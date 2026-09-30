@@ -41,6 +41,9 @@ PEOPLE = re.compile(r"(?<![a-z])(" + "|".join(_A["people_child"] + _A["people_ad
 GLUED = re.compile(r"(" + "|".join(
     n.capitalize() for n in _A["people_child"] + _A["people_adult"]) + r")(?![a-z])")
 PLACES = re.compile("|".join(_A["place_tokens"]))
+# A place that is only a place as a word of its own — inside a longer word it is
+# something else entirely, so it is matched whole, not as a substring.
+PLACE_WORDS = re.compile(r"(?<![a-z])(" + "|".join(_A["place_words"]) + r")(?![a-z])")
 
 # The wiring identifies the house as surely as its name: a private IPv4 draws the
 # LAN's map (and an ESPHome node is NAMED after its address), a MAC pins real
@@ -53,6 +56,10 @@ PRIVATE_IP = re.compile(
     r"\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
     r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b")
 REAL_MAC = re.compile(r"\b(?!02:00:5e)[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b")
+# The same with no separators, as Shelly names a device after it; the guards are
+# the pass's own (see BARE_MAC_RE there), so what it leaves is what this lets by.
+REAL_BARE_MAC = re.compile(r"(?<![0-9a-z])(?!02005e)(?=[0-9]*[a-f])[0-9a-f]{12}(?![0-9a-z])")
+UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 
 hits: dict[str, set[str]] = {}
 
@@ -72,8 +79,10 @@ def check(where: str, text: str) -> None:
     found = {m.group(0) for m in PEOPLE.finditer(flat)}
     found |= {m.group(0) for m in GLUED.finditer(cased)}
     found |= {m.group(0) for m in PLACES.finditer(flat)}
+    found |= {m.group(0) for m in PLACE_WORDS.finditer(flat)}
     found |= {m.group(0) for m in PRIVATE_IP.finditer(flat)}
     found |= {m.group(0) for m in REAL_MAC.finditer(flat)}
+    found |= {m.group(0) for m in REAL_BARE_MAC.finditer(UUID.sub(" ", flat))}
     if found:
         hits.setdefault(where, set()).update(found)
 

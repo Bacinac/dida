@@ -137,9 +137,32 @@ def _digest(value: str, n: int) -> int:
     return int(hashlib.sha256((SALT + value).encode()).hexdigest()[:n], 16)
 
 
+# The same address written without separators. Shelly bakes it into a device's
+# own name (`shelly1g4-<mac>`), where it rides the entity_id and MAC_RE never
+# sees it. A UUID's last group is also twelve hex digits, so UUIDs are taken out
+# before looking; and twelve bare digits are far likelier a number than a MAC —
+# rewriting one inside jsonb would break the value — so a letter is required.
+BARE_MAC_RE = re.compile(r"(?<![0-9A-Za-z])(?=[0-9]*[a-fA-F])[0-9a-fA-F]{12}(?![0-9A-Za-z])")
+
+
+def found_macs(text: str) -> set[str]:
+    """Every MAC in `text`, with or without separators, stand-ins left out."""
+    stand_in = FAKE_MAC_PREFIX.replace(":", "").lower()
+    return ({m for m in MAC_RE.findall(text) if not m.upper().startswith(FAKE_MAC_PREFIX)}
+            | {m for m in BARE_MAC_RE.findall(UUID_RE.sub(" ", text))
+               if not m.lower().startswith(stand_in)})
+
+
 def fake_mac(mac: str) -> str:
-    h = _digest(mac.lower(), 8)
-    return f"{FAKE_MAC_PREFIX}{(h >> 16) & 0xFF:02X}:{(h >> 8) & 0xFF:02X}:{h & 0xFF:02X}"
+    """The stand-in, spelled the way `mac` was: one device written both ways
+    must map to one stand-in."""
+    bare = mac.replace(":", "")
+    h = _digest(":".join(bare[i:i + 2] for i in range(0, 12, 2)).lower(), 8)
+    fake = f"{FAKE_MAC_PREFIX}{(h >> 16) & 0xFF:02X}:{(h >> 8) & 0xFF:02X}:{h & 0xFF:02X}"
+    if ":" in mac:
+        return fake
+    fake = fake.replace(":", "")
+    return fake if mac.isupper() else fake.lower()
 
 
 def remember() -> None:
@@ -238,12 +261,12 @@ def _found_identifiers(uuid_stand_ins: set[str]) -> tuple[set[str], set[str], se
     for table, col, _ in text_columns():
         rows = dev_psql(f"SELECT DISTINCT {col}::text FROM {table} WHERE {col} IS NOT NULL "  # noqa: S608
                         f"AND ({col}::text ~ '([0-9a-fA-F]{{2}}:){{5}}'"
+                        f" OR {col}::text ~ '[0-9a-fA-F]{{12}}'"
                         f" OR {col}::text ~ '(10|192\\.168|172|192\\.0\\.2|198\\.51\\.100|203\\.0\\.113)\\.'"
                         f" OR {col}::text ~ '[0-9]+_[0-9]+_[0-9]+_[0-9]+'"
                         f" OR {col}::text ~ '[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-')")
         for line in rows.splitlines():
-            macs.update(m for m in MAC_RE.findall(line)
-                        if not m.upper().startswith(FAKE_MAC_PREFIX))
+            macs.update(found_macs(line))
             ips.update(IP_RE.findall(line))
             # only the underscore forms that ARE private IPs
             uips.update(m for m in UIP_RE.findall(line) if IP_RE.search(m.replace("_", ".")))
@@ -550,9 +573,41 @@ def anonymise() -> None:
             f"UPDATE current_state SET value = to_jsonb(replace(value #>> '{{}}', '{o}', '{new}')) "  # noqa: S608
             f"WHERE jsonb_typeof(value) = 'string' AND strpos(value #>> '{{}}', '{o}') > 0;")
 
+    # 5. after step 4, so hostnames keep their meaningful stand-ins
+    stmts += _place_word_statements()
+
     stmts.append("COMMIT;")
     dev_psql("\n".join(stmts))
     remember()
+
+
+def _place_word_statements() -> list[str]:
+    """A place standing as a word of its own, which neither a hostname entry in
+    `places` nor the geo move reaches: a peer installation is named after where it
+    stands, so the place rides its devices' names and keys, the entity_ids built
+    from those, and its cameras' site label. A renamed identifier that already
+    exists is an earlier run's copy of the same device; the live re-report goes,
+    as in anonymise() step 2."""
+    stmts: list[str] = []
+    cascaded = cascaded_columns()
+    unique = {(t, c): others for t, c, others in unique_text_columns()}
+    for old, new in _A["place_words"].items():
+        for word, stand_in in ((old, new), (old.capitalize(), new.capitalize()), (old.upper(), new.upper())):
+            pat = f"(?<![A-Za-z]){word}(?![A-Za-z])".replace("'", "''")
+            w = stand_in.replace("'", "''")
+            for t, c, is_json in text_columns():
+                if (t, c) in cascaded:
+                    continue
+                if (t, c) in unique:
+                    same_key = "".join(f" AND a.{o} IS NOT DISTINCT FROM b.{o}" for o in unique[(t, c)])
+                    stmts.append(
+                        f"DELETE FROM {t} b USING {t} a WHERE b.{c} ~ '{pat}' "  # noqa: S608
+                        f"AND a.{c} = regexp_replace(b.{c}, '{pat}', '{w}', 'g'){same_key};")
+                cast = "jsonb" if is_json else "text"
+                stmts.append(
+                    f"UPDATE {t} SET {c} = regexp_replace({c}::text, '{pat}', '{w}', 'g')::{cast} "  # noqa: S608
+                    f"WHERE {c}::text ~ '{pat}';")
+    return stmts
 
 
 def move_the_world() -> None:
@@ -699,8 +754,7 @@ def scrub_fixtures(path: Path) -> None:
     doc_re = re.compile(r"\b(?:" + "|".join(n.replace(".", r"\.") for n in DOC_NETS)
                         + r")\.\d{1,3}\b")
     doc = DocAddresses(_A.get("ip_map"), set(doc_re.findall(text)))
-    repl: dict[str, str] = {m: fake_mac(m) for m in set(MAC_RE.findall(text))
-                            if not m.upper().startswith(FAKE_MAC_PREFIX)}
+    repl: dict[str, str] = {m: fake_mac(m) for m in found_macs(text)}
     # Any host under a family domain, not just the ones someone remembered to list
     # in `places`. An adapter's live status text is generated at runtime and never
     # passes a DB scrub, so a URL inside it reaches the fixtures verbatim (measured:
@@ -737,7 +791,8 @@ def verify() -> int:
     """Last line of defence before the fixtures are recorded."""
     people = "|".join(PEOPLE_CHILD + PEOPLE_ADULT)
     places = "|".join(_A["place_tokens"])
-    pat = f"(?<![a-z])({people})(?![a-z])|({places})"
+    words = "|".join(_A["place_words"])
+    pat = f"(?<![a-z])({people}|{words})(?![a-z])|({places})"
     glued = f"({camel(PEOPLE_CHILD + PEOPLE_ADULT)})(?![a-z])"
     # The Cloudflare adapter registers one entity per tunnel route, named after its
     # public hostname, so the whole ingress inventory sits under the family domain

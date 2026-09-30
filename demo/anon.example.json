@@ -50,5 +50,8 @@
   "ip_map": {},
   "entity_map": {},
   "device_map": {},
-  "uuid_map": {}
+  "uuid_map": {},
+  "place_words": {
+    "myvillage": "coast"
+  }
 }

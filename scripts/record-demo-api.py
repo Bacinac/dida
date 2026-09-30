@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("DIDA_DEMO_UI", "http://localhost:5273")
@@ -20,13 +21,13 @@ PW = os.environ.get("DIDA_DEMO_PASS", "")
 OUT = Path(os.environ.get("DIDA_DEMO_OUT", "/out"))
 
 ROUTES = [
-    "/floorplan", "/kamere", "/media", "/media/spotify", "/automations",
-    "/automations/schedules", "/history", "/panel", "/ulaz", "/about", "/account",
+    "/floorplan", "/cameras", "/media", "/media/spotify", "/heating", "/automations",
+    "/automations/schedules", "/history", "/panel", "/entry", "/about", "/account",
     "/settings/adapters", "/settings/alerts", "/settings/areas", "/settings/backup",
-    "/settings/commands", "/settings/devices", "/settings/floors", "/settings/helpers",
-    "/settings/keys", "/settings/network", "/settings/panel", "/settings/retention",
-    "/settings/scenes", "/settings/system", "/settings/translations", "/settings/users",
-    "/settings/zones",
+    "/settings/commands", "/settings/contacts", "/settings/devices", "/settings/floors",
+    "/settings/helpers", "/settings/keys", "/settings/logs", "/settings/network",
+    "/settings/panel", "/settings/retention", "/settings/scenes", "/settings/system",
+    "/settings/translations", "/settings/users", "/settings/zones",
 ]
 
 
@@ -65,6 +66,7 @@ def main() -> int:
     fixtures: dict[str, object] = {}
     misses: list[str] = []
     seen: list[str] = []          # every recorded response, in order — the liveness signal
+    gone: set[str] = set()
 
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -89,6 +91,11 @@ def main() -> int:
                 fixtures[key] = res.json()
             except ValueError:
                 misses.append(f"{key} ({res.status})")
+            except PlaywrightError:
+                # The page moved on before the body was read and the browser let
+                # it go. The same call is nearly always answered again on another
+                # route; the ones that never are get named below.
+                gone.add(key)
 
         page.on("response", on_response)
 
@@ -139,6 +146,7 @@ def main() -> int:
     (OUT / "api-fixtures.json").write_text(json.dumps(fixtures))
     print("endpoints:", len(fixtures))
     print("non-JSON responses:", misses[:8] or "none")
+    print("bodies dropped before they were read:", sorted(gone - fixtures.keys()) or "none")
     return 0
 
 

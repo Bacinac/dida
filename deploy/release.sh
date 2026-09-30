@@ -30,8 +30,16 @@ VERSION="$(tr -d ' \t\n\r' < VERSION).$(git rev-list --count HEAD)"
 TAG="v$VERSION"
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "tag $TAG already exists"
 
-# Asked anonymously, as the stranger running install.sh would.
-public_commit() { curl -fsS -o /dev/null "https://api.github.com/repos/$1/commits/$2"; }
+# Asked anonymously, as the stranger running install.sh would, and
+# over git: the anonymous REST API allows 60 requests an hour per address,
+# which a dry run and a release from one network already spend.
+PROBE=$(mktemp -d)
+trap 'rm -rf "$PROBE"' EXIT
+git init -q --bare "$PROBE"
+public_commit() {
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
+        git -C "$PROBE" fetch -q --depth=1 --filter=blob:none --no-tags "https://github.com/$1.git" "$2" 2>/dev/null
+}
 public_commit "$REPO" "$SHA" || die "$REPO@${SHA:0:8} is not publicly readable"
 while read -r key url; do
     name=${key#submodule.}; name=${name%.url}

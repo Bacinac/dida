@@ -1,0 +1,13 @@
+-- current_state.ts_ns — the source timestamp of the value currently stored.
+--
+-- The engine consumes state over an at-least-once durable JetStream consumer:
+-- a transiently-failed update naks and redelivers 3 s later, during which NEWER
+-- updates for the same (entity, capability) can land. Without an ordering guard
+-- the redelivered OLD value would overwrite the newer one (last-arrival-wins) and
+-- then republish onto dida.events, firing a phantom transition in the automation
+-- engine. Storing ts_ns lets the upsert reject any update not newer-or-equal than
+-- what is already there.
+--
+-- Existing rows default to 0, so the first real update (ts_ns > 0) always wins —
+-- no data loss, no backfill needed. Idempotent (safe to re-apply on every boot).
+ALTER TABLE current_state ADD COLUMN IF NOT EXISTS ts_ns BIGINT NOT NULL DEFAULT 0;

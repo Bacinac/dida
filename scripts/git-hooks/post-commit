@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Keep revision.json in sync with git HEAD after each commit.
+# Never fail the commit if the stamp can't be written.
+"$(git rev-parse --show-toplevel)/scripts/gen-revision.sh" || true
+exit 0

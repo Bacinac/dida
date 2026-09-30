@@ -1,0 +1,132 @@
+adb-shell==0.4.4
+aio-panasonic-comfort-cloud==2026.6.2
+aiocoap==0.4.17
+aiodns==4.0.4
+aioesphomeapi==45.6.2 ; platform_machine == 'x86_64' and sys_platform == 'darwin'
+aioesphomeapi==45.7.0 ; platform_machine != 'x86_64' or sys_platform != 'darwin'
+aiofiles==25.1.0
+aiohappyeyeballs==2.7.1
+aioharmony==1.0.8
+aiohomekit==4.0.1
+aiohttp==3.14.3
+aiomqtt==2.5.1
+aiooui==0.1.9 ; sys_platform == 'linux'
+aiosignal==1.4.0
+androidtv==0.0.75
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anthropic==0.121.0
+anyio==4.14.2
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+astral==3.2
+async-interrupt==1.2.2
+async-timeout==5.0.1
+async-upnp-client==0.48.0
+asyncpg==0.31.0
+asyncssh==2.24.0
+attrs==26.1.0
+backports-zstd==1.6.0 ; python_full_version < '3.14'
+beautifulsoup4==4.15.0
+bleak==3.0.2
+bleak-retry-connector==4.6.3
+bluetooth-adapters==2.4.0 ; sys_platform == 'linux'
+broadlink==0.19.0
+bs4==0.0.2
+casttube==0.2.1
+certifi==2026.7.22
+cffi==2.1.1
+chacha20poly1305==0.0.3
+chacha20poly1305-reuseable==0.13.2
+charset-normalizer==3.4.9
+click==8.4.2
+clickhouse-connect==1.6.0
+colorama==0.4.6
+cryptography==50.0.0
+dbus-fast==5.0.22 ; sys_platform == 'linux'
+defusedxml==0.7.1
+distro==1.9.0
+docstring-parser==0.18.0
+fastapi==0.141.1
+frozenlist==1.8.0
+h11==0.16.0
+http-ece==1.2.1
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.18
+ifaddr==0.2.0
+jiter==0.16.0
+lz4==4.4.5
+mashumaro==3.22
+msgspec==0.21.1
+msmart-ng==2026.8.0
+multidict==6.7.1
+nats-py==2.15.0
+noiseprotocol==0.3.1
+numpy==2.5.1
+opencv-python-headless==5.0.0.93
+orjson==3.11.9
+packaging==26.3
+paho-mqtt==2.1.0
+pillow==12.3.0
+propcache==0.5.2
+protobuf==7.35.1
+pure-python-adb==0.3.0.dev0
+py-vapid==1.9.4
+pyasn1==0.6.4
+pyasn1-modules==0.4.2
+pycares==5.0.1
+pychromecast==14.0.10
+pycparser==3.0 ; implementation_name != 'PyPy'
+pycryptodome==3.23.0
+pydantic==2.13.4
+pydantic-core==2.46.4
+pyheos==1.0.6
+pyjwt==2.13.0
+pynacl==1.6.2
+pyobjc-core==12.2.1 ; sys_platform == 'darwin'
+pyobjc-framework-cocoa==12.2.1 ; sys_platform == 'darwin'
+pyobjc-framework-corebluetooth==12.2.1 ; sys_platform == 'darwin'
+pyobjc-framework-libdispatch==12.2.1 ; sys_platform == 'darwin'
+pysmartthings==4.0.1
+python-didl-lite==1.5.0
+python-dotenv==1.2.2
+pywebpush==2.4.0
+pyworxcloud==6.4.2
+pyyaml==6.0.3
+requests==2.34.2
+rsa==4.9.1
+ruamel-yaml==0.19.1
+samsungtvws==3.0.6
+segno==1.6.6
+slixmpp==1.17.0
+sniffio==1.3.1
+soupsieve==2.9.2
+starlark-pyo3==2026.1
+starlette==1.4.1
+tinytuya==1.20.0
+typing-extensions==4.16.0
+typing-inspection==0.4.2
+tzdata==2026.3
+tzlocal==5.4.4
+uart-devices==0.1.1 ; sys_platform == 'linux'
+urllib3==2.7.0
+usb-devices==0.5.1 ; sys_platform == 'linux'
+uvicorn==0.52.1
+uvloop==0.22.1
+voluptuous==0.16.0
+watchfiles==1.2.0
+websocket-client==1.9.2
+websockets==17.0.1
+winrt-runtime==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-bluetooth==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-bluetooth-advertisement==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-bluetooth-genericattributeprofile==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-enumeration==3.2.1 ; sys_platform == 'win32'
+winrt-windows-devices-radios==3.2.1 ; sys_platform == 'win32'
+winrt-windows-foundation==3.2.1 ; sys_platform == 'win32'
+winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
+winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
+yarl==1.24.5
+zeroconf==0.150.0

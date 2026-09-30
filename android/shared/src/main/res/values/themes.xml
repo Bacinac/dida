@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DidaCar" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/dida_bg</item>
+        <item name="android:statusBarColor">@color/dida_bg</item>
+        <item name="android:navigationBarColor">@color/dida_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">@color/dida_accent</item>
+        <item name="android:textColor">@color/dida_text</item>
+        <item name="android:textColorHint">@color/dida_text_dim</item>
+    </style>
+</resources>

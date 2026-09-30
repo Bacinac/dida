@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 820">
+  <title>OPUS browser icons — set 06</title>
+  <desc>Module-specific OPUS favicons using an optically enlarged O and solid inner initials.</desc>
+  <defs>
+    <mask id="cut"><rect width="96" height="96" fill="#fff"/><path d="M58-3h19L55 39H36Z" fill="#000"/></mask>
+    <g id="ring"><ellipse cx="48" cy="48" rx="34" ry="39" fill="none" stroke="currentColor" stroke-width="15" mask="url(#cut)"/></g>
+    <g id="p"><path fill="currentColor" fill-rule="evenodd" d="M29 36 36 23h13c12 0 19 6 19 16s-7 16-19 16h-8v18H29Zm12-3v13h8c5 0 8-2 8-7s-3-6-8-6Z"/></g>
+    <g id="d"><path fill="currentColor" fill-rule="evenodd" d="M29 36 36 23h11c15 0 23 10 23 25s-8 25-23 25H29Zm12-3v30h6c8 0 12-5 12-15s-4-15-12-15Z"/></g>
+    <g id="l"><path fill="currentColor" d="M29 36 36 23h6v40h27v10H29Z"/></g>
+    <g id="mark-p"><g color="#147b76"><use xlink:href="#ring"/></g><g color="#a95808"><use xlink:href="#p"/></g></g>
+    <g id="mark-d"><g color="#147b76"><use xlink:href="#ring"/></g><g color="#a95808"><use xlink:href="#d"/></g></g>
+    <g id="mark-l"><g color="#147b76"><use xlink:href="#ring"/></g><g color="#a95808"><use xlink:href="#l"/></g></g>
+    <g id="mark-p-dark"><g color="#70d6ce"><use xlink:href="#ring"/></g><g color="#f0aa5a"><use xlink:href="#p"/></g></g>
+    <g id="mark-d-dark"><g color="#70d6ce"><use xlink:href="#ring"/></g><g color="#f0aa5a"><use xlink:href="#d"/></g></g>
+    <g id="mark-l-dark"><g color="#70d6ce"><use xlink:href="#ring"/></g><g color="#f0aa5a"><use xlink:href="#l"/></g></g>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".14"/></filter>
+  </defs>
+
+  <rect width="1600" height="820" fill="#f3f7f7"/>
+  <circle cx="1500" cy="-20" r="300" fill="#ddf5f2"/>
+  <circle cx="-60" cy="810" r="270" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">OPUS / BROWSER · SET 06</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">O sada može nositi modul i u tabu.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Veći O · deblji potez · puna unutarnja slova · automatska light/dark boja</text>
+
+    <text x="90" y="246" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">OPTICAL FAVICON VARIJANTE</text>
+    <text x="90" y="274" font-size="15" fill="#829397">Posebno nacrtane za male dimenzije; nisu samo smanjeni wordmark.</text>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(90 310)"><rect width="310" height="240" rx="30" fill="#fff"/><g transform="translate(79 35) scale(1.58)"><use xlink:href="#mark-p"/></g></g>
+      <g transform="translate(440 310)"><rect width="310" height="240" rx="30" fill="#fff"/><g transform="translate(79 35) scale(1.58)"><use xlink:href="#mark-d"/></g></g>
+      <g transform="translate(790 310)"><rect width="310" height="240" rx="30" fill="#fff"/><g transform="translate(79 35) scale(1.58)"><use xlink:href="#mark-l"/></g></g>
+    </g>
+    <text x="245" y="580" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">PLAYER</text>
+    <text x="595" y="580" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">DOWNLOADS</text>
+    <text x="945" y="580" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">LIBRARY</text>
+
+    <g transform="translate(1140 310)">
+      <rect width="370" height="240" rx="28" fill="#e6edef"/>
+      <text x="30" y="40" font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">STVARNE DIMENZIJE</text>
+      <text x="30" y="92" font-size="14" fill="#63787d">16 px</text>
+      <g transform="translate(96 73) scale(.167)"><use xlink:href="#mark-p"/></g>
+      <g transform="translate(135 73) scale(.167)"><use xlink:href="#mark-d"/></g>
+      <g transform="translate(174 73) scale(.167)"><use xlink:href="#mark-l"/></g>
+      <text x="30" y="150" font-size="14" fill="#63787d">32 px</text>
+      <g transform="translate(96 121) scale(.333)"><use xlink:href="#mark-p"/></g>
+      <g transform="translate(151 121) scale(.333)"><use xlink:href="#mark-d"/></g>
+      <g transform="translate(206 121) scale(.333)"><use xlink:href="#mark-l"/></g>
+      <text x="30" y="211" font-size="13" fill="#829397">P/D/L ostaju različivi na 16 px</text>
+    </g>
+
+    <text x="90" y="644" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">U BROWSERU</text>
+    <g transform="translate(90 674)">
+      <rect width="690" height="104" rx="18" fill="#fff" stroke="#dce5e6"/>
+      <rect x="20" y="24" width="650" height="58" rx="13" fill="#eef3f4"/>
+      <g transform="translate(52 37) scale(.29)"><use xlink:href="#mark-p"/></g><text x="92" y="60" font-size="15" font-weight="650" fill="#32484e">Player</text>
+      <g transform="translate(252 37) scale(.29)"><use xlink:href="#mark-d"/></g><text x="292" y="60" font-size="15" font-weight="650" fill="#32484e">Downloads</text>
+      <g transform="translate(492 37) scale(.29)"><use xlink:href="#mark-l"/></g><text x="532" y="60" font-size="15" font-weight="650" fill="#32484e">Library</text>
+    </g>
+    <g transform="translate(820 674)">
+      <rect width="690" height="104" rx="18" fill="#121a1d"/>
+      <rect x="20" y="24" width="650" height="58" rx="13" fill="#202a2e"/>
+      <g transform="translate(52 37) scale(.29)"><use xlink:href="#mark-p-dark"/></g><text x="92" y="60" font-size="15" font-weight="650" fill="#e3ecee">Player</text>
+      <g transform="translate(252 37) scale(.29)"><use xlink:href="#mark-d-dark"/></g><text x="292" y="60" font-size="15" font-weight="650" fill="#e3ecee">Downloads</text>
+      <g transform="translate(492 37) scale(.29)"><use xlink:href="#mark-l-dark"/></g><text x="532" y="60" font-size="15" font-weight="650" fill="#e3ecee">Library</text>
+    </g>
+  </g>
+</svg>

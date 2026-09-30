@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- "Dopusti cijelo vrijeme" — the whole point of the app: reporting continues
+         with the app not in focus. Requested in a separate step after fine location,
+         as the OS mandates (API 30+ sends the user to the settings screen). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Push-to-talk in the assistant. The page asks the WebView for the mic; a
+         WebView denies that outright unless the app both holds this permission and
+         answers onPermissionRequest (MainActivity). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- In-app QR scan on the signed-out onboarding screen (zxing-embedded). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Self-update: downloads the new APK from our own origin and hands it to the
+         system installer. Sideload distribution — no store in the loop. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:name=".App"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:theme="@style/Theme.Dida"
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="33">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Verified App Links (assetlinks.json on the same host): scanning the
+                 family setup QR (…/api/auth/link?k=…) opens the app directly when it
+                 is installed; without the app the same QR falls through to the
+                 browser flow. /onboard is claimed too so the handoff link on that
+                 page re-enters the app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="${didaHost}" />
+                <data android:pathPrefix="/api/auth/link" />
+                <data android:path="/onboard" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".LocationReceiver" android:exported="false" />
+        <receiver android:name=".GeofenceReceiver" android:exported="false" />
+        <receiver android:name=".BootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".FcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

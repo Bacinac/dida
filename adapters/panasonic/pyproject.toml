@@ -1,0 +1,18 @@
+[project]
+name = "dida-adapter-panasonic"
+version = "0.1.0"
+description = "DIDA Panasonic adapter — air conditioners via Panasonic Comfort Cloud"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "asyncpg",
+    "aiohttp",
+    "aio-panasonic-comfort-cloud",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_panasonic"]

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DIDA Auto</string>
+    <string name="ua_label">DIDA-Auto</string>
+    <string name="car_open_gate">Otvori kapiju</string>
+    <string name="car_gate_opened">Kapija se otvara</string>
+    <string name="car_no_gate">Kapija za auto nije konfigurirana u DIDA-i</string>
+    <string name="car_error">Poslužitelj nije dostupan</string>
+    <string name="car_not_configured">Otvorite aplikaciju DIDA Auto na telefonu i povežite se s poslužiteljem</string>
+    <string name="car_command_failed">Naredba nije uspjela</string>
+    <string name="car_nav">Navigacija</string>
+    <string name="car_nav_home">Dom</string>
+    <string name="car_nav_empty">Nema definiranih zona</string>
+</resources>

@@ -1,0 +1,15 @@
+-- current_state.changed_at — when the value last actually CHANGED (not merely
+-- re-reported).
+--
+-- `updated_at` bumps on every strictly-newer ts_ns, including the unchanged
+-- periodic re-reports a z2m sensor sends on its own schedule. That made it the
+-- wrong clock for two things the automation engine needs measured from the real
+-- transition: `for_seconds` hold reconstruction on boot (a motion sensor that
+-- re-announced "clear" 10 s before a deploy would reset a 300 s hold to nearly
+-- full) and the boiler anti-cycling already tracks its own transitions for the
+-- same reason. This column advances ONLY when the stored value differs from the
+-- incoming one, so age-in-state is honest.
+--
+-- Existing rows seed to now(): for one deploy a pending hold reconstructs from
+-- "just changed", i.e. the pre-fix behaviour, then it is correct. Idempotent.
+ALTER TABLE current_state ADD COLUMN IF NOT EXISTS changed_at TIMESTAMPTZ NOT NULL DEFAULT now();

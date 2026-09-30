@@ -1,0 +1,54 @@
+{
+  "prod_host": "root@203.0.113.10",
+  "people_child": [
+    "childa",
+    "childb"
+  ],
+  "people_adult": [
+    "adulta",
+    "adultb"
+  ],
+  "glued": {
+    "thchildaroom": "thchildroom2",
+    "thchildbroom": "thchildroom1"
+  },
+  "places": {
+    "my-nvr.example.com": "site-nvr.example",
+    "MyTown": "Home Town"
+  },
+  "zone_rename": {
+    "Home": "Home",
+    "My Work": "Work",
+    "My School": "School"
+  },
+  "zone_prefix": {
+    "Kids ": "Family"
+  },
+  "geo_from": [
+    45.0,
+    16.0
+  ],
+  "geo_to": [
+    44.0,
+    11.0
+  ],
+  "geo_rot_deg": 37.0,
+  "admin_at": [
+    43.5,
+    16.4
+  ],
+  "place_tokens": [
+    "mytown",
+    "myvillage"
+  ],
+  "place_tokens_accented": [
+    "Mytówn"
+  ],
+  "domains": [
+    "example.com"
+  ],
+  "ip_map": {},
+  "entity_map": {},
+  "device_map": {},
+  "uuid_map": {}
+}

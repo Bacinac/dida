@@ -1,0 +1,18 @@
+[project]
+name = "dida-adapter-frigate"
+version = "0.1.0"
+description = "DIDA Frigate adapter — subscribes a Frigate NVR's MQTT topics (events, per-object counts, motion, feature state) and translates detections into DIDA capabilities; registers cameras (go2rtc/MJPEG stream descriptor) and zones (occupancy) as entities. Talks to a REMOTE Frigate: broker over TLS + HTTP /api/config for the camera roster."
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "aiomqtt>=2.3",
+    "aiohttp>=3.10",
+    "asyncpg",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_frigate"]

@@ -1,0 +1,17 @@
+[project]
+name = "dida-adapter-ecowitt"
+version = "0.1.0"
+description = "DIDA Ecowitt adapter — polls the gateway's local JSON API (GW2000 etc.)"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "aiohttp>=3.10",
+    "asyncpg",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_ecowitt"]

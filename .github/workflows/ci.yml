@@ -1,0 +1,85 @@
+name: CI
+
+# Clean-room complement to the LOCAL pre-push gate (scripts/pre-push-tests.sh).
+# The local hook is the PRIMARY gate — it runs the exact same ruff + pytest
+# (tests/run.sh, one source of truth) on every push and blocks a bad one before it
+# leaves the machine. This workflow is the clean-room double-check: it builds every
+# image FRESH from the repo, proving "builds from a clean checkout" rather than
+# trusting the dev's already-built images.
+#
+# MANUAL only (workflow_dispatch), by choice 2026-07-16: running it on every push
+# turned a slow full-rebuild (~all images from scratch) into red noise on each of a
+# rapid commit series, while the local pre-push gate already caught everything. Run
+# it deliberately — Actions tab → "CI" → "Run workflow" — when a piece of work is
+# finished and the clean-room rebuild is worth waiting for (before a release, after a
+# dependency/Dockerfile change, or to reset trust in the tree).
+on:
+  workflow_dispatch:
+
+# A newer push to the same ref supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # dida/base bakes core (dida_core) + the migrations + every workspace
+      # dependency, pinned by the committed uv.lock — the same image every service
+      # and adapter image is FROM, so it MUST be built first (locally, so the FROM
+      # in the images below resolves from the daemon).
+      - name: Build base image
+        run: docker build -f docker/base.Dockerfile -t dida/base:latest .
+
+      # Build the service + adapter images the gate needs. This list MUST cover
+      # tests/run.sh's REQUIRED preflight set — a missing image makes the gate fail
+      # loud (never a silent skip), which is exactly the property we want CI to have.
+      # Derived from tests/run.sh REQUIRED rather than listed here. A hand-kept copy
+      # drifted: eight images the gate requires were missing (announce, broadlink,
+      # ecowitt, frigate, govee, homekit, notify, netmgr) while `runner` was built for
+      # nothing. CI is manual, so nobody hit the preflight that would have said so.
+      # Now there is no second list to fall behind.
+      - name: Build service + adapter images (derived from the gate's REQUIRED set)
+        run: |
+          set -eu
+          required=$(sed -n '/^REQUIRED="/,/"$/p' tests/run.sh | tr -d '\\"' | sed 's/^REQUIRED=//')
+          for name in $required; do
+            case "$name" in
+              base) continue ;;                                   # built above
+              adapter-*) dockerfile="adapters/${name#adapter-}/Dockerfile" ;;
+              *) dockerfile="services/$name/Dockerfile" ;;
+            esac
+            [ -f "$dockerfile" ] || { echo "no Dockerfile for dida/$name ($dockerfile)" >&2; exit 1; }
+            echo "::group::build dida/$name"
+            docker build -f "$dockerfile" -t "dida/$name:latest" .
+            echo "::endgroup::"
+          done
+
+      # UI type gate. Every gate above is Python-only, so until now a broken .svelte
+      # or .ts reached production with nothing between it and the user but the
+      # `vite build` inside deploy — and that catches syntax and imports, never types:
+      # a renamed field or a dead import would have shipped green. Measured at ZERO
+      # errors, so it gates at zero — no baseline, no ratchet to hide behind.
+      # Node pinned to the SAME major the UI image ships (node:24), so the gate and
+      # the artifact can't drift into different type behaviour.
+      - name: UI gate (svelte-check — 0 errors, pinned node)
+        run: |
+          docker run --rm -v "$PWD/ui:/app" -w /app node:24-bookworm-slim \
+            sh -c "npm ci --no-audit --no-fund >/dev/null 2>&1 && npm run check"
+
+      # And prove the shipping shape actually builds from a clean checkout — the real
+      # Dockerfile, the real `vite build`, before merge instead of during deploy.
+      - name: UI build (prod image)
+        run: docker build -f ui/Dockerfile --target prod -t dida/ui:prod .
+
+      # The full pytest gate: per-group runs inside each service/adapter image, an
+      # ephemeral Postgres the script spins up for the integration suites, combined
+      # coverage enforced against the ratchet floor. IDENTICAL to the local run.
+      - name: Test gate (pytest + coverage floor, ephemeral postgres)
+        run: sh tests/run.sh

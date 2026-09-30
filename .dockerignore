@@ -1,0 +1,73 @@
+# Build context exclusion for `docker compose build`.
+#
+# Every DIDA Dockerfile builds with the repo root as its context, so without this
+# file Docker streams the whole checkout — 1.9 GB of it, most of it _backups —
+# into each of forty-odd image builds that COPY a single subdirectory.
+#
+# node_modules is not merely waste, it is WRONG. Both Node images install from a
+# committed lockfile and then copy their source tree over it:
+#
+#     COPY services/matter-bridge/package.json …/package-lock.json ./
+#     RUN npm ci --no-audit --no-fund
+#     COPY services/matter-bridge/ ./          <- brings the dev box's node_modules
+#
+# so the dependency tree `npm ci` just resolved gets overlaid with whatever
+# happens to be installed here. That is exactly what those Dockerfiles' own
+# comments say they are preventing ("two builds of the same commit could ship
+# different bridge code"); the lockfile only actually decides once the host's
+# node_modules stops travelling with the source.
+
+# Database dumps and pre-upgrade archives — the biggest thing in the tree and
+# nothing builds from them.
+_backups/
+
+# Runtime state (postgres data dir, NATS jetstream, clickhouse data) — root-owned
+# bind mounts; a rootless builder cannot even read them.
+state/
+media/
+logs/
+
+# Installed dependency trees: every image installs its own from a lockfile.
+node_modules/
+.venv/
+venv/
+.uv-cache/
+
+# Build outputs and caches that regenerate inside the image.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.svelte-kit/
+ui/build/
+android/.gradle/
+android/build/
+android/app/build/
+
+# Signed APKs reach a host as a deploy artifact and are bind-mounted at runtime
+# (docker-compose.yml maps ./android/dist to /apk); no image contains them.
+android/dist/
+android/keystore/
+
+# Repository and editor metadata.
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets never belong in a build context, whatever a Dockerfile asks for.
+.env
+.env.local
+*.secret
+.demo-pass
+.cf-token
+
+# Test fixtures and demo captures — nothing COPYs them.
+tests/
+demo-snapshots/
+
+# Coverage runs leave a .cov-<pid> directory behind per process.
+.cov-*/
+.coverage
+htmlcov/

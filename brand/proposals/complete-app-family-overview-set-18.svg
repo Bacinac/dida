@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1800 1200">
+  <title>Complete DIDA, BABA and OPUS application identity overview</title>
+  <desc>Browser icon, installed mobile icon and full in-app logo for Dida, Baba, OPUS Downloads, OPUS Player and OPUS Library.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5f8f8"/><stop offset="1" stop-color="#e6eff0"/></linearGradient>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#062f3a"/><stop offset=".5" stop-color="#0d5361"/><stop offset="1" stop-color="#14736e"/></linearGradient>
+    <linearGradient id="dida-tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#073844"/><stop offset="1" stop-color="#0d7689"/></linearGradient>
+    <linearGradient id="baba-tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0a334b"/><stop offset="1" stop-color="#126887"/></linearGradient>
+    <linearGradient id="opus-tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#083b3b"/><stop offset="1" stop-color="#147a72"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-25%" width="160%" height="170%"><feDropShadow dx="0" dy="9" stdDeviation="13" flood-color="#07191e" flood-opacity=".13"/></filter>
+    <filter id="phone-shadow" x="-30%" y="-20%" width="160%" height="150%"><feDropShadow dx="0" dy="22" stdDeviation="28" flood-color="#05161c" flood-opacity=".25"/></filter>
+    <filter id="icon-shadow" x="-30%" y="-25%" width="160%" height="170%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#00191f" flood-opacity=".3"/></filter>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96"><rect width="96" height="96" fill="#fff"/><path d="M55 4h15L53 38H38Z" fill="#000"/></mask>
+
+    <!-- Exact alphabet from the accepted full logos. -->
+    <g id="D" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70h18c25 0 39-13 39-35S61 13 36 13H18"/></g>
+    <g id="B" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70M18 13h23c19 0 29 6 29 17s-10 18-29 18H18M41 48c22 0 33 6 33 17s-11 18-33 18H18"/></g>
+    <g id="O" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="48" cy="48" rx="31" ry="35"/></g>
+    <g id="D-cut" mask="url(#cut)"><use xlink:href="#D"/></g>
+    <g id="B-cut" mask="url(#cut)"><use xlink:href="#B"/></g>
+    <g id="O-cut" mask="url(#cut)"><use xlink:href="#O"/></g>
+    <g id="I" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round"><path d="M8 13h28M22 13v70M8 83h28"/></g>
+    <g id="A" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M8 83 36 13l28 70M19 58h34"/></g>
+    <g id="P" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 83V13h24c20 0 31 7 31 20S62 53 42 53H18"/></g>
+    <g id="U" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13v42c0 19 12 29 29 29s29-10 29-29V13"/></g>
+    <g id="S" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M70 22c-7-6-16-9-26-9-18 0-29 8-29 19 0 27 57 12 57 35 0 11-12 17-29 17-12 0-23-4-31-11"/></g>
+    <g id="L" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70h51"/></g>
+    <g id="DIDA"><use xlink:href="#D-cut"/><use xlink:href="#I" transform="translate(86)"/><use xlink:href="#D" transform="translate(138)"/><use xlink:href="#A" transform="translate(224)"/></g>
+    <g id="BABA"><use xlink:href="#B-cut"/><use xlink:href="#A" transform="translate(88)"/><use xlink:href="#B" transform="translate(168)"/><use xlink:href="#A" transform="translate(256)"/></g>
+    <g id="OPUS"><use xlink:href="#O-cut"/><use xlink:href="#P" transform="translate(92)"/><use xlink:href="#U" transform="translate(180)"/><use xlink:href="#S" transform="translate(270)"/></g>
+    <g id="opus-downloads"><g color="#147b76"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="#79aaa6"/><g transform="translate(379 6.5) scale(.5)" color="#c36e12"><use xlink:href="#D"/></g></g>
+    <g id="opus-player"><g color="#147b76"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="#79aaa6"/><g transform="translate(380 6.5) scale(.5)" color="#c36e12"><use xlink:href="#P"/></g></g>
+    <g id="opus-library"><g color="#147b76"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="#79aaa6"/><g transform="translate(381 6.5) scale(.5)" color="#c36e12"><use xlink:href="#L"/></g></g>
+
+    <!-- Installed icons use the exact same leading glyph, now on product tiles. -->
+    <g id="app-dida"><rect width="96" height="96" rx="22" fill="url(#dida-tile)"/><path d="M10 17C31 2 65 2 86 17" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/><g transform="translate(14.5 12) scale(.76)" color="#48d5e5"><use xlink:href="#D-cut"/></g></g>
+    <g id="app-baba"><rect width="96" height="96" rx="22" fill="url(#baba-tile)"/><path d="M10 17C31 2 65 2 86 17" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/><g transform="translate(15 12) scale(.76)" color="#55c8ef"><use xlink:href="#B-cut"/></g></g>
+    <g id="app-opus"><rect width="96" height="96" rx="22" fill="url(#opus-tile)"/><path d="M10 17C31 2 65 2 86 17" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/><g transform="translate(11.5 12) scale(.76)" color="#72ddd1"><use xlink:href="#O-cut"/></g></g>
+  </defs>
+
+  <rect width="1800" height="1200" fill="url(#page)"/>
+  <circle cx="1730" cy="10" r="320" fill="#d9f1ec"/>
+  <circle cx="30" cy="1190" r="300" fill="#dcf1f5"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="70" y="68" font-size="17" font-weight="750" letter-spacing="3" fill="#587178">COMPLETE APPLICATION FAMILY · SET 18</text>
+    <text x="70" y="122" font-size="40" font-weight="680" fill="#14282e">Jedan pregled cijelog sustava</text>
+    <text x="70" y="158" font-size="18" fill="#687d82">Isto početno slovo iz logotipa koristi se u browseru i na instaliranoj aplikaciji.</text>
+
+    <!-- Identity matrix -->
+    <g transform="translate(70 205)" filter="url(#shadow)">
+      <rect width="1120" height="910" rx="30" fill="#fff"/>
+      <g font-size="13" font-weight="750" letter-spacing="1.7" fill="#7a8e93">
+        <text x="34" y="48">APLIKACIJA</text><text x="250" y="48">BROWSER</text><text x="405" y="48">INSTALIRANA</text><text x="585" y="48">PUNI LOGO U APLIKACIJI</text>
+      </g>
+      <path d="M30 70h1060M30 238h1060M30 406h1060M30 574h1060M30 742h1060" stroke="#e5ebed"/>
+
+      <!-- Dida -->
+      <g transform="translate(0 72)">
+        <text x="34" y="74" font-size="20" font-weight="700" fill="#243a40">Dida</text>
+        <text x="34" y="99" font-size="13" fill="#7a8e93">samostalna aplikacija</text>
+        <g transform="translate(250 48) scale(.42)" color="#0e9db5"><use xlink:href="#D-cut"/></g>
+        <g transform="translate(310 62) scale(.167)" color="#0e9db5"><use xlink:href="#D-cut"/></g>
+        <text x="248" y="120" font-size="11" fill="#8a999d">32 / 16 px</text>
+        <g transform="translate(405 22) scale(.95)" filter="url(#icon-shadow)"><use xlink:href="#app-dida"/></g>
+        <g transform="translate(585 38) scale(.78)" color="#0e9db5"><use xlink:href="#DIDA"/></g>
+      </g>
+
+      <!-- Baba -->
+      <g transform="translate(0 240)">
+        <text x="34" y="74" font-size="20" font-weight="700" fill="#243a40">Baba</text>
+        <text x="34" y="99" font-size="13" fill="#7a8e93">samostalna aplikacija</text>
+        <g transform="translate(250 48) scale(.42)" color="#146f8b"><use xlink:href="#B-cut"/></g>
+        <g transform="translate(310 62) scale(.167)" color="#146f8b"><use xlink:href="#B-cut"/></g>
+        <text x="248" y="120" font-size="11" fill="#8a999d">32 / 16 px</text>
+        <g transform="translate(405 22) scale(.95)" filter="url(#icon-shadow)"><use xlink:href="#app-baba"/></g>
+        <g transform="translate(585 38) scale(.72)" color="#146f8b"><use xlink:href="#BABA"/></g>
+      </g>
+
+      <!-- OPUS Downloads -->
+      <g transform="translate(0 408)">
+        <text x="34" y="67" font-size="20" font-weight="700" fill="#243a40">OPUS Downloads</text>
+        <text x="34" y="94" font-size="13" fill="#7a8e93">OPUS obitelj · D</text>
+        <g transform="translate(250 48) scale(.42)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <g transform="translate(310 62) scale(.167)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <text x="248" y="120" font-size="11" fill="#8a999d">32 / 16 px</text>
+        <g transform="translate(405 22) scale(.95)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <g transform="translate(585 39) scale(.78)"><use xlink:href="#opus-downloads"/></g>
+      </g>
+
+      <!-- OPUS Player -->
+      <g transform="translate(0 576)">
+        <text x="34" y="67" font-size="20" font-weight="700" fill="#243a40">OPUS Player</text>
+        <text x="34" y="94" font-size="13" fill="#7a8e93">OPUS obitelj · P</text>
+        <g transform="translate(250 48) scale(.42)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <g transform="translate(310 62) scale(.167)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <text x="248" y="120" font-size="11" fill="#8a999d">32 / 16 px</text>
+        <g transform="translate(405 22) scale(.95)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <g transform="translate(585 39) scale(.78)"><use xlink:href="#opus-player"/></g>
+      </g>
+
+      <!-- OPUS Library -->
+      <g transform="translate(0 744)">
+        <text x="34" y="67" font-size="20" font-weight="700" fill="#243a40">OPUS Library</text>
+        <text x="34" y="94" font-size="13" fill="#7a8e93">OPUS obitelj · L</text>
+        <g transform="translate(250 48) scale(.42)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <g transform="translate(310 62) scale(.167)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <text x="248" y="120" font-size="11" fill="#8a999d">32 / 16 px</text>
+        <g transform="translate(405 22) scale(.95)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <g transform="translate(585 39) scale(.78)"><use xlink:href="#opus-library"/></g>
+      </g>
+    </g>
+
+    <!-- Mobile home-screen context -->
+    <g transform="translate(1270 210)" filter="url(#phone-shadow)">
+      <rect width="460" height="900" rx="68" fill="#0b171b"/>
+      <rect x="13" y="13" width="434" height="874" rx="57" fill="url(#wall)"/>
+      <circle cx="350" cy="195" r="205" fill="#52beae" opacity=".15"/>
+      <circle cx="35" cy="700" r="230" fill="#1b91a6" opacity=".13"/>
+      <rect x="166" y="28" width="128" height="33" rx="17" fill="#061216"/>
+      <text x="46" y="51" font-size="14" font-weight="650" fill="#fff">9:41</text>
+      <text x="230" y="120" text-anchor="middle" font-size="27" font-weight="650" fill="#fff">21. rujna</text>
+      <text x="230" y="150" text-anchor="middle" font-size="16" fill="#fff" fill-opacity=".78">sve aplikacije</text>
+
+      <g transform="translate(40 210)">
+        <g transform="scale(.82)" filter="url(#icon-shadow)"><use xlink:href="#app-dida"/></g>
+        <g transform="translate(115) scale(.82)" filter="url(#icon-shadow)"><use xlink:href="#app-baba"/></g>
+        <g transform="translate(230) scale(.82)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <g transform="translate(345) scale(.82)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <g fill="#fff" font-size="12" font-weight="600" text-anchor="middle">
+          <text x="39" y="100">Dida</text><text x="154" y="100">Baba</text><text x="269" y="100">Downloads</text><text x="384" y="100">Player</text>
+        </g>
+        <g transform="translate(0 150) scale(.82)" filter="url(#icon-shadow)"><use xlink:href="#app-opus"/></g>
+        <text x="39" y="250" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">Library</text>
+      </g>
+
+      <g transform="translate(42 748)">
+        <rect width="376" height="105" rx="34" fill="#e8ffff" fill-opacity=".16" stroke="#fff" stroke-opacity=".12"/>
+        <g fill="#fff" fill-opacity=".24">
+          <rect x="23" y="17" width="70" height="70" rx="17"/><rect x="110" y="17" width="70" height="70" rx="17"/><rect x="197" y="17" width="70" height="70" rx="17"/><rect x="284" y="17" width="70" height="70" rx="17"/>
+        </g>
+      </g>
+      <rect x="177" y="873" width="106" height="5" rx="2.5" fill="#fff" fill-opacity=".76"/>
+    </g>
+
+    <text x="1270" y="1146" font-size="14" fill="#667d83">OPUS ikona je ista za Downloads, Player i Library;</text>
+    <text x="1270" y="1170" font-size="14" fill="#667d83">D / P / L pojavljuje se samo u punom logotipu.</text>
+  </g>
+</svg>

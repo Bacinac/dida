@@ -1,0 +1,15 @@
+-- Heating: per-room config lives on the ROOM, next to the sensor-label and media
+-- configs it sits beside (same pattern, same editing surface). The house-wide part
+-- (boiler relay, hysteresis, anti-cycling, summer cutoff) is a single app_settings
+-- row written by the API — configuration in the DB, env only ever a seed.
+--
+--   areas.heating_config = {
+--     "enabled": true,
+--     "sensor":  "mqtt:thbedroom",          -- room temperature source ("" = the valves' own)
+--     "valves":  ["mqtt:trbedroom"],        -- TRVs this room drives
+--     "targets": {"comfort": 21, "eco": 19, "night": 18, "away": 15},
+--     "schedule": [{"days": [0,1,2,3,4], "at": "06:30", "profile": "comfort"}, …],
+--     "window_pause": true,
+--     "override_target": 22, "override_until": 1754236800   -- temporary boost (epoch s)
+--   }
+ALTER TABLE areas ADD COLUMN IF NOT EXISTS heating_config JSONB;

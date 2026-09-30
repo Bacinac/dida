@@ -1,0 +1,21 @@
+[project]
+name = "dida-planvision"
+version = "0.1.0"
+description = "DIDA planvision: raster floor plan → vector room polygons (classical CV, CPU)"
+requires-python = ">=3.14"
+# Deliberately NOT on dida/base and NOT dependent on dida-core: this is a
+# stateless one-shot CV service. No torch, no ONNX in the base path — pure
+# OpenCV/NumPy (Apache/BSD).
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "opencv-python-headless>=4.10",
+    "numpy>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_planvision"]

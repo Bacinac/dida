@@ -1,0 +1,16 @@
+# Build artifacts (dist/ is what deploy ships to prod; rebuilt from source + keystore)
+dist/
+app/build/
+build/
+.gradle/
+.kotlin/
+
+# Signing + publishing secrets — LIVE ONLY ON DEV, never in git, never on prod.
+# Losing the keystore means family phones refuse the next update (signature
+# mismatch), so it is in the dev host's ZFS snapshot rotation. Ignore the WHOLE
+# directory (not by extension) so a new credential type can't slip in the way
+# the Play service-account .json once did.
+keystore/*
+
+local.properties
+app/google-services.json

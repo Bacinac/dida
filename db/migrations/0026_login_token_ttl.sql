@@ -1,0 +1,16 @@
+-- login_token lifecycle hardening (audit 2026-07-10, K1c).
+--
+-- The per-user QR login_token was a full-session bearer credential that never
+-- expired and -- by original design (0015) -- survived a password reset, so the
+-- "changing a password severs every session" guarantee did NOT hold for it, and
+-- a leaked/screenshotted QR was revocable only by an admin rotating that one
+-- token. Three changes close it:
+--   1. an expiry timestamp (this column) -- /auth/link rejects an expired token;
+--   2. one-time redemption -- the token is DELETED the moment it is exchanged for
+--      a cookie (so a value captured from an access-log URL is already dead);
+--   3. a password reset now NULLs login_token (in the api), so the reset really
+--      does sever this path too.
+-- Set on generation to now() + 14 days (generous for the show-QR -> scan flow).
+-- owntracks_token is deliberately NOT touched here: it is an endpoint-scoped
+-- location credential with its own explicit revoke path, not a UI session.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS login_token_expires_at TIMESTAMPTZ;

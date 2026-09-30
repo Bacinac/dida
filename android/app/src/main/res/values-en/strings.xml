@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_updates">App updates</string>
+    <string name="channel_alerts">Notifications &amp; alerts</string>
+    <string name="update_title">A new version %1$s is available</string>
+    <string name="update_body">Version %1$s is installed. Update now?</string>
+    <string name="update_now">Update</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading update…</string>
+    <string name="update_failed">Update failed. Please try again.</string>
+    <string name="update_current">You have the latest version.</string>
+    <string name="update_check_failed">Update check failed.</string>
+    <string name="setup_ok">Location reporting is on.</string>
+    <string name="setup_failed">Couldn\'t connect — check your sign-in and try again.</string>
+    <string name="perm_location_denied">Location reporting can\'t work without the location permission.</string>
+    <string name="perm_open_settings">Permission was denied earlier — opening settings. Choose Permissions → Location → Allow all the time.</string>
+    <string name="dl_started">Downloading…</string>
+    <string name="dl_failed">Download failed.</string>
+</resources>

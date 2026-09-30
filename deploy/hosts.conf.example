@@ -1,0 +1,31 @@
+# DIDA deployment inventory. Copy this file to deploy/hosts.conf (git-ignored)
+# and list your own installations there.
+#
+# One line per instance; `deploy/prod.sh <name>` (or `all`) reads only this
+# file, so adding a house is a line here, never a new script. Blank lines and
+# `#` comments are ignored.
+#
+#   name      short handle you pass to prod.sh
+#   ssh       ssh target (user@host, or an alias from ~/.ssh/config)
+#   path      DIDA installation on that host
+#   flags     comma-separated, or `-` for none:
+#               apk  — ship the signed Android companion. The keystore lives
+#                 ONLY on this dev box, so the APK is built here and travels as
+#                 an artifact; only the house whose phones run it wants one.
+#               demo — refresh the public demo (demo-dida.boskovic.biz) afterwards so
+#                 it shows the frontend that just shipped.
+#
+# Unlike BABA, the source is NOT shipped from here: deploy/upgrade.sh fetches
+# origin/main on the host, because that same script is what an operator runs on
+# their own installation and the two paths must not drift apart. That is why the
+# origin/main check in prod.sh has no escape hatch — an unpushed commit cannot
+# reach a host at all, it would only be deployed as a surprise.
+#
+# ORDER MATTERS. `prod.sh all` deploys the first line here in front of you and
+# lets the rest carry on in the background, so the list runs from what it costs
+# most to leave stale down to what it costs least. Naming instances explicitly
+# keeps them all in the foreground.
+#
+# name    ssh                   path              flags
+home      root@192.0.2.20       /srv/dida         apk
+cabin     cabin-dida            /srv/dida         -

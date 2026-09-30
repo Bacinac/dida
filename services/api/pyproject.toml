@@ -1,0 +1,30 @@
+[project]
+name = "dida-api"
+version = "0.1.0"
+description = "DIDA API: REST snapshots + live WebSocket over the bus"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "asyncpg>=0.30",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.9",
+    "clickhouse-connect[async]>=0.8",
+    "anthropic>=0.69",
+    "httpx>=0.27",
+    "cryptography>=49",  # floor = the version already shipped: `uv lock --upgrade`
+                     # resolved it DOWNWARD (49 -> 48.0.1) with a >=43 bound, and a
+                     # crypto library must never go backwards on a routine refresh.
+    "py-vapid>=1.9",
+    "pynacl>=1.5",
+    "segno>=1.6",
+    "pillow>=11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_api"]

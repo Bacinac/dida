@@ -1,0 +1,10 @@
+# gitleaks config for the DIDA gate (tests/run.sh), which scans only what git would
+# ship. Extends the default rules; the test suites carry dummy secrets by design.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures"
+paths = [
+  '''(^|/)tests/''',
+]

@@ -1,0 +1,81 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+.uv-cache/
+
+.env
+.env.local
+*.secret
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+node_modules/
+.svelte-kit/
+build/
+.DS_Store
+
+*.log
+logs/
+
+# agent/editor tooling
+.claude/
+
+# app revision stamp — git-derived (scripts/gen-revision.sh), never committed
+revision.json
+
+# runtime state (postgres data dir, NATS jetstream, clickhouse data)
+state/
+
+# MQTT broker credential (hashed) — regenerate with mosquitto_passwd, do not commit
+docker/mosquitto.passwd
+_backups/
+.cov*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# GitHub PAT for CI-run monitoring (operational credential, never committed)
+.gh-token
+.cf-token
+
+# dev admin password used by the demo recorder (never committed)
+.demo-pass
+
+# curated camera stills for the public demo (own property, no people) — not in git
+demo-snapshots/
+# Demo build template, generated from src/app.html with the network shim filled in.
+ui/src/app.demo.html
+# Build output of the public demo. It embeds a full API recording, so an
+# unignored copy once rode `git add -A` into history carrying REAL device
+# addresses and the children's real names. Never tracked.
+ui/demo-dist/
+
+# Real demo anonymisation map — names real people/places; schema in demo/anon.example.json
+demo/anon.json
+
+# Internal working docs (audits, scorecard, planning notes, per-instance Claude
+# config) — kept on disk for local use, not part of the public repo.
+/AUDIT-*.md
+/SCORECARD.md
+/BABA_IDENTITY_TODO.md
+/CLAUDE.md
+/PROPOSAL.md
+/PROPOSAL-CAMERA-CONTROL.md
+/PROPOSAL-HOME-UX.md
+/PROPOSAL-LOGS-HISTORY.md
+/PROPOSAL-REORG.md
+/PROPOSAL-ROOM-SENSORS.md
+/PROPOSAL-ZEN-FIRMWARE.md
+/.deploy.lock.*
+
+# Deployment inventory of the live installations; deploy/hosts.conf.example is the template.
+/deploy/hosts.conf

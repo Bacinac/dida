@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 980">
+  <title>DIDA · BABA · OPUS — semantic browser monograms, set 12</title>
+  <desc>Refined solid monograms whose counters suggest doorway, optics and media disc.</desc>
+  <defs>
+    <!-- Smooth, filled favicon geometry. The meaning is in the counter; there
+         are no decorative cuts and no dependency on a background tile. -->
+    <g id="d" fill="currentColor" fill-rule="evenodd">
+      <path d="M9 8h32c29 0 46 15 46 40S70 88 41 88H9Zm24 62h31V49c0-12-7-21-16-21s-15 9-15 21Z"/>
+    </g>
+    <g id="b" fill="currentColor" fill-rule="evenodd">
+      <path d="M9 8h40c23 0 36 8 36 22 0 9-6 16-17 19 12 4 18 10 18 19 0 14-13 20-37 20H9Zm36 12a11 11 0 1 0 0 22 11 11 0 0 0 0-22Zm1 36a11 11 0 1 0 0 22 11 11 0 0 0 0-22Z"/>
+    </g>
+    <g id="o" fill="currentColor" fill-rule="evenodd">
+      <path d="M48 7a41 41 0 1 1 0 82 41 41 0 0 1 0-82Zm0 20a21 21 0 1 0 0 42 21 21 0 0 0 0-42Z"/>
+      <circle cx="48" cy="48" r="6"/>
+    </g>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="9" stdDeviation="15" flood-color="#08171c" flood-opacity=".13"/></filter>
+  </defs>
+
+  <rect width="1700" height="980" fill="#f3f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#ddf5f2"/>
+  <circle cx="-70" cy="960" r="300" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">BROWSER ICONS / SEMANTIC COUNTERS · SET 12</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Mirna slova. Smisao je unutra.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Bez ukrasa i pločica · puna geometrija · jasna silueta na 16 px</text>
+
+    <g transform="translate(90 230)" filter="url(#shadow)">
+      <rect width="1520" height="390" rx="32" fill="#fff"/>
+
+      <g transform="translate(55 50)">
+        <rect width="400" height="280" rx="26" fill="#f6f9f9" stroke="#e4ebec"/>
+        <g transform="translate(101 32) scale(2.05)" color="#0e9db5"><use xlink:href="#d"/></g>
+        <text x="200" y="235" text-anchor="middle" font-size="15" font-weight="750" letter-spacing="2" fill="#0e9db5">DIDA</text>
+        <text x="200" y="260" text-anchor="middle" font-size="14" fill="#7d8f93">zaobljeni ulaz / dom</text>
+      </g>
+      <g transform="translate(560 50)">
+        <rect width="400" height="280" rx="26" fill="#f6f9f9" stroke="#e4ebec"/>
+        <g transform="translate(101 32) scale(2.05)" color="#146f8b"><use xlink:href="#b"/></g>
+        <text x="200" y="235" text-anchor="middle" font-size="15" font-weight="750" letter-spacing="2" fill="#146f8b">BABA</text>
+        <text x="200" y="260" text-anchor="middle" font-size="14" fill="#7d8f93">dvostruka optika / pogled</text>
+      </g>
+      <g transform="translate(1065 50)">
+        <rect width="400" height="280" rx="26" fill="#f6f9f9" stroke="#e4ebec"/>
+        <g transform="translate(101 32) scale(2.05)" color="#147b76"><use xlink:href="#o"/></g>
+        <text x="200" y="235" text-anchor="middle" font-size="15" font-weight="750" letter-spacing="2" fill="#147b76">OPUS</text>
+        <text x="200" y="260" text-anchor="middle" font-size="14" fill="#7d8f93">medijski disk / zbirka</text>
+      </g>
+    </g>
+
+    <text x="90" y="682" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">U BROWSERU</text>
+    <text x="90" y="710" font-size="15" fill="#829397">Isti znak bez promjene konstrukcije na svijetloj i tamnoj podlozi.</text>
+
+    <g transform="translate(90 744)">
+      <rect width="735" height="120" rx="20" fill="#fff" stroke="#dce5e6"/>
+      <rect x="22" y="28" width="691" height="64" rx="14" fill="#edf2f3"/>
+      <g transform="translate(52 40) scale(.333)" color="#0e9db5"><use xlink:href="#d"/></g><text x="96" y="67" font-size="16" font-weight="650" fill="#32484e">Dida</text>
+      <g transform="translate(264 40) scale(.333)" color="#146f8b"><use xlink:href="#b"/></g><text x="308" y="67" font-size="16" font-weight="650" fill="#32484e">Baba</text>
+      <g transform="translate(476 40) scale(.333)" color="#147b76"><use xlink:href="#o"/></g><text x="520" y="67" font-size="16" font-weight="650" fill="#32484e">Opus</text>
+      <text x="680" y="67" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+    </g>
+    <g transform="translate(855 744)">
+      <rect width="755" height="120" rx="20" fill="#121a1d"/>
+      <rect x="22" y="28" width="711" height="64" rx="14" fill="#202a2e"/>
+      <g transform="translate(60 48) scale(.167)" color="#29c5df"><use xlink:href="#d"/></g><text x="96" y="67" font-size="16" font-weight="650" fill="#e3ecee">Dida</text>
+      <g transform="translate(272 48) scale(.167)" color="#35c7ed"><use xlink:href="#b"/></g><text x="308" y="67" font-size="16" font-weight="650" fill="#e3ecee">Baba</text>
+      <g transform="translate(484 48) scale(.167)" color="#70d6ce"><use xlink:href="#o"/></g><text x="520" y="67" font-size="16" font-weight="650" fill="#e3ecee">Opus</text>
+      <text x="700" y="67" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+    </g>
+
+    <g transform="translate(90 920)">
+      <text font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">MONOKROMATSKI TEST</text>
+      <g transform="translate(230 -24) scale(.4)" color="#2e3d41"><use xlink:href="#d"/></g>
+      <g transform="translate(290 -24) scale(.4)" color="#2e3d41"><use xlink:href="#b"/></g>
+      <g transform="translate(350 -24) scale(.4)" color="#2e3d41"><use xlink:href="#o"/></g>
+      <text x="420" y="4" font-size="14" fill="#7a8d91">identitet radi i bez boje</text>
+    </g>
+  </g>
+</svg>

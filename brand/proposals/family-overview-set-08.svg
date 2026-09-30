@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 1200">
+  <title>DIDA · BABA · OPUS — family overview, set 08</title>
+  <desc>Consolidated browser icons and full in-app wordmarks for the three applications.</desc>
+  <defs>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".13"/></filter>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96"><rect width="96" height="96" fill="#fff"/><path d="M55 4h15L53 38H38Z" fill="#000"/></mask>
+
+    <g id="D-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70h18c25 0 39-13 39-35S61 13 36 13H18"/></g>
+    <g id="B-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70M18 13h23c19 0 29 6 29 17s-10 18-29 18H18M41 48c22 0 33 6 33 17s-11 18-33 18H18"/></g>
+    <g id="O-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="48" cy="48" rx="31" ry="35"/></g>
+    <g id="D-cut" mask="url(#cut)"><use xlink:href="#D-plain"/></g>
+    <g id="B-cut" mask="url(#cut)"><use xlink:href="#B-plain"/></g>
+    <g id="O-cut" mask="url(#cut)"><use xlink:href="#O-plain"/></g>
+    <g id="I" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round"><path d="M8 13h28M22 13v70M8 83h28"/></g>
+    <g id="A" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M8 83 36 13l28 70M19 58h34"/></g>
+    <g id="P" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 83V13h24c20 0 31 7 31 20S62 53 42 53H18"/></g>
+    <g id="U" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13v42c0 19 12 29 29 29s29-10 29-29V13"/></g>
+    <g id="S" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M70 22c-7-6-16-9-26-9-18 0-29 8-29 19 0 27 57 12 57 35 0 11-12 17-29 17-12 0-23-4-31-11"/></g>
+    <g id="L" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v70h51"/></g>
+
+    <g id="DIDA"><use xlink:href="#D-cut"/><use xlink:href="#I" transform="translate(86)"/><use xlink:href="#D-plain" transform="translate(138)"/><use xlink:href="#A" transform="translate(224)"/></g>
+    <g id="BABA"><use xlink:href="#B-cut"/><use xlink:href="#A" transform="translate(88)"/><use xlink:href="#B-plain" transform="translate(168)"/><use xlink:href="#A" transform="translate(256)"/></g>
+    <g id="OPUS"><use xlink:href="#O-cut"/><use xlink:href="#P" transform="translate(92)"/><use xlink:href="#U" transform="translate(180)"/><use xlink:href="#S" transform="translate(270)"/></g>
+
+    <g id="lock-p"><g color="var(--word,#147b76)"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="var(--soft,#79aaa6)"/><g transform="translate(380 6.5) scale(.5)" color="var(--module,#c36e12)"><use xlink:href="#P"/></g></g>
+    <g id="lock-d"><g color="var(--word,#147b76)"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="var(--soft,#79aaa6)"/><g transform="translate(379 6.5) scale(.5)" color="var(--module,#c36e12)"><use xlink:href="#D-plain"/></g></g>
+    <g id="lock-l"><g color="var(--word,#147b76)"><use xlink:href="#OPUS"/></g><rect x="365" y="12" width="3" height="72" rx="1.5" fill="var(--soft,#79aaa6)"/><g transform="translate(381 6.5) scale(.5)" color="var(--module,#c36e12)"><use xlink:href="#L"/></g></g>
+  </defs>
+
+  <rect width="1700" height="1200" fill="#f3f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#ddf5f2"/>
+  <circle cx="-70" cy="1180" r="310" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">DIDA · BABA · OPUS / FAMILY OVERVIEW</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Jedan sustav, tri proizvoda.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Browser znakovi i puni logotipi na jednom mjestu</text>
+
+    <text x="90" y="236" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">BRAND PLOČA</text>
+
+    <g filter="url(#shadow)">
+      <!-- DIDA -->
+      <g transform="translate(90 270)">
+        <rect width="455" height="650" rx="32" fill="#fff"/>
+        <text x="36" y="46" font-size="14" font-weight="750" letter-spacing="2" fill="#0e9db5">DIDA</text>
+        <text x="36" y="76" font-size="13" fill="#86979b">browser znak</text>
+        <rect x="36" y="98" width="150" height="150" rx="28" fill="#eef5f6"/>
+        <g transform="translate(61 123) scale(1.05)" color="#0e9db5"><use xlink:href="#D-cut"/></g>
+        <text x="36" y="305" font-size="13" fill="#86979b">puni in-app logotip</text>
+        <g transform="translate(90 350) scale(.96)" color="#0e9db5"><use xlink:href="#DIDA"/></g>
+        <line x1="36" y1="565" x2="419" y2="565" stroke="#e2eaeb"/>
+        <circle cx="49" cy="600" r="7" fill="#083b47"/><circle cx="72" cy="600" r="7" fill="#29c5df"/>
+        <text x="96" y="605" font-size="13" fill="#71858a">Adriatic cyan</text>
+      </g>
+
+      <!-- BABA -->
+      <g transform="translate(575 270)">
+        <rect width="455" height="650" rx="32" fill="#fff"/>
+        <text x="36" y="46" font-size="14" font-weight="750" letter-spacing="2" fill="#146f8b">BABA</text>
+        <text x="36" y="76" font-size="13" fill="#86979b">browser znak</text>
+        <rect x="36" y="98" width="150" height="150" rx="28" fill="#eef5f6"/>
+        <g transform="translate(61 123) scale(1.05)" color="#146f8b"><use xlink:href="#B-cut"/></g>
+        <text x="36" y="305" font-size="13" fill="#86979b">puni in-app logotip</text>
+        <g transform="translate(70 350) scale(.96)" color="#146f8b"><use xlink:href="#BABA"/></g>
+        <line x1="36" y1="565" x2="419" y2="565" stroke="#e2eaeb"/>
+        <circle cx="49" cy="600" r="7" fill="#102f3d"/><circle cx="72" cy="600" r="7" fill="#35c7ed"/>
+        <text x="96" y="605" font-size="13" fill="#71858a">deep blue</text>
+      </g>
+
+      <!-- OPUS -->
+      <g transform="translate(1060 270)">
+        <rect width="550" height="650" rx="32" fill="#fff"/>
+        <text x="36" y="46" font-size="14" font-weight="750" letter-spacing="2" fill="#147b76">OPUS</text>
+        <text x="36" y="76" font-size="13" fill="#86979b">browser znak — isti za sva tri modula</text>
+        <rect x="36" y="98" width="150" height="150" rx="28" fill="#eef5f6"/>
+        <g transform="translate(61 123) scale(1.05)" color="#147b76"><use xlink:href="#O-cut"/></g>
+        <text x="36" y="287" font-size="13" fill="#86979b">puni in-app logotipi</text>
+        <g transform="translate(45 315) scale(.96)"><use xlink:href="#lock-p"/></g>
+        <g transform="translate(45 425) scale(.96)"><use xlink:href="#lock-d"/></g>
+        <g transform="translate(45 535) scale(.96)"><use xlink:href="#lock-l"/></g>
+      </g>
+    </g>
+
+    <text x="90" y="980" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">BROWSER / STVARNA UPOTREBA</text>
+    <g transform="translate(90 1012)">
+      <rect width="735" height="116" rx="20" fill="#fff" stroke="#dce5e6"/>
+      <rect x="22" y="28" width="691" height="60" rx="14" fill="#edf2f3"/>
+      <g transform="translate(54 39) scale(.34)" color="#0e9db5"><use xlink:href="#D-cut"/></g><text x="98" y="65" font-size="16" font-weight="650" fill="#32484e">Dida</text>
+      <line x1="225" y1="43" x2="225" y2="73" stroke="#d2dddf"/>
+      <g transform="translate(270 39) scale(.34)" color="#146f8b"><use xlink:href="#B-cut"/></g><text x="314" y="65" font-size="16" font-weight="650" fill="#32484e">Baba</text>
+      <line x1="441" y1="43" x2="441" y2="73" stroke="#d2dddf"/>
+      <g transform="translate(486 39) scale(.34)" color="#147b76"><use xlink:href="#O-cut"/></g><text x="530" y="65" font-size="16" font-weight="650" fill="#32484e">Opus</text>
+    </g>
+    <g transform="translate(855 1012)">
+      <rect width="755" height="116" rx="20" fill="#121a1d"/>
+      <rect x="22" y="28" width="711" height="60" rx="14" fill="#202a2e"/>
+      <g transform="translate(54 39) scale(.34)" color="#29c5df"><use xlink:href="#D-cut"/></g><text x="98" y="65" font-size="16" font-weight="650" fill="#e3ecee">Dida</text>
+      <line x1="225" y1="43" x2="225" y2="73" stroke="#344348"/>
+      <g transform="translate(270 39) scale(.34)" color="#35c7ed"><use xlink:href="#B-cut"/></g><text x="314" y="65" font-size="16" font-weight="650" fill="#e3ecee">Baba</text>
+      <line x1="441" y1="43" x2="441" y2="73" stroke="#344348"/>
+      <g transform="translate(486 39) scale(.34)" color="#70d6ce"><use xlink:href="#O-cut"/></g><text x="530" y="65" font-size="16" font-weight="650" fill="#e3ecee">Opus</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,58 @@
+[project]
+name = "dida-workspace"
+version = "0.0.0"
+description = "DIDA monorepo workspace (dev-only; not published)"
+requires-python = ">=3.14"
+
+[tool.uv.workspace]
+# Every Python package in the monorepo — one lockfile resolves them together so
+# a rebuild pins the exact same versions (reproducible; no silent auto-bump).
+members = ["core", "services/*", "adapters/*"]
+exclude = ["services/matter-bridge"]  # TypeScript (matter.js), not a uv package
+
+[tool.uv.sources]
+dida-core = { workspace = true }
+
+[dependency-groups]
+lint = ["ruff>=0.16"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+# BLE: a broad `except` must log the traceback or re-raise, so a failure is
+# never swallowed into a one-line warning. ASYNC: no blocking call on the
+# event loop. S608: every SQL string built with an f-string carries
+# `# noqa: S608`, placed by someone who checked that nothing interpolated can
+# come from a request, so a new one gets that check too. C901: a function past
+# fifteen branches is split before it grows, not after.
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "BLE", "ASYNC", "S608", "C901"]
+# RUF001/002/003 flag Croatian diacritics (č ć š ž đ) as "ambiguous unicode".
+# Our comments and UI copy are intentionally Croatian — false positives.
+# E501: `ruff format` owns line wrapping; remaining long lines are unsplittable
+# string/SQL/URL literals.
+# `ruff check` IS the gate and must stay clean.
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.per-file-ignores]
+# A test runs one coroutine at a time, so blocking file I/O there stalls
+# nothing, and a fake keeps the `timeout` parameter of the client it stands in for.
+"tests/**" = ["ASYNC109", "ASYNC221", "ASYNC230", "ASYNC240"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom puts these in argument defaults.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Security",
+]

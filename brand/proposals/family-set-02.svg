@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 1000">
+  <title>DIDA · BABA · OPUS — family marks, set 02</title>
+  <desc>Custom uppercase geometric monograms and wordmarks.</desc>
+  <defs>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".15"/>
+    </filter>
+
+    <!-- Custom-drawn uppercase alphabet. The logos never use live text. -->
+    <g id="D" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 14v68h18c24 0 38-13 38-34S60 14 36 14H18"/>
+    </g>
+    <g id="B" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 14v68M18 14h23c18 0 28 6 28 17s-10 17-28 17H18M41 48c21 0 32 6 32 17s-11 17-32 17H18"/>
+    </g>
+    <!-- True 48/48 centre. The ellipse is intentionally a touch narrower than
+         a circle so it reads circular beside the straight capitals. -->
+    <g id="O" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="48" cy="48" rx="31" ry="35"/>
+    </g>
+    <g id="I" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round">
+      <path d="M8 14h28M22 14v68M8 82h28"/>
+    </g>
+    <g id="A" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 82 36 14l28 68M19 57h34"/>
+    </g>
+    <g id="P" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 82V14h24c19 0 30 7 30 19S61 52 42 52H18"/>
+    </g>
+    <g id="U" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 14v41c0 19 12 28 29 28s29-9 29-28V14"/>
+    </g>
+    <g id="S" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M70 22c-7-6-16-9-26-9-17 0-29 8-29 19 0 26 57 12 57 35 0 11-12 17-29 17-12 0-23-4-31-11"/>
+    </g>
+    <g id="L" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 14v68h51"/>
+    </g>
+
+    <g id="DIDA">
+      <use xlink:href="#D"/><use xlink:href="#I" transform="translate(86)"/>
+      <use xlink:href="#D" transform="translate(138)"/><use xlink:href="#A" transform="translate(224)"/>
+    </g>
+    <g id="BABA">
+      <use xlink:href="#B"/><use xlink:href="#A" transform="translate(88)"/>
+      <use xlink:href="#B" transform="translate(168)"/><use xlink:href="#A" transform="translate(256)"/>
+    </g>
+    <g id="OPUS">
+      <use xlink:href="#O"/><use xlink:href="#P" transform="translate(92)"/>
+      <use xlink:href="#U" transform="translate(180)"/><use xlink:href="#S" transform="translate(270)"/>
+    </g>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#f4f7f7"/>
+  <circle cx="1510" cy="-20" r="300" fill="#dff6f4"/>
+  <circle cx="-80" cy="1030" r="300" fill="#e4f4f8"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">SET 02 / UPPERCASE GEOMETRY</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Velika slova. Neutralna, jasna, naša.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Bez neželjenih asocijacija · precizno centrirano · čitljivo od 16 px</text>
+
+    <text x="90" y="246" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">BROWSER / FAVICON</text>
+    <text x="90" y="274" font-size="15" fill="#829397">Jedno veliko slovo, bez pločice i bez oznake Opus modula.</text>
+
+    <g transform="translate(90 304)">
+      <rect width="690" height="120" rx="18" fill="#fff" stroke="#dce5e6"/>
+      <circle cx="34" cy="25" r="5" fill="#ff766f"/><circle cx="53" cy="25" r="5" fill="#ffc05c"/><circle cx="72" cy="25" r="5" fill="#62ce7b"/>
+      <rect x="22" y="48" width="646" height="54" rx="13" fill="#f0f4f5"/>
+
+      <g transform="translate(49 56) scale(.38)" color="#0e9db5"><use xlink:href="#D"/></g>
+      <text x="92" y="84" font-size="16" font-weight="600" fill="#32484e">Dida</text>
+      <line x1="181" y1="61" x2="181" y2="91" stroke="#d2dddf"/>
+      <g transform="translate(212 56) scale(.38)" color="#146f8b"><use xlink:href="#B"/></g>
+      <text x="255" y="84" font-size="16" font-weight="600" fill="#32484e">Baba</text>
+      <line x1="344" y1="61" x2="344" y2="91" stroke="#d2dddf"/>
+      <g transform="translate(375 56) scale(.38)" color="#147b76"><use xlink:href="#O"/></g>
+      <text x="418" y="84" font-size="16" font-weight="600" fill="#32484e">Opus</text>
+      <text x="646" y="83" text-anchor="end" font-size="13" fill="#93a3a6">16 px test</text>
+    </g>
+
+    <g transform="translate(820 304)">
+      <rect width="690" height="120" rx="18" fill="#121a1d"/>
+      <circle cx="34" cy="25" r="5" fill="#ff766f"/><circle cx="53" cy="25" r="5" fill="#ffc05c"/><circle cx="72" cy="25" r="5" fill="#62ce7b"/>
+      <rect x="22" y="48" width="646" height="54" rx="13" fill="#202a2e"/>
+
+      <g transform="translate(49 56) scale(.38)" color="#29c5df"><use xlink:href="#D"/></g>
+      <text x="92" y="84" font-size="16" font-weight="600" fill="#e3ecee">Dida</text>
+      <line x1="181" y1="61" x2="181" y2="91" stroke="#344348"/>
+      <g transform="translate(212 56) scale(.38)" color="#35c7ed"><use xlink:href="#B"/></g>
+      <text x="255" y="84" font-size="16" font-weight="600" fill="#e3ecee">Baba</text>
+      <line x1="344" y1="61" x2="344" y2="91" stroke="#344348"/>
+      <g transform="translate(375 56) scale(.38)" color="#70d6ce"><use xlink:href="#O"/></g>
+      <text x="418" y="84" font-size="16" font-weight="600" fill="#e3ecee">Opus</text>
+      <text x="646" y="83" text-anchor="end" font-size="13" fill="#829397">dark chrome</text>
+    </g>
+
+    <text x="90" y="492" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">MOBITEL / INSTALIRANA APLIKACIJA</text>
+    <text x="90" y="520" font-size="15" fill="#829397">Jednaka optička veličina i centar za sva tri znaka.</text>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(90 550)"><rect width="152" height="152" rx="36" fill="#083b47"/><g transform="translate(27 23) scale(1.1)" color="#29c5df"><use xlink:href="#D"/></g></g>
+      <g transform="translate(282 550)"><rect width="152" height="152" rx="36" fill="#102f3d"/><g transform="translate(27 23) scale(1.1)" color="#35c7ed"><use xlink:href="#B"/></g></g>
+      <g transform="translate(474 550)"><rect width="152" height="152" rx="36" fill="#103f3d"/><g transform="translate(24 23) scale(1.1)" color="#70d6ce"><use xlink:href="#O"/></g></g>
+    </g>
+    <text x="166" y="734" text-anchor="middle" font-size="14" font-weight="700" fill="#0e9db5">DIDA</text>
+    <text x="358" y="734" text-anchor="middle" font-size="14" font-weight="700" fill="#146f8b">BABA</text>
+    <text x="550" y="734" text-anchor="middle" font-size="14" font-weight="700" fill="#147b76">OPUS</text>
+
+    <g transform="translate(700 542)">
+      <rect width="810" height="170" rx="24" fill="#e9eff0"/>
+      <text x="38" y="42" font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">ŠTO JE PROMIJENJENO</text>
+      <circle cx="54" cy="91" r="4" fill="#0e9db5"/><text x="72" y="97" font-size="16" fill="#40565c">D je klasični kapital, bez kružnog malog d</text>
+      <circle cx="54" cy="128" r="4" fill="#0e9db5"/><text x="72" y="134" font-size="16" fill="#40565c">O ima stvarni centar na 48 × 48</text>
+      <circle cx="465" cy="91" r="4" fill="#0e9db5"/><text x="483" y="97" font-size="16" fill="#40565c">isti cap-height za D, B i O</text>
+      <circle cx="465" cy="128" r="4" fill="#0e9db5"/><text x="483" y="134" font-size="16" fill="#40565c">P / D / L su pune, čitljive oznake</text>
+    </g>
+
+    <text x="90" y="805" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">UNUTAR APLIKACIJE</text>
+    <text x="90" y="833" font-size="15" fill="#829397">Puni naziv velikim slovima; modul postoji samo uz OPUS.</text>
+
+    <g transform="translate(90 860) scale(.78)" color="#0e9db5"><use xlink:href="#DIDA"/></g>
+    <g transform="translate(390 860) scale(.78)" color="#146f8b"><use xlink:href="#BABA"/></g>
+
+    <g transform="translate(760 860) scale(.6)" color="#147b76"><use xlink:href="#OPUS"/></g>
+    <rect x="977" y="866" width="3" height="60" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1002 860) scale(.72)" color="#b76b18"><use xlink:href="#P"/></g>
+
+    <g transform="translate(1120 860) scale(.6)" color="#147b76"><use xlink:href="#OPUS"/></g>
+    <rect x="1337" y="866" width="3" height="60" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1362 860) scale(.72)" color="#b76b18"><use xlink:href="#D"/></g>
+
+    <g transform="translate(760 938) scale(.6)" color="#147b76"><use xlink:href="#OPUS"/></g>
+    <rect x="977" y="944" width="3" height="52" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1002 932) scale(.72)" color="#b76b18"><use xlink:href="#L"/></g>
+  </g>
+</svg>

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 1120">
+  <title>DIDA · BABA · OPUS — browser letterform study, set 11</title>
+  <desc>Three new monogram families focused on letterform: carved, handwritten and maritime stencil.</desc>
+  <defs>
+    <!-- A / CARVED: filled, faceted forms. No font, no strokes. -->
+    <g id="a-d" fill="currentColor" fill-rule="evenodd"><path d="M10 7h34l25 12 16 21v17L69 77 44 89H10Zm22 20v42h10l14-7 8-10v-8l-8-10-14-7Z"/></g>
+    <g id="a-b" fill="currentColor" fill-rule="evenodd"><path d="M10 7h38l21 10 10 14-4 10-10 7 11 7 6 12-10 13-23 9H10Zm22 18v15h12l11-4 3-5-5-4-10-2Zm0 31v15h13l13-4 2-5-5-4-11-2Z"/></g>
+    <g id="a-o" fill="currentColor" fill-rule="evenodd"><path d="M29 7h38l20 20v42L67 89H29L9 69V27Zm10 21-9 9v22l9 9h18l9-9V37l-9-9Z"/></g>
+
+    <!-- B / HAND: bold open brush gestures with one controlled exit stroke. -->
+    <g id="b-d" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"><path d="M24 13v66M24 17c38-13 60 4 58 30-2 24-20 37-58 34M20 81c20 6 46 5 64-6"/></g>
+    <g id="b-b" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"><path d="M22 13v67M22 17c31-10 52-3 52 14 0 13-15 19-48 18M26 49c36-5 55 2 55 18 0 17-22 22-59 14M19 81c21 6 47 5 66-6"/></g>
+    <g id="b-o" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"><path d="M70 23c-20-16-51-6-57 19-6 24 10 43 34 43 22 0 38-15 38-37 0-10-4-19-12-25M47 85c15 3 30 0 41-10"/></g>
+
+    <!-- C / STENCIL: industrial strokes with cuts where a real stencil needs bridges. -->
+    <mask id="c-d-cut"><rect width="96" height="96" fill="#fff"/><rect x="67" y="40" width="23" height="14" fill="#000"/></mask>
+    <mask id="c-b-cut"><rect width="96" height="96" fill="#fff"/><rect x="63" y="23" width="25" height="11" fill="#000"/><rect x="66" y="63" width="23" height="11" fill="#000"/></mask>
+    <mask id="c-o-cut"><rect width="96" height="96" fill="#fff"/><rect x="5" y="41" width="24" height="14" fill="#000"/><rect x="67" y="41" width="24" height="14" fill="#000"/></mask>
+    <g id="c-d" fill="none" stroke="currentColor" stroke-width="19" stroke-linecap="butt" stroke-linejoin="bevel" mask="url(#c-d-cut)"><path d="M18 10v76h20c28 0 43-15 43-38S66 10 38 10H18"/></g>
+    <g id="c-b" fill="none" stroke="currentColor" stroke-width="19" stroke-linecap="butt" stroke-linejoin="bevel" mask="url(#c-b-cut)"><path d="M18 10v76M18 10h26c21 0 32 7 32 19S65 48 44 48H18M44 48c24 0 36 7 36 19S68 86 44 86H18"/></g>
+    <g id="c-o" fill="none" stroke="currentColor" stroke-width="19" stroke-linecap="butt" stroke-linejoin="bevel" mask="url(#c-o-cut)"><ellipse cx="48" cy="48" rx="35" ry="39"/></g>
+
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#08171c" flood-opacity=".13"/></filter>
+  </defs>
+
+  <rect width="1700" height="1120" fill="#f3f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#ddf5f2"/>
+  <circle cx="-70" cy="1100" r="310" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">BROWSER ICONS / LETTERFORM STUDY · SET 11</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Prvo karakter slova. Tek onda podloga.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Tri nova crteža bez pločica, kutova i dosadašnjeg reza</text>
+
+    <!-- Shared row layout: large forms left; 32 and 16 px chrome tests right. -->
+    <g transform="translate(90 224)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">A / KLESANO</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Pune uglate forme, kao suvremeni natpis isklesan u kamenu.</text>
+      <g transform="translate(34 94) scale(1.28)" color="#0e9db5"><use xlink:href="#a-d"/></g>
+      <g transform="translate(188 94) scale(1.28)" color="#146f8b"><use xlink:href="#a-b"/></g>
+      <g transform="translate(342 94) scale(1.28)" color="#147b76"><use xlink:href="#a-o"/></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333)" color="#0e9db5"><use xlink:href="#a-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333)" color="#146f8b"><use xlink:href="#a-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333)" color="#147b76"><use xlink:href="#a-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167)" color="#29c5df"><use xlink:href="#a-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167)" color="#35c7ed"><use xlink:href="#a-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167)" color="#70d6ce"><use xlink:href="#a-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+
+    <g transform="translate(90 512)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">B / RUKOPIS</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Jedan snažan potez i izlazni zamah; bliže izvornom karakteru DIDE i BABE.</text>
+      <g transform="translate(34 94) scale(1.28) skewX(-5)" color="#0e9db5"><use xlink:href="#b-d"/></g>
+      <g transform="translate(188 94) scale(1.28) skewX(-5)" color="#146f8b"><use xlink:href="#b-b"/></g>
+      <g transform="translate(342 94) scale(1.28) skewX(-5)" color="#147b76"><use xlink:href="#b-o"/></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333) skewX(-5)" color="#0e9db5"><use xlink:href="#b-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333) skewX(-5)" color="#146f8b"><use xlink:href="#b-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333) skewX(-5)" color="#147b76"><use xlink:href="#b-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167) skewX(-5)" color="#29c5df"><use xlink:href="#b-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167) skewX(-5)" color="#35c7ed"><use xlink:href="#b-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167) skewX(-5)" color="#70d6ce"><use xlink:href="#b-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+
+    <g transform="translate(90 800)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">C / POMORSKI STENCIL</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Industrijska slova s pravim stencil mostovima; tehnički, robusno i čitljivo.</text>
+      <g transform="translate(34 94) scale(1.28)" color="#0e9db5"><use xlink:href="#c-d"/></g>
+      <g transform="translate(188 94) scale(1.28)" color="#146f8b"><use xlink:href="#c-b"/></g>
+      <g transform="translate(342 94) scale(1.28)" color="#147b76"><use xlink:href="#c-o"/></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333)" color="#0e9db5"><use xlink:href="#c-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333)" color="#146f8b"><use xlink:href="#c-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333)" color="#147b76"><use xlink:href="#c-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167)" color="#29c5df"><use xlink:href="#c-d"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167)" color="#35c7ed"><use xlink:href="#c-b"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167)" color="#70d6ce"><use xlink:href="#c-o"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+  </g>
+</svg>

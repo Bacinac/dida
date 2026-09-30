@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="hr" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to anything
+         other than 0; the bottom nav, sheets and player bar all pad with it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" href="/favicon.ico?v=20260921" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260921" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260921" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260921" />
+    <!-- icon-192/512 are declared in the manifest ONLY. They carry the tile,
+         which an installed app needs and a tab does not — declared here, the
+         browser would pick one for a HiDPI tab and draw a sticker. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260921" />
+    <link rel="manifest" href="/site.webmanifest?v=20260921" />
+    <meta name="theme-color" content="#0ea5b9" />
+    <title>DIDA</title>
+    <script>
+      // Pre-hydration theme apply: no flash of wrong theme on first paint.
+      // Mirrors the kit's theme store but synchronous and dependency-free.
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          var dark =
+            t === "dark" ||
+            (!t) ||  // default = dark
+            (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) { document.documentElement.classList.add("dark"); }
+      })();
+    </script>
+    <!-- Public demo builds only (DIDA_DEMO=1): swaps fetch/WebSocket for a
+         recorded snapshot so the real frontend runs with no backend. The tag
+         is stripped from every normal build. -->
+    <!--DEMO_NET-->
+    %sveltekit.head%
+  </head>
+  <body class="h-full antialiased" data-sveltekit-preload-data="hover"
+        style="padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)">
+    <div class="h-full">%sveltekit.body%</div>
+  </body>
+</html>

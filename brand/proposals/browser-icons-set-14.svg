@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 940">
+  <title>DIDA · BABA · OPUS — ribbon browser monograms, set 14</title>
+  <desc>Smooth continuous ribbon monograms with product-specific tonal gradients.</desc>
+  <defs>
+    <linearGradient id="dida" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#08788d"/><stop offset=".55" stop-color="#0e9db5"/><stop offset="1" stop-color="#35d2e8"/></linearGradient>
+    <linearGradient id="baba" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d4c63"/><stop offset=".55" stop-color="#146f8b"/><stop offset="1" stop-color="#38c9ee"/></linearGradient>
+    <linearGradient id="opus" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b5652"/><stop offset=".55" stop-color="#147b76"/><stop offset="1" stop-color="#78ded5"/></linearGradient>
+    <linearGradient id="dida-dark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#13a8c1"/><stop offset="1" stop-color="#69e4f2"/></linearGradient>
+    <linearGradient id="baba-dark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e98bb"/><stop offset="1" stop-color="#77e3fa"/></linearGradient>
+    <linearGradient id="opus-dark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#35aaa3"/><stop offset="1" stop-color="#9ce9e3"/></linearGradient>
+
+    <g id="d" fill="none" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"><path d="M24 14v68h16c27 0 42-14 42-34S67 14 40 14Z"/></g>
+    <g id="b" fill="none" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"><path d="M24 14v68M24 14h19c20 0 31 7 31 18S63 49 43 49H24M43 49c23 0 35 7 35 18S66 82 43 82H24"/></g>
+    <g id="o" fill="none" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="48" cy="48" rx="34" ry="36"/></g>
+
+    <!-- Small darker overpasses make the drawings read as folded ribbon rather
+         than generic monoline letters. -->
+    <g id="d-fold" fill="none" stroke-width="17" stroke-linecap="round"><path d="M24 14v18"/></g>
+    <g id="b-fold" fill="none" stroke-width="17" stroke-linecap="round"><path d="M24 40v18"/></g>
+    <g id="o-fold" fill="none" stroke-width="17" stroke-linecap="round"><path d="M25 21c5-5 10-7 16-8"/></g>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="9" stdDeviation="15" flood-color="#08171c" flood-opacity=".12"/></filter>
+  </defs>
+
+  <rect width="1700" height="940" fill="#f5f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#e1f4f2"/>
+  <circle cx="-70" cy="930" r="290" fill="#e4f2f6"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">BROWSER ICONS / RIBBON MONOGRAMS · SET 14</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Jedan potez. Jedan miran znak.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Kontinuirana vrpca · tonalni prijelaz · bez podloge i tipografskih ukrasa</text>
+
+    <g transform="translate(90 230)" filter="url(#shadow)">
+      <rect width="1520" height="350" rx="32" fill="#fff"/>
+      <g transform="translate(70 48)">
+        <rect width="400" height="230" rx="26" fill="#f7f9f9" stroke="#e4ebec"/>
+        <g transform="translate(105 20) scale(1.95)" stroke="url(#dida)"><use xlink:href="#d"/></g>
+        <g transform="translate(105 20) scale(1.95)" stroke="#076c7f"><use xlink:href="#d-fold"/></g>
+        <text x="200" y="202" text-anchor="middle" font-size="14" font-weight="750" letter-spacing="2" fill="#0e9db5">DIDA</text>
+      </g>
+      <g transform="translate(560 48)">
+        <rect width="400" height="230" rx="26" fill="#f7f9f9" stroke="#e4ebec"/>
+        <g transform="translate(105 20) scale(1.95)" stroke="url(#baba)"><use xlink:href="#b"/></g>
+        <g transform="translate(105 20) scale(1.95)" stroke="#0b465b"><use xlink:href="#b-fold"/></g>
+        <text x="200" y="202" text-anchor="middle" font-size="14" font-weight="750" letter-spacing="2" fill="#146f8b">BABA</text>
+      </g>
+      <g transform="translate(1050 48)">
+        <rect width="400" height="230" rx="26" fill="#f7f9f9" stroke="#e4ebec"/>
+        <g transform="translate(105 20) scale(1.95)" stroke="url(#opus)"><use xlink:href="#o"/></g>
+        <g transform="translate(105 20) scale(1.95)" stroke="#094d49"><use xlink:href="#o-fold"/></g>
+        <text x="200" y="202" text-anchor="middle" font-size="14" font-weight="750" letter-spacing="2" fill="#147b76">OPUS</text>
+      </g>
+      <text x="760" y="320" text-anchor="middle" font-size="14" fill="#839499">tonalni prijelaz ostaje unutar iste obitelji boja</text>
+    </g>
+
+    <text x="90" y="646" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">U BROWSERU</text>
+    <text x="90" y="674" font-size="15" fill="#829397">Na 16 px preklop postaje jedna tamnija točka, a silueta ostaje čista.</text>
+
+    <g transform="translate(90 706)">
+      <rect width="735" height="120" rx="20" fill="#fff" stroke="#dce5e6"/>
+      <rect x="22" y="28" width="691" height="64" rx="14" fill="#edf2f3"/>
+      <g transform="translate(52 40) scale(.333)" stroke="url(#dida)"><use xlink:href="#d"/></g><g transform="translate(52 40) scale(.333)" stroke="#076c7f"><use xlink:href="#d-fold"/></g><text x="96" y="67" font-size="16" font-weight="650" fill="#32484e">Dida</text>
+      <g transform="translate(264 40) scale(.333)" stroke="url(#baba)"><use xlink:href="#b"/></g><g transform="translate(264 40) scale(.333)" stroke="#0b465b"><use xlink:href="#b-fold"/></g><text x="308" y="67" font-size="16" font-weight="650" fill="#32484e">Baba</text>
+      <g transform="translate(476 40) scale(.333)" stroke="url(#opus)"><use xlink:href="#o"/></g><g transform="translate(476 40) scale(.333)" stroke="#094d49"><use xlink:href="#o-fold"/></g><text x="520" y="67" font-size="16" font-weight="650" fill="#32484e">Opus</text>
+      <text x="680" y="67" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+    </g>
+    <g transform="translate(855 706)">
+      <rect width="755" height="120" rx="20" fill="#121a1d"/>
+      <rect x="22" y="28" width="711" height="64" rx="14" fill="#202a2e"/>
+      <g transform="translate(60 48) scale(.167)" stroke="url(#dida-dark)"><use xlink:href="#d"/></g><text x="96" y="67" font-size="16" font-weight="650" fill="#e3ecee">Dida</text>
+      <g transform="translate(272 48) scale(.167)" stroke="url(#baba-dark)"><use xlink:href="#b"/></g><text x="308" y="67" font-size="16" font-weight="650" fill="#e3ecee">Baba</text>
+      <g transform="translate(484 48) scale(.167)" stroke="url(#opus-dark)"><use xlink:href="#o"/></g><text x="520" y="67" font-size="16" font-weight="650" fill="#e3ecee">Opus</text>
+      <text x="700" y="67" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+    </g>
+
+    <g transform="translate(90 884)">
+      <text font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">SVG I PNG</text>
+      <text x="115" font-size="14" fill="#7a8d91">gradijent se izvozi u raster za starije browsere; oblik ostaje potpuno jednak</text>
+    </g>
+  </g>
+</svg>

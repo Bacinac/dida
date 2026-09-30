@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 820">
+  <title>OPUS module marks — set 05</title>
+  <desc>Full inner module initials with a bevel parallel to the signature cut.</desc>
+  <defs>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".14"/>
+    </filter>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96">
+      <rect width="96" height="96" fill="#fff"/>
+      <path d="M55 4h15L53 38H38Z" fill="#000"/>
+    </mask>
+
+    <g id="O-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="48" cy="48" rx="31" ry="35"/></g>
+    <g id="O-cut" mask="url(#cut)"><use xlink:href="#O-plain"/></g>
+    <g id="P" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M18 83V13h24c20 0 31 7 31 20S62 53 42 53H18"/></g>
+    <g id="U" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M14 13v42c0 19 12 29 29 29s29-10 29-29V13"/></g>
+    <g id="S" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M70 22c-7-6-16-9-26-9-18 0-29 8-29 19 0 27 57 12 57 35 0 11-12 17-29 17-12 0-23-4-31-11"/></g>
+    <g id="OPUS"><use xlink:href="#O-cut"/><use xlink:href="#P" transform="translate(92)"/><use xlink:href="#U" transform="translate(180)"/><use xlink:href="#S" transform="translate(270)"/></g>
+
+    <!-- Solid small-size initials. Their top-left terminal is bevelled on the
+         same 2:1 diagonal as O's cut, but no material is removed from the body. -->
+    <g id="inside-p" fill="currentColor" fill-rule="evenodd">
+      <path d="M34 36 39 27h10c10 0 16 5 16 14s-6 14-16 14h-7v12h-8Zm8-2v14h7c6 0 8-3 8-7s-2-7-8-7Z"/>
+    </g>
+    <g id="inside-d" fill="currentColor" fill-rule="evenodd">
+      <path d="M34 36 39 27h8c12 0 19 8 19 20s-7 20-19 20H34Zm8-2v26h5c7 0 11-5 11-13s-4-13-11-13Z"/>
+    </g>
+    <g id="inside-l" fill="currentColor">
+      <path d="M34 36 39 27h4v33h21v7H34Z"/>
+    </g>
+  </defs>
+
+  <rect width="1600" height="820" fill="#f3f7f7"/>
+  <circle cx="1500" cy="-20" r="300" fill="#ddf5f2"/>
+  <circle cx="-60" cy="810" r="270" fill="#e1f3f8"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">OPUS / MODULES · SET 05</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Isti kut, bez još jedne rupe.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Vanjski rez ostaje potpis · unutarnje slovo dobiva samo ukošeni završetak</text>
+
+    <text x="90" y="244" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">VELIKI PRIKAZ</text>
+    <text x="90" y="272" font-size="15" fill="#829397">Puna slova ostaju čitljiva, a paralelne dijagonale vizualno ih vežu uz O.</text>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(90 310)">
+        <rect width="440" height="220" rx="30" fill="#fff"/>
+        <line x1="220" y1="20" x2="220" y2="200" stroke="#deeaeb" stroke-dasharray="4 8"/>
+        <g transform="translate(38 62) scale(1.05)" color="#147b76"><use xlink:href="#OPUS"/></g>
+        <g transform="translate(38 62) scale(1.05)" color="#c36e12"><use xlink:href="#inside-p"/></g>
+      </g>
+      <g transform="translate(580 310)">
+        <rect width="440" height="220" rx="30" fill="#fff"/>
+        <line x1="220" y1="20" x2="220" y2="200" stroke="#deeaeb" stroke-dasharray="4 8"/>
+        <g transform="translate(38 62) scale(1.05)" color="#147b76"><use xlink:href="#OPUS"/></g>
+        <g transform="translate(38 62) scale(1.05)" color="#c36e12"><use xlink:href="#inside-d"/></g>
+      </g>
+      <g transform="translate(1070 310)">
+        <rect width="440" height="220" rx="30" fill="#fff"/>
+        <line x1="220" y1="20" x2="220" y2="200" stroke="#deeaeb" stroke-dasharray="4 8"/>
+        <g transform="translate(38 62) scale(1.05)" color="#147b76"><use xlink:href="#OPUS"/></g>
+        <g transform="translate(38 62) scale(1.05)" color="#c36e12"><use xlink:href="#inside-l"/></g>
+      </g>
+    </g>
+    <text x="310" y="560" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">PLAYER</text>
+    <text x="800" y="560" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">DOWNLOADS</text>
+    <text x="1290" y="560" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="2" fill="#8a5a25">LIBRARY</text>
+
+    <g transform="translate(90 612)">
+      <rect width="540" height="138" rx="24" fill="#e6edef"/>
+      <text x="32" y="35" font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">KONSTRUKCIJA</text>
+      <path d="M60 62h18L58 102H40Z" fill="#cad9dc"/>
+      <path d="M103 76 112 58h12v44h-21Z" fill="#c36e12"/>
+      <path d="M41 112 79 36M104 112l38-76" stroke="#0e9db5" stroke-width="2" stroke-dasharray="5 5"/>
+      <text x="178" y="80" font-size="16" fill="#40565c">rez i završetak imaju isti nagib</text>
+      <text x="178" y="108" font-size="15" fill="#71858a">slovo je i dalje jedna puna silueta</text>
+    </g>
+
+    <g transform="translate(670 612)">
+      <text x="0" y="20" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">STVARNA VELIČINA ZAGLAVLJA</text>
+      <rect y="42" width="840" height="96" rx="20" fill="#142023"/>
+      <line x1="420" y1="52" x2="420" y2="128" stroke="#33474c" stroke-dasharray="3 7"/>
+      <g transform="translate(306 59) scale(.64)" color="#70d6ce"><use xlink:href="#OPUS"/></g>
+      <g transform="translate(306 59) scale(.64)" color="#f0aa5a"><use xlink:href="#inside-p"/></g>
+    </g>
+  </g>
+</svg>

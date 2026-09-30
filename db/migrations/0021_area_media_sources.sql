@@ -1,0 +1,22 @@
+-- 0021 — per-area MEDIA SOURCE registry: the outcome layer over the mechanism.
+--
+-- A "source" is an EXPERIENCE the user picks in a room ("Kino", "TV", "Shield",
+-- "Glazba"), not a device or an app. Each entry maps that choice to a concrete
+-- control path, so the MediaHub widget can expose the outcome and hide whether it
+-- drives a Harmony activity (internal AV — keeps the physical remote in sync) or
+-- routes the Marantz Zone 2 to a streaming player (external — iFi → MUSIC → Zone 2).
+--
+-- Shape: { "sources": [ <source>, … ] } where a <source> is either
+--   activity (internal, via Harmony):
+--     { "key": "shield", "label": "Shield", "icon": "tv", "kind": "activity",
+--       "remote": "harmony:hub", "activity": "Watch Shield",
+--       "nowplaying": "androidtv:shield" | null }   -- where to read now-playing (optional)
+--   player (external streaming → an AVR zone):
+--     { "key": "glazba", "label": "Glazba", "icon": "music", "kind": "player",
+--       "player": "volumio:ifi",
+--       "zone": "denon:marantz_zone2", "zone_input": "MUSIC",  -- route + volume target (optional)
+--       "browse": ["local", "tidal", "radio"] }               -- which browse tabs to show
+--
+-- NULL = not configured; the UI derives a sensible default from the live Harmony
+-- activities + detected players until the user curates and saves it here.
+ALTER TABLE areas ADD COLUMN IF NOT EXISTS media_config JSONB;

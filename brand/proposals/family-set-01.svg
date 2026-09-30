@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 1100">
+  <title>DIDA · BABA · OPUS — family marks, set 01</title>
+  <desc>Custom geometric monograms for browser and installed-app icons, with matching full in-app wordmarks.</desc>
+
+  <defs>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".14"/>
+    </filter>
+
+    <!-- The brand alphabet is drawn, not typeset. Every glyph uses one rounded
+         14-unit stroke on a 64-unit body. The shared construction is the family
+         resemblance; colour identifies the product. -->
+    <g id="g-d" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M52 8v72"/>
+      <path d="M52 43c-5-8-12-12-21-12-14 0-23 10-23 25s9 25 23 25c9 0 16-4 21-12"/>
+    </g>
+    <g id="g-b" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 8v72"/>
+      <path d="M12 43c5-8 12-12 21-12 14 0 23 10 23 25s-9 25-23 25c-9 0-16-4-21-12"/>
+    </g>
+    <g id="g-o" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 31c15 0 25 10 25 25S47 81 32 81 7 71 7 56s10-25 25-25Z"/>
+    </g>
+    <g id="g-a" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M52 34v46"/>
+      <path d="M52 43c-5-8-12-12-21-12-14 0-23 10-23 25s9 25 23 25c9 0 16-4 21-12"/>
+    </g>
+    <g id="g-i" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round">
+      <path d="M14 36v44"/><path d="M14 11h.01"/>
+    </g>
+    <g id="g-p" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 34v67"/>
+      <path d="M12 43c5-8 12-12 21-12 14 0 23 10 23 25s-9 25-23 25c-9 0-16-4-21-12"/>
+    </g>
+    <g id="g-u" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 34v24c0 15 8 23 22 23 13 0 22-8 22-23V34"/>
+    </g>
+    <g id="g-s" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M51 38c-5-5-12-7-20-7-11 0-20 5-20 13 0 19 41 7 41 25 0 8-8 13-20 13-9 0-17-3-23-8"/>
+    </g>
+    <g id="g-l" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round">
+      <path d="M14 8v72"/>
+    </g>
+
+    <!-- Full wordmarks, assembled only from the custom alphabet above. -->
+    <g id="word-dida">
+      <use xlink:href="#g-d"/><use xlink:href="#g-i" transform="translate(68)"/>
+      <use xlink:href="#g-d" transform="translate(102)"/><use xlink:href="#g-a" transform="translate(170)"/>
+    </g>
+    <g id="word-baba">
+      <use xlink:href="#g-b"/><use xlink:href="#g-a" transform="translate(68)"/>
+      <use xlink:href="#g-b" transform="translate(136)"/><use xlink:href="#g-a" transform="translate(204)"/>
+    </g>
+    <g id="word-opus">
+      <use xlink:href="#g-o"/><use xlink:href="#g-p" transform="translate(68)"/>
+      <use xlink:href="#g-u" transform="translate(136)"/><use xlink:href="#g-s" transform="translate(204)"/>
+    </g>
+
+    <!-- Optical favicon variants: same skeleton, slightly heavier and enlarged.
+         These are deliberately separate from the wordmark glyphs. -->
+    <g id="icon-d" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M55 7v74"/><path d="M55 41c-6-8-14-12-24-12C15 29 6 40 6 56s9 27 25 27c10 0 18-4 24-12"/>
+    </g>
+    <g id="icon-b" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 7v74"/><path d="M9 41c6-8 14-12 24-12 16 0 25 11 25 27s-9 27-25 27c-10 0-18-4-24-12"/>
+    </g>
+    <g id="icon-o" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 29c17 0 27 11 27 27S49 83 32 83 5 72 5 56s10-27 27-27Z"/>
+    </g>
+  </defs>
+
+  <rect width="1600" height="1100" fill="#f4f7f7"/>
+  <circle cx="1500" cy="-20" r="300" fill="#dff6f4"/>
+  <circle cx="-60" cy="1070" r="330" fill="#e6f5f9"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="90" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">SET 01 / SOFT GEOMETRY</text>
+    <text x="90" y="146" font-size="40" font-weight="650" fill="#14282e">Jedna obitelj. Tri jasna glasa.</text>
+    <text x="90" y="184" font-size="19" fill="#667b80">Ručno konstruirana slova · bez fonta u logotipu · čitljivo od 16 px</text>
+
+    <text x="90" y="258" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">BROWSER / FAVICON</text>
+    <text x="90" y="286" font-size="15" fill="#829397">Samo proizvod. Bez pločice i bez oznake modula.</text>
+
+    <!-- Browser strips show the marks in the environment where they matter. -->
+    <g transform="translate(90 318)">
+      <rect width="690" height="120" rx="18" fill="#ffffff" stroke="#dce5e6"/>
+      <circle cx="34" cy="25" r="5" fill="#ff766f"/><circle cx="53" cy="25" r="5" fill="#ffc05c"/><circle cx="72" cy="25" r="5" fill="#62ce7b"/>
+      <rect x="22" y="48" width="646" height="54" rx="13" fill="#f0f4f5"/>
+
+      <g transform="translate(52 58) scale(.35)" color="#0e9db5"><use xlink:href="#icon-d"/></g>
+      <text x="92" y="84" font-size="16" font-weight="600" fill="#32484e">Dida</text>
+      <line x1="181" y1="61" x2="181" y2="91" stroke="#d2dddf"/>
+
+      <g transform="translate(215 58) scale(.35)" color="#146f8b"><use xlink:href="#icon-b"/></g>
+      <text x="255" y="84" font-size="16" font-weight="600" fill="#32484e">Baba</text>
+      <line x1="344" y1="61" x2="344" y2="91" stroke="#d2dddf"/>
+
+      <g transform="translate(378 58) scale(.35)" color="#147b76"><use xlink:href="#icon-o"/></g>
+      <text x="418" y="84" font-size="16" font-weight="600" fill="#32484e">Opus</text>
+      <text x="646" y="83" text-anchor="end" font-size="13" fill="#93a3a6">16 px test</text>
+    </g>
+
+    <g transform="translate(820 318)">
+      <rect width="690" height="120" rx="18" fill="#121a1d"/>
+      <circle cx="34" cy="25" r="5" fill="#ff766f"/><circle cx="53" cy="25" r="5" fill="#ffc05c"/><circle cx="72" cy="25" r="5" fill="#62ce7b"/>
+      <rect x="22" y="48" width="646" height="54" rx="13" fill="#202a2e"/>
+
+      <g transform="translate(52 58) scale(.35)" color="#29c5df"><use xlink:href="#icon-d"/></g>
+      <text x="92" y="84" font-size="16" font-weight="600" fill="#e3ecee">Dida</text>
+      <line x1="181" y1="61" x2="181" y2="91" stroke="#344348"/>
+
+      <g transform="translate(215 58) scale(.35)" color="#35c7ed"><use xlink:href="#icon-b"/></g>
+      <text x="255" y="84" font-size="16" font-weight="600" fill="#e3ecee">Baba</text>
+      <line x1="344" y1="61" x2="344" y2="91" stroke="#344348"/>
+
+      <g transform="translate(378 58) scale(.35)" color="#70d6ce"><use xlink:href="#icon-o"/></g>
+      <text x="418" y="84" font-size="16" font-weight="600" fill="#e3ecee">Opus</text>
+      <text x="646" y="83" text-anchor="end" font-size="13" fill="#829397">dark chrome</text>
+    </g>
+
+    <text x="90" y="506" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">MOBITEL / INSTALIRANA APLIKACIJA</text>
+    <text x="90" y="534" font-size="15" fill="#829397">Isti znak dobiva tamnu pločicu i dovoljno zraka za iOS/Android maske.</text>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(90 566)">
+        <rect width="152" height="152" rx="36" fill="#083b47"/>
+        <g transform="translate(36 28) scale(1.22)" color="#29c5df"><use xlink:href="#icon-d"/></g>
+      </g>
+      <g transform="translate(282 566)">
+        <rect width="152" height="152" rx="36" fill="#102f3d"/>
+        <g transform="translate(36 28) scale(1.22)" color="#35c7ed"><use xlink:href="#icon-b"/></g>
+      </g>
+      <g transform="translate(474 566)">
+        <rect width="152" height="152" rx="36" fill="#103f3d"/>
+        <g transform="translate(36 28) scale(1.22)" color="#70d6ce"><use xlink:href="#icon-o"/></g>
+      </g>
+    </g>
+    <text x="166" y="750" text-anchor="middle" font-size="14" font-weight="700" fill="#0e9db5">DIDA</text>
+    <text x="358" y="750" text-anchor="middle" font-size="14" font-weight="700" fill="#146f8b">BABA</text>
+    <text x="550" y="750" text-anchor="middle" font-size="14" font-weight="700" fill="#147b76">OPUS</text>
+
+    <g transform="translate(700 558)">
+      <rect width="810" height="170" rx="24" fill="#e9eff0"/>
+      <text x="38" y="42" font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">ZAŠTO RADI U MALOM</text>
+      <circle cx="54" cy="92" r="4" fill="#0e9db5"/><text x="72" y="98" font-size="16" fill="#40565c">jedan potez i velike unutarnje bjeline</text>
+      <circle cx="54" cy="127" r="4" fill="#0e9db5"/><text x="72" y="133" font-size="16" fill="#40565c">optički deblji favicon, odvojen od wordmarka</text>
+      <circle cx="465" cy="92" r="4" fill="#0e9db5"/><text x="483" y="98" font-size="16" fill="#40565c">bez detalja koji nestaju na 16 px</text>
+      <circle cx="465" cy="127" r="4" fill="#0e9db5"/><text x="483" y="133" font-size="16" fill="#40565c">ista silueta na webu i launcheru</text>
+    </g>
+
+    <text x="90" y="822" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">UNUTAR APLIKACIJE</text>
+    <text x="90" y="850" font-size="15" fill="#829397">Puni naziv je glavni znak. Opusov modul je sekundarna oznaka.</text>
+
+    <!-- Wordmarks: custom path geometry; no live text is used in the marks. -->
+    <g transform="translate(90 878) scale(1.05)" color="#0e9db5"><use xlink:href="#word-dida"/></g>
+    <g transform="translate(425 878) scale(1.05)" color="#146f8b"><use xlink:href="#word-baba"/></g>
+
+    <g transform="translate(790 878) scale(.78)" color="#147b76"><use xlink:href="#word-opus"/></g>
+    <rect x="1014" y="889" width="3" height="62" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1044 892) scale(.72)" color="#b76b18"><use xlink:href="#g-p"/></g>
+
+    <g transform="translate(1142 878) scale(.78)" color="#147b76"><use xlink:href="#word-opus"/></g>
+    <rect x="1366" y="889" width="3" height="62" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1398 892) scale(.72)" color="#b76b18"><use xlink:href="#g-l"/></g>
+
+    <g transform="translate(790 988) scale(.78)" color="#147b76"><use xlink:href="#word-opus"/></g>
+    <rect x="1014" y="999" width="3" height="62" rx="1.5" fill="#75aaa6"/>
+    <g transform="translate(1044 1002) scale(.72)" color="#b76b18"><use xlink:href="#g-d"/></g>
+
+    <text x="90" y="1072" font-size="13" fill="#87999d">Dida cyan · Baba blue · Opus teal + module amber</text>
+  </g>
+</svg>

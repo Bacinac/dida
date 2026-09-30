@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overridden by each app module (resource merging: app wins). -->
+    <string name="app_name">DIDA</string>
+    <string name="ua_label">DIDA-Car</string>
+    <string name="app_ver">dev</string>
+    <string name="default_base_url" translatable="false"></string>
+
+    <string name="setup_server">Poslužitelj</string>
+    <string name="setup_username">Korisničko ime</string>
+    <string name="setup_password">Lozinka</string>
+    <string name="setup_connect">Poveži</string>
+    <string name="setup_connected">Povezano — dostupno u vozilu</string>
+    <string name="setup_failed">Povezivanje nije uspjelo</string>
+    <string name="setup_bad_credentials">Pogrešno korisničko ime ili lozinka</string>
+    <string name="setup_intro">Prijavite se svojim DIDA računom. Aplikacija sprema vlastiti pristupni ključ; lozinka se ne pohranjuje.</string>
+</resources>

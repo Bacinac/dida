@@ -1,0 +1,18 @@
+-- Least privilege by DEFAULT for device control.
+--
+-- 0014 gave `can_control` a `DEFAULT true`, so a user created through Settings →
+-- Users could operate every device in the house from the moment they existed. The
+-- admin's visible act of restriction — cutting `allowed_pages` down to just /ulaz for
+-- a guest — creates NO control boundary: `allowed_pages` scopes what a user SEES, and
+-- /command only consults `can_control` + the flip rules (see permissions.py). The two
+-- axes are independent by design, which is fine; the default was not, because it made
+-- least privilege depend on the admin remembering a SECOND switch.
+--
+-- That failure was silent — the guest quietly holds full control and nobody finds out
+-- — while the opposite failure is loud and cheap: the new user says "I can't turn on
+-- the light" and the admin grants it. Prefer the loud one.
+--
+-- Only NEW rows are affected. Existing users keep whatever they have (verified live
+-- before this change: family = true, the one guest = false with explicit allow rules),
+-- so this changes nobody's access today.
+ALTER TABLE users ALTER COLUMN can_control SET DEFAULT false;

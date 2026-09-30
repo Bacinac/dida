@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Re-stamp revision.json after a merge/pull moves HEAD.
+"$(git rev-parse --show-toplevel)/scripts/gen-revision.sh" || true
+exit 0

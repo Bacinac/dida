@@ -1,0 +1,12 @@
+-- Per-entity "expose to voice assistant / Matter bridge" axis — DISTINCT from
+-- `exposed` (DIDA-app visibility). The two are genuinely different questions: an
+-- entity can be visible in the app but NOT pushed to Google/Matter (irrigation
+-- valves, indicator LEDs, appliance plugs), and a voiced entity is always also
+-- app-visible. HA models "expose to Google Assistant" the same separate way.
+--
+-- The Matter bridge now filters on this column instead of the hardcoded, fragile
+-- DIDA_MATTER_EXCLUDE env list (which silently broke when an ESPHome slug drifted
+-- from name-based to IP-based and leaked the raw gate relays into Google Home).
+-- Which entities are voice targets is decided per entity in the UI; 0062 replaces
+-- this column's blanket default with a derived rule, so nothing is seeded here.
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS voice_exposed BOOLEAN NOT NULL DEFAULT false;

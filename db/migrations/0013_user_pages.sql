@@ -1,0 +1,14 @@
+-- Per-user page visibility — Phase 1 of the per-user access policy.
+--
+-- NULL  = full consumer access (default; preserves existing behavior for every
+--         seeded user, and auto-grants any page added later).
+-- {…}   = exactly these page keys are visible to that non-admin user. Admins
+--         ignore the column entirely and always see everything.
+--
+-- Page keys are the canonical set validated in the API (dida_api/users.py):
+--   devices · floorplan · media · assistant · history · adapters
+--
+-- This is UI-scope declutter, not a security boundary — the consumer data APIs
+-- stay open to any authenticated user. Real per-entity control is Phase 2
+-- (user_entity_grants), enforced at the /command dispatch.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_pages TEXT[];

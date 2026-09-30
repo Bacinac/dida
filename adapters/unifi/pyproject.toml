@@ -1,0 +1,16 @@
+[project]
+name = "dida-adapter-unifi"
+version = "0.1.0"
+description = "DIDA UniFi presence adapter — controller association table → presence:*"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "asyncpg",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_unifi"]

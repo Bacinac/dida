@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 1080">
+  <title>DIDA · BABA · OPUS — family marks, set 03</title>
+  <desc>Uppercase custom marks with a shared diagonal cut and vertically centred OPUS module signatures.</desc>
+  <defs>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#08171c" flood-opacity=".16"/>
+    </filter>
+
+    <!-- The shared signature: one diagonal cut through the upper-right curve.
+         It is a void, not another colour, so it survives every background. -->
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96">
+      <rect width="96" height="96" fill="#fff"/>
+      <path d="M55 4h15L53 38H38Z" fill="#000"/>
+    </mask>
+
+    <g id="D-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 13v70h18c25 0 39-13 39-35S61 13 36 13H18"/>
+    </g>
+    <g id="B-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 13v70M18 13h23c19 0 29 6 29 17s-10 18-29 18H18M41 48c22 0 33 6 33 17s-11 18-33 18H18"/>
+    </g>
+    <g id="O-plain" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="48" cy="48" rx="31" ry="35"/>
+    </g>
+    <g id="D-cut" mask="url(#cut)"><use xlink:href="#D-plain"/></g>
+    <g id="B-cut" mask="url(#cut)"><use xlink:href="#B-plain"/></g>
+    <g id="O-cut" mask="url(#cut)"><use xlink:href="#O-plain"/></g>
+
+    <g id="I" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round">
+      <path d="M8 13h28M22 13v70M8 83h28"/>
+    </g>
+    <g id="A" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 83 36 13l28 70M19 58h34"/>
+    </g>
+    <g id="P" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 83V13h24c20 0 31 7 31 20S62 53 42 53H18"/>
+    </g>
+    <g id="U" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 13v42c0 19 12 29 29 29s29-10 29-29V13"/>
+    </g>
+    <g id="S" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M70 22c-7-6-16-9-26-9-18 0-29 8-29 19 0 27 57 12 57 35 0 11-12 17-29 17-12 0-23-4-31-11"/>
+    </g>
+    <g id="L" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 13v70h51"/>
+    </g>
+
+    <!-- Only the leading letter takes the family cut. Repeating it through the
+         whole word would turn a signature into decoration. -->
+    <g id="DIDA"><use xlink:href="#D-cut"/><use xlink:href="#I" transform="translate(86)"/><use xlink:href="#D-plain" transform="translate(138)"/><use xlink:href="#A" transform="translate(224)"/></g>
+    <g id="BABA"><use xlink:href="#B-cut"/><use xlink:href="#A" transform="translate(88)"/><use xlink:href="#B-plain" transform="translate(168)"/><use xlink:href="#A" transform="translate(256)"/></g>
+    <g id="OPUS"><use xlink:href="#O-cut"/><use xlink:href="#P" transform="translate(92)"/><use xlink:href="#U" transform="translate(180)"/><use xlink:href="#S" transform="translate(270)"/></g>
+
+    <g id="module-p"><use xlink:href="#P"/></g>
+    <g id="module-d"><use xlink:href="#D-plain"/></g>
+    <g id="module-l"><use xlink:href="#L"/></g>
+  </defs>
+
+  <rect width="1600" height="1080" fill="#f3f7f7"/>
+  <circle cx="1500" cy="-20" r="300" fill="#ddf5f2"/>
+  <circle cx="-60" cy="1070" r="310" fill="#e1f3f8"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">SET 03 / THE CUT</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Jedan rez postaje obiteljski potpis.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Prepoznatljivo bez ilustracije · čitljivo bez fonta · jednako na svim podlogama</text>
+
+    <text x="90" y="244" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">GLAVNI ZNAKOVI</text>
+    <text x="90" y="272" font-size="15" fill="#829397">Kosi negativni rez pojavljuje se samo jednom — na vodećem slovu.</text>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(90 306)"><rect width="190" height="190" rx="44" fill="#083b47"/><g transform="translate(42 39) scale(1.18)" color="#29c5df"><use xlink:href="#D-cut"/></g></g>
+      <g transform="translate(320 306)"><rect width="190" height="190" rx="44" fill="#102f3d"/><g transform="translate(42 39) scale(1.18)" color="#35c7ed"><use xlink:href="#B-cut"/></g></g>
+      <g transform="translate(550 306)"><rect width="190" height="190" rx="44" fill="#103f3d"/><g transform="translate(39 39) scale(1.18)" color="#70d6ce"><use xlink:href="#O-cut"/></g></g>
+    </g>
+    <text x="185" y="530" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="1.5" fill="#0e9db5">DIDA</text>
+    <text x="415" y="530" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="1.5" fill="#146f8b">BABA</text>
+    <text x="645" y="530" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="1.5" fill="#147b76">OPUS</text>
+
+    <g transform="translate(810 306)">
+      <rect width="700" height="190" rx="24" fill="#e7edef"/>
+      <text x="38" y="42" font-size="14" font-weight="700" letter-spacing="1.8" fill="#71858a">ZAŠTO JE KARAKTERISTIČNIJE</text>
+      <circle cx="54" cy="88" r="4" fill="#0e9db5"/><text x="72" y="94" font-size="16" fill="#40565c">rez nije dio nijednog standardnog fonta</text>
+      <circle cx="54" cy="126" r="4" fill="#0e9db5"/><text x="72" y="132" font-size="16" fill="#40565c">povezuje D, B i O bez izjednačavanja karaktera</text>
+      <circle cx="54" cy="164" r="4" fill="#0e9db5"/><text x="72" y="170" font-size="16" fill="#40565c">negativni prostor radi i u jednoj boji</text>
+      <path d="M560 46 624 46 592 111 528 111Z" fill="#cad9dc"/>
+      <path d="M576 64h22l-16 31h-22Z" fill="#0e9db5"/>
+    </g>
+
+    <text x="90" y="600" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">BROWSER / 16–32 PX</text>
+    <text x="90" y="628" font-size="15" fill="#829397">Pojednostavljeni znak ostaje sam; modul se ne pokušava ugurati u favicon.</text>
+    <g transform="translate(90 654)">
+      <rect width="1420" height="108" rx="19" fill="#151e21"/>
+      <rect x="22" y="25" width="1376" height="58" rx="14" fill="#222e32"/>
+      <g transform="translate(58 36) scale(.38)" color="#29c5df"><use xlink:href="#D-cut"/></g><text x="105" y="63" font-size="16" font-weight="650" fill="#e6edef">Dida</text>
+      <line x1="230" y1="39" x2="230" y2="69" stroke="#3a494e"/>
+      <g transform="translate(275 36) scale(.38)" color="#35c7ed"><use xlink:href="#B-cut"/></g><text x="322" y="63" font-size="16" font-weight="650" fill="#e6edef">Baba</text>
+      <line x1="447" y1="39" x2="447" y2="69" stroke="#3a494e"/>
+      <g transform="translate(492 36) scale(.38)" color="#70d6ce"><use xlink:href="#O-cut"/></g><text x="539" y="63" font-size="16" font-weight="650" fill="#e6edef">Opus</text>
+      <text x="1364" y="62" text-anchor="end" font-size="13" fill="#829397">dark browser chrome</text>
+    </g>
+
+    <text x="90" y="830" font-size="15" font-weight="750" letter-spacing="2.4" fill="#7b8e92">UNUTAR APLIKACIJE / CENTRIRANI OPUS MODULI</text>
+    <text x="90" y="858" font-size="15" fill="#829397">Oznaka modula ide ispod osi. Širina logotipa i njegov centar ostaju potpuno isti.</text>
+
+    <g transform="translate(90 888) scale(.68)" color="#0e9db5"><use xlink:href="#DIDA"/></g>
+    <g transform="translate(380 888) scale(.68)" color="#146f8b"><use xlink:href="#BABA"/></g>
+
+    <!-- Three equal lockup boxes. The guide proves that OPUS, module and card
+         share exactly the same horizontal centre. -->
+    <g transform="translate(730 875)">
+      <rect width="240" height="170" rx="22" fill="#fff" stroke="#dce5e6"/>
+      <line x1="120" y1="14" x2="120" y2="156" stroke="#dbe5e6" stroke-dasharray="3 6"/>
+      <g transform="translate(21 32) scale(.58)" color="#147b76"><use xlink:href="#OPUS"/></g>
+      <line x1="92" y1="111" x2="108" y2="111" stroke="#8fb7b3" stroke-width="2"/><line x1="132" y1="111" x2="148" y2="111" stroke="#8fb7b3" stroke-width="2"/>
+      <g transform="translate(108 98) scale(.25)" color="#b76b18"><use xlink:href="#module-p"/></g>
+    </g>
+    <g transform="translate(990 875)">
+      <rect width="240" height="170" rx="22" fill="#fff" stroke="#dce5e6"/>
+      <line x1="120" y1="14" x2="120" y2="156" stroke="#dbe5e6" stroke-dasharray="3 6"/>
+      <g transform="translate(21 32) scale(.58)" color="#147b76"><use xlink:href="#OPUS"/></g>
+      <line x1="92" y1="111" x2="108" y2="111" stroke="#8fb7b3" stroke-width="2"/><line x1="132" y1="111" x2="148" y2="111" stroke="#8fb7b3" stroke-width="2"/>
+      <g transform="translate(108 98) scale(.25)" color="#b76b18"><use xlink:href="#module-d"/></g>
+    </g>
+    <g transform="translate(1250 875)">
+      <rect width="240" height="170" rx="22" fill="#fff" stroke="#dce5e6"/>
+      <line x1="120" y1="14" x2="120" y2="156" stroke="#dbe5e6" stroke-dasharray="3 6"/>
+      <g transform="translate(21 32) scale(.58)" color="#147b76"><use xlink:href="#OPUS"/></g>
+      <line x1="92" y1="111" x2="108" y2="111" stroke="#8fb7b3" stroke-width="2"/><line x1="132" y1="111" x2="148" y2="111" stroke="#8fb7b3" stroke-width="2"/>
+      <g transform="translate(108 98) scale(.25)" color="#b76b18"><use xlink:href="#module-l"/></g>
+    </g>
+  </g>
+</svg>

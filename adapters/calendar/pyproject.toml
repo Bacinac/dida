@@ -1,0 +1,17 @@
+[project]
+name = "dida-adapter-calendar"
+version = "0.1.0"
+description = "DIDA calendar adapter — user-defined schedules (season windows + cron beats) as entities"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "asyncpg>=0.30",
+    "tzdata>=2024.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_calendar"]

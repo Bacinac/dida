@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 1050">
+  <title>DIDA · BABA · OPUS — browser icon study, set 09</title>
+  <desc>Three optical favicon directions tested on light and dark browser chrome.</desc>
+  <defs>
+    <!-- A much smaller signature notch than the wordmark uses. At 16 px it is
+         one deliberate pixel, not a broken letter. -->
+    <mask id="micro-cut"><rect width="96" height="96" fill="#fff"/><path d="M60 6h12L59 31H47Z" fill="#000"/></mask>
+    <g id="D" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" mask="url(#micro-cut)"><path d="M19 12v72h18c25 0 39-14 39-36S62 12 37 12H19"/></g>
+    <g id="B" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" mask="url(#micro-cut)"><path d="M19 12v72M19 12h23c19 0 30 6 30 18S61 48 42 48H19M42 48c22 0 34 6 34 18S64 84 42 84H19"/></g>
+    <g id="O" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" mask="url(#micro-cut)"><ellipse cx="48" cy="48" rx="32" ry="37"/></g>
+    <g id="marks"><use xlink:href="#D"/><use xlink:href="#B" transform="translate(112)"/><use xlink:href="#O" transform="translate(224)"/></g>
+
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#08171c" flood-opacity=".14"/></filter>
+  </defs>
+
+  <rect width="1700" height="1050" fill="#f3f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#ddf5f2"/>
+  <circle cx="-70" cy="1030" r="300" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">BROWSER ICONS / OPTICAL STUDY · SET 09</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Favicon nije smanjeni logotip.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Deblji potez · manji rez · veći kontrast · provjera na stvarnih 16 i 32 px</text>
+
+    <!-- Option A -->
+    <g transform="translate(90 230)">
+      <rect width="1520" height="300" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="46" font-size="14" font-weight="800" letter-spacing="2" fill="#147b76">A / DARK PLATE — PREPORUKA</text>
+      <text x="34" y="76" font-size="14" fill="#7a8d91">Tamna pločica daje jednak kontrast u svakom browseru i na mobitelu.</text>
+
+      <g transform="translate(34 104)"><rect width="138" height="138" rx="31" fill="#083b47"/><g transform="translate(21 21)" color="#29c5df"><use xlink:href="#D"/></g></g>
+      <g transform="translate(200 104)"><rect width="138" height="138" rx="31" fill="#102f3d"/><g transform="translate(21 21)" color="#35c7ed"><use xlink:href="#B"/></g></g>
+      <g transform="translate(366 104)"><rect width="138" height="138" rx="31" fill="#103f3d"/><g transform="translate(21 21)" color="#70d6ce"><use xlink:href="#O"/></g></g>
+
+      <g transform="translate(560 104)">
+        <rect width="924" height="62" rx="14" fill="#edf2f3"/>
+        <g transform="translate(24 15) scale(.333)"><rect width="96" height="96" rx="22" fill="#083b47"/><g color="#29c5df"><use xlink:href="#D"/></g></g><text x="68" y="40" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(214 15) scale(.333)"><rect width="96" height="96" rx="22" fill="#102f3d"/><g color="#35c7ed"><use xlink:href="#B"/></g></g><text x="258" y="40" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(404 15) scale(.333)"><rect width="96" height="96" rx="22" fill="#103f3d"/><g color="#70d6ce"><use xlink:href="#O"/></g></g><text x="448" y="40" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="890" y="39" text-anchor="end" font-size="13" fill="#829397">32 px / desktop</text>
+      </g>
+      <g transform="translate(560 180)">
+        <rect width="924" height="62" rx="14" fill="#202a2e"/>
+        <g transform="translate(32 23) scale(.167)"><rect width="96" height="96" rx="22" fill="#083b47"/><g color="#29c5df"><use xlink:href="#D"/></g></g><text x="68" y="40" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(222 23) scale(.167)"><rect width="96" height="96" rx="22" fill="#102f3d"/><g color="#35c7ed"><use xlink:href="#B"/></g></g><text x="258" y="40" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(412 23) scale(.167)"><rect width="96" height="96" rx="22" fill="#103f3d"/><g color="#70d6ce"><use xlink:href="#O"/></g></g><text x="448" y="40" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="890" y="39" text-anchor="end" font-size="13" fill="#829397">16 px / compact tab</text>
+      </g>
+    </g>
+
+    <!-- Option B -->
+    <g transform="translate(90 565)">
+      <rect width="735" height="300" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="46" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">B / ACCENT PLATE</text>
+      <text x="34" y="76" font-size="14" fill="#7a8d91">Vedrije, ali vizualno glasnije u tabu.</text>
+      <g transform="translate(34 104)"><rect width="138" height="138" rx="31" fill="#29c5df"/><g transform="translate(21 21)" color="#083b47"><use xlink:href="#D"/></g></g>
+      <g transform="translate(200 104)"><rect width="138" height="138" rx="31" fill="#35c7ed"/><g transform="translate(21 21)" color="#102f3d"><use xlink:href="#B"/></g></g>
+      <g transform="translate(366 104)"><rect width="138" height="138" rx="31" fill="#70d6ce"/><g transform="translate(21 21)" color="#103f3d"><use xlink:href="#O"/></g></g>
+      <g transform="translate(548 124)">
+        <text x="0" y="0" font-size="13" fill="#829397">16 px</text>
+        <g transform="translate(0 22) scale(.167)"><rect width="96" height="96" rx="22" fill="#29c5df"/><g color="#083b47"><use xlink:href="#D"/></g></g>
+        <g transform="translate(38 22) scale(.167)"><rect width="96" height="96" rx="22" fill="#35c7ed"/><g color="#102f3d"><use xlink:href="#B"/></g></g>
+        <g transform="translate(76 22) scale(.167)"><rect width="96" height="96" rx="22" fill="#70d6ce"/><g color="#103f3d"><use xlink:href="#O"/></g></g>
+      </g>
+    </g>
+
+    <!-- Option C -->
+    <g transform="translate(875 565)">
+      <rect width="735" height="300" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="46" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">C / BARE MARK</text>
+      <text x="34" y="76" font-size="14" fill="#7a8d91">Najmirnije, ali ovisi o boji browser chromea.</text>
+      <g transform="translate(34 104) scale(1.42)" color="#0e9db5"><use xlink:href="#D"/></g>
+      <g transform="translate(200 104) scale(1.42)" color="#146f8b"><use xlink:href="#B"/></g>
+      <g transform="translate(366 104) scale(1.42)" color="#147b76"><use xlink:href="#O"/></g>
+      <g transform="translate(548 124)">
+        <text x="0" y="0" font-size="13" fill="#829397">16 px</text>
+        <g transform="translate(0 22) scale(.167)" color="#0e9db5"><use xlink:href="#D"/></g>
+        <g transform="translate(38 22) scale(.167)" color="#146f8b"><use xlink:href="#B"/></g>
+        <g transform="translate(76 22) scale(.167)" color="#147b76"><use xlink:href="#O"/></g>
+      </g>
+    </g>
+
+    <g transform="translate(90 920)">
+      <text font-size="15" font-weight="750" letter-spacing="2.2" fill="#7b8e92">ZAJEDNIČKO SVIM VARIJANTAMA</text>
+      <text y="34" font-size="15" fill="#667b80">Poseban favicon crtež: 31% deblji potez i 40% manji rez od punog logotipa.</text>
+    </g>
+  </g>
+</svg>

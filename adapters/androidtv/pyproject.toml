@@ -1,0 +1,24 @@
+[project]
+name = "dida-adapter-androidtv"
+version = "0.1.0"
+description = "DIDA Android TV adapter — NVIDIA Shield & any Android TV / Google TV box via the Android TV Remote v2 protocol (power, nav, app launch, media keys, volume)"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "asyncpg",
+    # ADB-based Android TV control — the same library Home Assistant's (stronger)
+    # `androidtv` integration uses. Needs "Network debugging" (developer mode) on
+    # the device. Gives the real installed-app list, launch-any-app, true
+    # play/paused state, absolute volume, HDMI input. The [async] extra pulls in
+    # adb-shell + aiofiles (the async ADB transport reads the keyfile with them).
+    "androidtv[async]",
+    # Downscale the ADB screencap to a light JPEG so the live-screen refresh is snappy.
+    "pillow",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_androidtv"]

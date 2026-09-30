@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1700 1120">
+  <title>DIDA · BABA · OPUS — browser icon study, set 10</title>
+  <desc>Three distinct favicon directions: colour inlay, round seal and diagonal field.</desc>
+  <defs>
+    <!-- Clean optical capitals: heavier and simpler than the wordmark drawings. -->
+    <g id="D" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10v76h19c27 0 42-15 42-38S64 10 37 10H18"/></g>
+    <g id="B" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10v76M18 10h25c20 0 31 7 31 19S63 48 43 48H18M43 48c23 0 35 7 35 19S66 86 43 86H18"/></g>
+    <g id="O" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="48" cy="48" rx="34" ry="39"/></g>
+    <!-- A coloured inlay replaces the destructive gap. -->
+    <g id="slash"><path d="M59 3h14L59 32H45Z" fill="currentColor"/></g>
+
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#08171c" flood-opacity=".13"/></filter>
+  </defs>
+
+  <rect width="1700" height="1120" fill="#f3f7f7"/>
+  <circle cx="1600" cy="-20" r="320" fill="#ddf5f2"/>
+  <circle cx="-70" cy="1100" r="310" fill="#e1f3f8"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <text x="90" y="82" font-size="18" font-weight="700" letter-spacing="3" fill="#587076">BROWSER ICONS / THREE NEW ROUTES · SET 10</text>
+    <text x="90" y="138" font-size="40" font-weight="650" fill="#14282e">Tri nova jezika za isti monogram.</text>
+    <text x="90" y="176" font-size="19" fill="#667b80">Bez povećavanja starog reza · svaki smjer ima vlastitu jasnu ideju</text>
+
+    <!-- ROUTE A -->
+    <g transform="translate(90 224)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">A / COLOUR INLAY</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Slovo ostaje cijelo; obojeni umetak nosi obiteljski potpis.</text>
+      <g transform="translate(34 94) scale(1.25)" color="#0e9db5"><use xlink:href="#D"/></g><g transform="translate(34 94) scale(1.25)" color="#29c5df"><use xlink:href="#slash"/></g>
+      <g transform="translate(188 94) scale(1.25)" color="#146f8b"><use xlink:href="#B"/></g><g transform="translate(188 94) scale(1.25)" color="#35c7ed"><use xlink:href="#slash"/></g>
+      <g transform="translate(342 94) scale(1.25)" color="#147b76"><use xlink:href="#O"/></g><g transform="translate(342 94) scale(1.25)" color="#c36e12"><use xlink:href="#slash"/></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333)" color="#0e9db5"><use xlink:href="#D"/></g><g transform="translate(26 12) scale(.333)" color="#29c5df"><use xlink:href="#slash"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333)" color="#146f8b"><use xlink:href="#B"/></g><g transform="translate(216 12) scale(.333)" color="#35c7ed"><use xlink:href="#slash"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333)" color="#147b76"><use xlink:href="#O"/></g><g transform="translate(406 12) scale(.333)" color="#c36e12"><use xlink:href="#slash"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167)" color="#29c5df"><use xlink:href="#D"/></g><g transform="translate(34 20) scale(.167)" color="#82e2ef"><use xlink:href="#slash"/></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167)" color="#35c7ed"><use xlink:href="#B"/></g><g transform="translate(224 20) scale(.167)" color="#9be8fa"><use xlink:href="#slash"/></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167)" color="#70d6ce"><use xlink:href="#O"/></g><g transform="translate(414 20) scale(.167)" color="#f0aa5a"><use xlink:href="#slash"/></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+
+    <!-- ROUTE B -->
+    <g transform="translate(90 512)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">B / ROUND SEAL</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Kružni pečat je mekši od app pločice i prirodno pristaje browser tabu.</text>
+      <g transform="translate(34 94)"><circle cx="62" cy="62" r="62" fill="#083b47"/><g transform="translate(14 14)" color="#29c5df"><use xlink:href="#D"/></g></g>
+      <g transform="translate(188 94)"><circle cx="62" cy="62" r="62" fill="#102f3d"/><g transform="translate(14 14)" color="#35c7ed"><use xlink:href="#B"/></g></g>
+      <g transform="translate(342 94)"><circle cx="62" cy="62" r="62" fill="#103f3d"/><g transform="translate(14 14)" color="#70d6ce"><use xlink:href="#O"/></g></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333)"><circle cx="48" cy="48" r="48" fill="#083b47"/><g color="#29c5df"><use xlink:href="#D"/></g></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333)"><circle cx="48" cy="48" r="48" fill="#102f3d"/><g color="#35c7ed"><use xlink:href="#B"/></g></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333)"><circle cx="48" cy="48" r="48" fill="#103f3d"/><g color="#70d6ce"><use xlink:href="#O"/></g></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167)"><circle cx="48" cy="48" r="48" fill="#083b47"/><g color="#29c5df"><use xlink:href="#D"/></g></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167)"><circle cx="48" cy="48" r="48" fill="#102f3d"/><g color="#35c7ed"><use xlink:href="#B"/></g></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167)"><circle cx="48" cy="48" r="48" fill="#103f3d"/><g color="#70d6ce"><use xlink:href="#O"/></g></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+
+    <!-- ROUTE C -->
+    <g transform="translate(90 800)">
+      <rect width="1520" height="250" rx="30" fill="#fff" filter="url(#shadow)"/>
+      <text x="34" y="43" font-size="14" font-weight="800" letter-spacing="2" fill="#587076">C / DIAGONAL FIELD</text>
+      <text x="34" y="71" font-size="14" fill="#7a8d91">Dijagonala seli iz slova u podlogu; monogram ostaje potpuno čist.</text>
+      <g transform="translate(34 94)"><rect width="124" height="124" rx="28" fill="#083b47"/><path d="M124 0v52L72 0Z" fill="#29c5df"/><g transform="translate(14 14)" color="#e8fbff"><use xlink:href="#D"/></g></g>
+      <g transform="translate(188 94)"><rect width="124" height="124" rx="28" fill="#102f3d"/><path d="M124 0v52L72 0Z" fill="#35c7ed"/><g transform="translate(14 14)" color="#edfaff"><use xlink:href="#B"/></g></g>
+      <g transform="translate(342 94)"><rect width="124" height="124" rx="28" fill="#103f3d"/><path d="M124 0v52L72 0Z" fill="#c36e12"/><g transform="translate(14 14)" color="#eafffc"><use xlink:href="#O"/></g></g>
+      <g transform="translate(520 94)">
+        <rect width="964" height="56" rx="13" fill="#edf2f3"/>
+        <g transform="translate(26 12) scale(.333)"><rect width="96" height="96" rx="22" fill="#083b47"/><path d="M96 0v40L56 0Z" fill="#29c5df"/><g color="#e8fbff"><use xlink:href="#D"/></g></g><text x="70" y="36" font-size="15" font-weight="650" fill="#32484e">Dida</text>
+        <g transform="translate(216 12) scale(.333)"><rect width="96" height="96" rx="22" fill="#102f3d"/><path d="M96 0v40L56 0Z" fill="#35c7ed"/><g color="#edfaff"><use xlink:href="#B"/></g></g><text x="260" y="36" font-size="15" font-weight="650" fill="#32484e">Baba</text>
+        <g transform="translate(406 12) scale(.333)"><rect width="96" height="96" rx="22" fill="#103f3d"/><path d="M96 0v40L56 0Z" fill="#c36e12"/><g color="#eafffc"><use xlink:href="#O"/></g></g><text x="450" y="36" font-size="15" font-weight="650" fill="#32484e">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">32 px</text>
+      </g>
+      <g transform="translate(520 164)">
+        <rect width="964" height="56" rx="13" fill="#202a2e"/>
+        <g transform="translate(34 20) scale(.167)"><rect width="96" height="96" rx="22" fill="#083b47"/><path d="M96 0v40L56 0Z" fill="#29c5df"/><g color="#e8fbff"><use xlink:href="#D"/></g></g><text x="70" y="36" font-size="15" font-weight="650" fill="#e3ecee">Dida</text>
+        <g transform="translate(224 20) scale(.167)"><rect width="96" height="96" rx="22" fill="#102f3d"/><path d="M96 0v40L56 0Z" fill="#35c7ed"/><g color="#edfaff"><use xlink:href="#B"/></g></g><text x="260" y="36" font-size="15" font-weight="650" fill="#e3ecee">Baba</text>
+        <g transform="translate(414 20) scale(.167)"><rect width="96" height="96" rx="22" fill="#103f3d"/><path d="M96 0v40L56 0Z" fill="#c36e12"/><g color="#eafffc"><use xlink:href="#O"/></g></g><text x="450" y="36" font-size="15" font-weight="650" fill="#e3ecee">Opus</text>
+        <text x="930" y="35" text-anchor="end" font-size="13" fill="#829397">16 px</text>
+      </g>
+    </g>
+  </g>
+</svg>

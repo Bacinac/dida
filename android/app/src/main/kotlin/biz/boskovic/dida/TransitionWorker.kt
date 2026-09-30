@@ -1,0 +1,46 @@
+package biz.boskovic.dida
+
+import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Delivers one geofence transition to the server, retrying with exponential
+ * backoff until it lands (a zone edge crossed in a tunnel with no signal must
+ * still arrive once the network is back). */
+class TransitionWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val event = inputData.getString("event") ?: return Result.failure()
+        val zone = inputData.getString("zone") ?: return Result.failure()
+        val ok = withContext(Dispatchers.IO) {
+            OwnTracksClient.postTransition(applicationContext, event, zone)
+        }
+        return when {
+            ok -> Result.success()
+            runAttemptCount < 8 -> Result.retry()
+            else -> Result.failure()
+        }
+    }
+
+    companion object {
+        fun enqueue(ctx: Context, event: String, zone: String) {
+            WorkManager.getInstance(ctx).enqueue(
+                OneTimeWorkRequestBuilder<TransitionWorker>()
+                    .setInputData(workDataOf("event" to event, "zone" to zone))
+                    .setConstraints(
+                        Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                    )
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                    .build()
+            )
+        }
+    }
+}

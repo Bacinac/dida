@@ -1,0 +1,40 @@
+{
+  "name": "dida-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sveltejs/adapter-node": "^5.5.7",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "http-proxy": "^1.18.1",
+    "layerchart": "^2.5.0",
+    "leaflet": "^1.9.4",
+    "svelte": "^5.57.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0"
+  },
+  "//typescript": "typescript is held at ^6, NOT ^7: @sveltejs/kit 2.70.3 (latest) declares peerOptional typescript ^5.3.3 || ^6.0.0, and so does svelte-check 4.7.6, so TS 7 (the native compiler) fails to resolve. Nothing else blocks it \u2014 raise this the moment kit widens that peer range. Verified 2026-09-23.",
+  "//overrides": "cookie: @sveltejs/kit 2.70.3 still pins ^0.6.0, which accepts out-of-range characters in cookie name/path/domain (GHSA-pxg6-pf52-xh8x, fixed in 0.7.0); 0.7 keeps the same parse/serialize API. Drop this once kit's own range reaches 0.7.",
+  "overrides": {
+    "cookie": "^0.7.2"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@types/d3-shape": "^3.2.0",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^26.6.2",
+    "svelte-check": "^4.7.6",
+    "vitest": "^5.0.1"
+  }
+}

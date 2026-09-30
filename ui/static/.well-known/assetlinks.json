@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "biz.boskovic.dida",
+      "sha256_cert_fingerprints": [
+        "B2:87:C3:36:F4:BE:E5:11:56:F6:E2:5D:E2:72:73:72:73:9E:8E:A9:D2:2F:33:0F:26:5A:4A:7B:E2:D1:EA:01"
+      ]
+    }
+  }
+]

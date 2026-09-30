@@ -1,0 +1,17 @@
+[project]
+name = "dida-adapter-solar"
+version = "0.1.0"
+description = "DIDA solar-inverter adapter — polls a Solarman/iGEN datalogger's local JSON API (read-only)"
+requires-python = ">=3.14"
+dependencies = [
+    "dida-core",
+    "aiohttp>=3.10",
+    "asyncpg",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dida_adapter_solar"]

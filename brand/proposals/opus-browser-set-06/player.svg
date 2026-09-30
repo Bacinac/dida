@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <style>
+    :root { --ring: #147b76; --module: #a95808; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ring: #70d6ce; --module: #f0aa5a; }
+    }
+  </style>
+  <defs>
+    <mask id="cut"><rect width="96" height="96" fill="#fff"/><path d="M58-3h19L55 39H36Z" fill="#000"/></mask>
+  </defs>
+  <ellipse cx="48" cy="48" rx="34" ry="39" fill="none" stroke="var(--ring)" stroke-width="15" mask="url(#cut)"/>
+  <path fill="var(--module)" fill-rule="evenodd" d="M29 36 36 23h13c12 0 19 6 19 16s-7 16-19 16h-8v18H29Zm12-3v13h8c5 0 8-2 8-7s-3-6-8-6Z"/>
+</svg>

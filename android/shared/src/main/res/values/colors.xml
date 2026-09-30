@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same palette as :app (ui/static/site.webmanifest). -->
+    <color name="dida_bg">#0b1316</color>
+    <color name="dida_accent">#0ea5b9</color>
+    <color name="ic_launcher_background">#01bde4</color>
+    <color name="dida_text">#e8edef</color>
+    <color name="dida_text_dim">#8aa0a6</color>
+</resources>

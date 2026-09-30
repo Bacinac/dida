@@ -1,0 +1,2442 @@
+name: dida
+
+# DIDA — Distributed Isolated Device Automation.
+# One storage tier (everything small & hot): postgres, NATS jetstream and
+# clickhouse all under DIDA_STATE_HOST. Service logs go to stdout (captured by
+# the json-file driver, capped per container), not to a logs volume.
+
+# Shared env for DIDA services. Each logs into the bus as itself (an adapter by its
+# name, the core services as `core`) with the password the keys service wrote into
+# the directory it mounts at /run/dida-key; what each identity may do on the bus is
+# dida_core.identity's. Host-networked services override the URL with the published
+# loopback port.
+x-dida-env: &dida-env
+  DIDA_NATS_URL: nats://nats:4222
+  DIDA_NATS_PASSWORD_FILE: /run/dida-key/nats
+  # Verbosity, per container. Every service is its own container, so setting
+  # this for ONE adapter in .env raises just that adapter to DEBUG — no code
+  # edit, no rebuild, which is the only version of this that helps mid-incident.
+  DIDA_LOG_LEVEL: ${DIDA_LOG_LEVEL:-INFO}
+  DIDA_STATE_PATH: /state
+
+# Postgres connection env, DRY'd. A service logs in as its own role
+# (dida_core.db_roles) with the password the keys service wrote into the directory
+# it mounts at /run/dida-db; the superuser's stays with postgres and keys.
+x-dida-pg: &dida-pg
+  POSTGRES_HOST: postgres
+  POSTGRES_USER: dida_app
+  POSTGRES_PASSWORD_FILE: /run/dida-db/password
+  POSTGRES_DB: ${POSTGRES_DB:-dida}
+
+# Cap each container's json log at ~250 MB (5 × 50 MB) so a runaway loop
+# can't fill the host disk.
+x-dida-logging: &dida-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+x-docker-proxy: &docker-proxy
+  image: wollomatic/socket-proxy:1.13.1
+  network_mode: none
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - "no-new-privileges:true"
+  group_add:
+    - "${DIDA_DOCKER_GID:?DIDA_DOCKER_GID unset — run install.sh or deploy/upgrade.sh}"
+  <<: *dida-logging
+  restart: unless-stopped
+
+services:
+
+  # ---------------------------------------------------------------------
+  # Shared base image. Builds only under the `bases` profile; never runs.
+  #   docker compose --profile bases build
+  # Rebuild only when core/ or docker/base.Dockerfile change.
+  # ---------------------------------------------------------------------
+  base:
+    profiles: [bases]
+    image: dida/base:latest
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+    command: ["true"]
+
+  nats:
+    image: nats:2.14-alpine
+    container_name: dida-nats
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    # The user list is the keys service's (one login per bus identity, derived from
+    # DIDA_SECRET_KEY); nats-run.sh reloads it when a later `up` changes it.
+    command: ["sh", "/etc/nats/nats-run.sh"]
+    ports:
+      - "127.0.0.1:4232:4222"
+    volumes:
+      - ${DIDA_STATE_HOST}/nats:/data
+      - ./docker/nats.conf:/etc/nats/nats.conf:ro
+      - ./docker/nats-run.sh:/etc/nats/nats-run.sh:ro
+      - type: volume
+        source: dida-keys
+        target: /etc/nats/auth
+        read_only: true
+        volume:
+          subpath: nats-server
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  keys:
+    # One-shot: writes each broker client's key, each bus identity's password (and
+    # the NATS server's user list) and each database role's password, all derived
+    # from DIDA_SECRET_KEY, into its own directory of dida-keys, which only its
+    # services mount, then provisions the roles as the superuser. The root key
+    # stays with the api — it signs every login. See dida_core.identity. The api's
+    # image, because the base carries no database driver.
+    image: dida/api:latest
+    container_name: dida-keys
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    user: "0:0"
+    command: ["python", "-m", "dida_core.identity"]
+    environment:
+      DIDA_SECRET_KEY: ${DIDA_SECRET_KEY:?DIDA_SECRET_KEY unset — run install.sh}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-dida}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dida}
+    volumes:
+      - dida-keys:/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    # The MAJOR is the load-bearing pin: Postgres refuses a data directory written
+    # by a different major, so `pg18` is what stops an upgrade from bricking the DB.
+    # Minor updates within it are wanted (security fixes) and are safe in place.
+    image: pgvector/pgvector:pg18
+    container_name: dida-postgres
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    # Bound to localhost for the host-networked lanprobe (it can't resolve the
+    # Docker-network service name).
+    ports:
+      - "127.0.0.1:${DIDA_PG_HOST_PORT:-5442}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dida}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dida}
+    volumes:
+      # pg18+ stores data in a major-version subdir, so the image expects the
+      # mount at /var/lib/postgresql (not /…/data). Fresh dir; data migrated
+      # from the old pg17 `postgres` dir via dump→restore. initdb applies the
+      # schema once on first boot.
+      - ${DIDA_STATE_HOST}/pgdata18:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dida} -d ${POSTGRES_DB:-dida}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  clickhouse:
+    # History / event firehose. Running from Phase 0 so the engine's history
+    # append (Phase 1) lands without infra churn. LTS tag; bump deliberately.
+    image: clickhouse/clickhouse-server:25.8
+    container_name: dida-clickhouse
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dida}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dida}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ${DIDA_STATE_HOST}/clickhouse:/var/lib/clickhouse
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  mosquitto:
+    # Local MQTT broker. In real deployments zigbee2mqtt / zwave-js publish
+    # here; the mqtt adapter bridges it onto the DIDA bus.
+    # Pinned by DIGEST because upstream publishes no exact tag for what `:2`
+    # currently is: the binary reports 2.1.2 and no 2.1.2 tag exists, so the only
+    # exact tag (2.0.20) would be a downgrade. The digest is what is running.
+    image: eclipse-mosquitto:2@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
+    container_name: dida-mosquitto
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto.passwd:/mosquitto/config/passwd:ro
+      - ${DIDA_STATE_HOST}/mosquitto:/mosquitto/data
+    restart: unless-stopped
+    healthcheck:
+      # Liveness (auth is on, so a real MQTT ping would need creds): the broker
+      # process must exist. Catches a crashed/exited broker so compose surfaces
+      # it instead of leaving dependents silently pointing at a dead port.
+      test: ["CMD-SHELL", "pidof mosquitto || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # zigbee2mqtt — the Zigbee BRIDGE (we consume bridges, never reimplement the
+  # stack). Reaches the coordinator either over TCP (network coordinator) or on
+  # a USB stick passed in as DIDA_ZIGBEE_DEVICE, and publishes to mosquitto,
+  # where adapter-mqtt picks it up.
+  #
+  # Gated behind the `zigbee` profile: the coordinator is single-owner, so this
+  # must NOT auto-start while HA/ZHA still holds it. Cutover:
+  #   1) free the coordinator (disable ZHA in HA)
+  #   2) seed state/zigbee2mqtt/ with the network backup (no re-pair)
+  #   3) docker compose --profile zigbee up -d zigbee2mqtt
+  zigbee2mqtt:
+    profiles: ["zigbee"]
+    image: ghcr.io/koenkk/zigbee2mqtt:2.13.0
+    container_name: dida-zigbee2mqtt
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      TZ: ${DIDA_TZ:-Europe/Zagreb}
+    devices:
+      # The USB stick lands on a fixed in-container path, so configuration.yaml
+      # says `/dev/zigbee` on every host regardless of the by-id name outside.
+      # A network coordinator leaves DIDA_ZIGBEE_DEVICE unset; /dev/null is the
+      # inert stand-in, since compose has no way to drop a list entry.
+      - ${DIDA_ZIGBEE_DEVICE:-/dev/null}:/dev/zigbee
+    volumes:
+      - ${DIDA_STATE_HOST}/zigbee2mqtt:/app/data
+    ports:
+      # Exposed on the LAN (0.0.0.0) so the z2m frontend is reachable at
+      # http://<host>:8092 — network map / LQI / permit-join during onboarding.
+      - "${DIDA_Z2M_PORT:-8092}:8080"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # z2m frontend on 8080 in-container (koenkk image ships busybox wget).
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ESPHome dashboard — compiles and flashes the nodes THIS installation owns.
+  # It is a build toolchain, not a runtime dependency: adapter-esphome talks to
+  # finished nodes over their native API and does not need this running. Gated
+  # behind the `esphome` profile so a normal installation carries none of it.
+  #
+  # It belongs on the DIDA host rather than the dev box because OTA needs to
+  # reach the node directly, and a second installation is a different LAN. Host
+  # networking for the same reason (and so the dashboard's ping status works).
+  # The first flash of a virgin board is USB, from a laptop next to it.
+  esphome:
+    profiles: ["esphome-dashboard"]
+    image: esphome/esphome:2026.7.3
+    container_name: dida-esphome
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      TZ: ${DIDA_TZ:-Europe/Zagreb}
+      ESPHOME_DASHBOARD_USE_PING: "true"
+    volumes:
+      - ${DIDA_STATE_HOST}/esphome:/config
+    restart: unless-stopped
+    healthcheck:
+      # The dashboard is a python app, so python is the one interpreter the
+      # image is guaranteed to ship (no curl, no busybox wget).
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:6052/')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  govee2mqtt:
+    # Govee bridge (Wez Furlong). Talks to Govee over the account/AWS-IoT path
+    # (realtime, no LAN needed) + optional API key + LAN, and republishes every
+    # device as Home Assistant MQTT Discovery onto OUR mosquitto — which the
+    # co-located `govee` adapter itself ingests. Account credentials come from govee.env, which the
+    # `govee` adapter writes from Settings → Adapters (then restarts this). Broker
+    # settings are static (our mosquitto); the bridge idles until creds are set.
+    profiles: ["govee"]
+    build:
+      context: .
+      dockerfile: docker/govee2mqtt.Dockerfile
+    image: dida/govee2mqtt:latest
+    container_name: dida-govee2mqtt
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      TZ: ${DIDA_TZ:-Europe/Zagreb}
+      GOVEE_MQTT_HOST: mosquitto
+      GOVEE_MQTT_PORT: "1883"
+      GOVEE_MQTT_USER: ${DIDA_MQTT_USERNAME:-dida}
+      GOVEE_MQTT_PASSWORD: ${DIDA_MQTT_PASSWORD}
+    volumes:
+      # /govee: account creds (govee.env) — RAM-only, written by the govee adapter
+      # and sourced by the entrypoint; never on disk. /data: named volume (owned by
+      # uid 1000 via the image) for the API cache + AWS IoT key across boots.
+      - govee_creds:/govee
+      - govee_data:/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  adapter-govee:
+    # Owns the whole Govee path: the Settings → Adapters form for Govee creds
+    # (writes the bridge's env + restarts it over the Docker socket), AND consumes
+    # the HA MQTT Discovery the bridge publishes on our mosquitto → govee: entities.
+    build:
+      context: .
+      dockerfile: adapters/govee/Dockerfile
+    image: dida/adapter-govee:latest
+    container_name: dida-adapter-govee
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["govee"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      GOVEE_ENV_PATH: /govee/govee.env
+      DIDA_MQTT_HOST: mosquitto
+      DIDA_MQTT_USERNAME: ${DIDA_MQTT_USERNAME:-dida}
+      DIDA_MQTT_PASSWORD: ${DIDA_MQTT_PASSWORD}
+      DOCKER_SOCK: /docker/docker.sock
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: govee
+      # govee_creds: the RAM-only volume where we render the bridge's govee.env
+      # (shared with it). /state: persist the discovered device registry.
+      - govee_creds:/govee
+      - ${DIDA_STATE_HOST}/adapter-govee:/state
+      - docker_api_govee:/docker
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      docker-proxy-govee:
+        condition: service_started
+      nats:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-govee 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+
+  engine:
+    build:
+      context: .
+      dockerfile: services/engine/Dockerfile
+    image: dida/engine:latest
+    container_name: dida-engine
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: [*dida-env, *dida-pg]
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dida}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dida}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - ${DIDA_STATE_HOST}/engine:/state
+      - type: volume
+        source: dida-keys
+        target: /run/dida-db
+        read_only: true
+        volume:
+          subpath: db-dida_app
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: core
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_engine 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  automation:
+    # Automation engine (Layer 1: typed rules). Separate process for fault
+    # isolation — a misbehaving rule can't stall state projection, and a
+    # per-rule circuit breaker disables one that keeps erroring.
+    build:
+      context: .
+      dockerfile: services/automation/Dockerfile
+    image: dida/automation:latest
+    container_name: dida-automation
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: [*dida-env, *dida-pg]
+    volumes:
+      - ${DIDA_STATE_HOST}/automation:/state
+      - type: volume
+        source: dida-keys
+        target: /run/dida-db
+        read_only: true
+        volume:
+          subpath: db-dida_app
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: core
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_automation 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  journal:
+    # Event journal — durable sink for discrete device events (dida.journal ->
+    # ClickHouse device_events). Its own process on purpose: if it dies the house
+    # doesn't notice (events queue in JetStream), and the engine keeps its single
+    # responsibility instead of growing a second one.
+    build:
+      context: .
+      dockerfile: services/journal/Dockerfile
+    image: dida/journal:latest
+    container_name: dida-journal
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dida}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dida}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - ${DIDA_STATE_HOST}/journal:/state
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: core
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_journal 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  netmgr:
+    # Network manager — gives DIDA a presence on the IoT VLAN(s) WITHOUT touching
+    # the host network. For each UI-selected VLAN it asks Docker (via the socket)
+    # to create a macvlan network trunked to <parent>.<vlan> — Docker creates +
+    # removes that tagging sub-link itself; the host's parent NIC, IP and routing
+    # are never touched and nothing is written to netplan. netmgr connects itself
+    # to the network and DHCPs on it, so the address comes from the router
+    # (the router stays the sole owner of DHCP/firewall/routing). Desired VLANs live
+    # in app_settings.managed_vlans (from the UI); none configured → idle.
+    build:
+      context: .
+      dockerfile: services/netmgr/Dockerfile
+    image: dida/netmgr:latest
+    container_name: dida-netmgr
+    security_opt:
+      - "no-new-privileges:true"
+    # PID-1 reaper: `dhclient … -nw` daemonizes and reparents to PID 1 (our Python
+    # process, which never reaps) → zombies. tini reaps them.
+    init: true
+    <<: *dida-logging
+    cap_add:
+      - NET_ADMIN   # bring the macvlan iface up in our netns
+      - NET_RAW     # dhclient raw socket
+    environment:
+      <<: [*dida-env, *dida-pg]
+      POSTGRES_USER: dida_netmgr
+      DIDA_NETMGR_CONTAINER: dida-netmgr
+      DOCKER_SOCK: /docker/docker.sock
+    volumes:
+      - docker_api_netmgr:/docker
+      - type: volume
+        source: dida-keys
+        target: /run/dida-db
+        read_only: true
+        volume:
+          subpath: db-dida_netmgr
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: netmgr
+    depends_on:
+      docker-proxy-netmgr:
+        condition: service_started
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_netmgr 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  # Docker API for netmgr and govee, one proxy per consumer. Each exposes a filtered
+  # unix socket in a volume mounted only into its consumer and has no network at
+  # all, so no other container (bridge or host-net) can reach it; the allow-lists
+  # name the exact calls, since container create/exec through a Docker API is root
+  # on the host.
+  docker-proxy-netmgr:
+    <<: *docker-proxy
+    container_name: dida-docker-proxy-netmgr
+    command:
+      - -proxysocketendpoint=/proxy/docker.sock
+      - -proxysocketendpointfilemode=0600
+      - -watchdoginterval=60
+      - -stoponwatchdog
+      - -allowGET=(/v1\.[0-9]+)?/containers/dida-[a-z0-9-]+/json
+      - -allowPOST=(/v1\.[0-9]+)?/networks/(create|dida-vlan[0-9]+/(connect|disconnect))
+      - -allowDELETE=(/v1\.[0-9]+)?/networks/dida-vlan[0-9]+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker_api_netmgr:/proxy
+
+  docker-proxy-govee:
+    <<: *docker-proxy
+    container_name: dida-docker-proxy-govee
+    profiles: ["govee"]
+    command:
+      - -proxysocketendpoint=/proxy/docker.sock
+      - -proxysocketendpointfilemode=0666
+      - -watchdoginterval=60
+      - -stoponwatchdog
+      - -allowPOST=(/v1\.[0-9]+)?/containers/dida-govee2mqtt/restart
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker_api_govee:/proxy
+
+  runner:
+    # Switches this installation's adapters on and off from the UI. Every adapter is
+    # its own compose profile; the runner is the only writer of COMPOSE_PROFILES in
+    # .env and the only container holding the Docker socket, so the api — which is
+    # published to the internet through the tunnel — never gets root-equivalent
+    # access to the host. It talks compose (standalone binary, no docker CLI).
+    build:
+      context: .
+      dockerfile: services/runner/Dockerfile
+    image: dida/runner:latest
+    container_name: dida-runner
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      DIDA_REPO_HOST: ${DIDA_REPO_HOST:-/mnt/docker/dida}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The project itself, at the SAME absolute path as on the host: compose derives
+      # the host paths it hands the daemon from this directory, so mounting it
+      # anywhere else would point every relative bind mount at a path the host
+      # doesn't have.
+      - ${DIDA_REPO_HOST:-/mnt/docker/dida}:${DIDA_REPO_HOST:-/mnt/docker/dida}
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: core
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_runner 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  lanprobe:
+    # Host self-probe — reports every interface the host addressed (address/MAC,
+    # which one is the LAN, which carries the default route) and its name: the
+    # read-only counterpart to netmgr's VLAN presence. Must run host-networked —
+    # only the host netns sees the real LAN interface (the bridge netns, where the
+    # API/netmgr live, only ever sees the 172.x bridge address). Reuses the netmgr
+    # image (same package, different entrypoint); no router integration — DIDA
+    # knows itself on any network. Publishes app_settings.lan_status.
+    image: dida/netmgr:latest
+    container_name: dida-lanprobe
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    command: ["python", "-m", "dida_netmgr.lanprobe"]
+    network_mode: host
+    environment:
+      <<: [*dida-env, *dida-pg]
+      # host networking → reach the DB via the host-published loopback port.
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: ${DIDA_PG_HOST_PORT:-5442}
+      POSTGRES_USER: dida_lanprobe
+    volumes:
+      # The host's name (as the router registers it), read-only. host-net shares
+      # the net namespace but NOT UTS, so this is how we read the real host name.
+      - /etc/hostname:/host/etc/hostname:ro
+      - type: volume
+        source: dida-keys
+        target: /run/dida-db
+        read_only: true
+        volume:
+          subpath: db-dida_lanprobe
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_lanprobe 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    image: dida/api:latest
+    container_name: dida-api
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: [*dida-env, *dida-pg]
+      DIDA_API_PORT: ${DIDA_API_PORT:-8090}
+      DIDA_CORS_ORIGINS: ${DIDA_CORS_ORIGINS:-}
+      # THIS host's address on the LAN the AV devices are on — what the SSDP
+      # adapters bind discovery to and the cast panel URL names.
+      # SEED ONLY: the api copies these into app_settings on first boot and nothing
+      # reads them again — Settings → Network owns them from then on. Still required
+      # here so a fresh install starts with a LAN address instead of none.
+      DIDA_LAN_IP: ${DIDA_LAN_IP:?set in .env — THIS host's LAN IP as the devices reach it, e.g. 198.51.100.100}
+      # OPUS · Player: where the house's music, radio and the bytes come from, as
+      # the devices reach it, and the household's service token. Seeds like the
+      # rest; empty = the media page has no shelf until Settings → Network says.
+      DIDA_OPUS_URL: ${DIDA_OPUS_URL:-}
+      DIDA_OPUS_TOKEN: ${DIDA_OPUS_TOKEN:-}
+      # planvision (floor-plan vectorizer) — reached over the bridge net.
+      DIDA_PLANVISION_URL: ${DIDA_PLANVISION_URL:-http://planvision:8094}
+      # For the Zigbee console link on the Adapters page — the same value the
+      # zigbee2mqtt service publishes on, read here rather than copied into the UI.
+      DIDA_Z2M_PORT: ${DIDA_Z2M_PORT:-8092}
+      # DIDA_PUBLIC_URL is the origin the outside world reaches (OAuth callbacks,
+      # the app link); DIDA_APP_URL is the user's normal origin to land back on
+      # (logged in).
+      DIDA_PUBLIC_URL: ${DIDA_PUBLIC_URL:-http://[::1]:5273}
+      DIDA_APP_URL: ${DIDA_APP_URL:-http://localhost:5273}
+      # Seeded into app_settings on first boot like the rest; netmgr reads the stored
+      # value, so this has to reach the SEEDER (here) — not the service that uses it.
+      DIDA_NET_PARENT: ${DIDA_NET_PARENT:-}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-dida}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dida}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # Auth. Secret persists under /state if DIDA_SECRET_KEY is unset. Cookie
+      # Secure stays false so one cookie works over LAN HTTP + tunnel HTTPS.
+      DIDA_SECRET_KEY: ${DIDA_SECRET_KEY:-}
+      DIDA_COOKIE_SECURE: ${DIDA_COOKIE_SECURE:-false}
+      # Trusted reverse-proxy IPs whose X-Forwarded-For the rate-limiter honours
+      # (empty → trust internal/loopback hops: the vite proxy + cloudflared).
+      DIDA_TRUSTED_PROXIES: ${DIDA_TRUSTED_PROXIES:-}
+      DIDA_ADMIN_USERNAME: ${DIDA_ADMIN_USERNAME:-}
+      DIDA_ADMIN_PASSWORD: ${DIDA_ADMIN_PASSWORD:-}
+      # Observability: unset → /metrics is 404 (disabled). Set a token to enable
+      # Prometheus scraping (?token= or Authorization: Bearer). /system/stats is
+      # always available to a signed-in user.
+      DIDA_METRICS_TOKEN: ${DIDA_METRICS_TOKEN:-}
+      # Claude assistant (natural-language control). Unset → /assistant 503s.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # App revision stamp (GET /version). Git-derived by the push hook, mounted
+      # read-only below and read per-request so a push refreshes it live.
+      DIDA_REVISION_FILE: /app/revision.json
+    # Loopback only — the browser reaches the API through the UI's internal vite
+    # /api proxy over the Docker network (api:8090), never via this host port.
+    ports:
+      - "127.0.0.1:${DIDA_API_PORT:-8090}:${DIDA_API_PORT:-8090}"
+    volumes:
+      # Persist the JWT secret-key + bootstrap_admin_password across restarts.
+      - ${DIDA_STATE_HOST}/api:/state
+      - androidtv_snap:/snap
+      # Scheduled backups land here (config .dump + history .tar.gz). Default is a
+      # dir on the logs volume — SEPARATE from /state where the DB lives — so a
+      # backup isn't on the same directory as the data. Point DIDA_BACKUP_HOST at an
+      # NFS/off-box mount for real durability.
+      - ${DIDA_BACKUP_HOST}:/backups
+      # App revision stamp (git-derived; scripts/gen-revision.sh). Read-only,
+      # re-read per request so a push updates /version without an API rebuild.
+      - ./revision.json:/app/revision.json:ro
+      # Android companion APK (android/build.sh on dev; deploy ships it to prod).
+      # Served at /app/dida.apk + /app/apk.json — bind mount, no image rebuild.
+      - ./android/dist:/apk:ro
+      # The Zigbee console's own config, READ-ONLY and one file: the admin needs its
+      # auth token to open the console, and the token lives here and nowhere else.
+      # Copying it into app_settings would make a second place to rotate and forget.
+      - ${DIDA_STATE_HOST}/zigbee2mqtt/configuration.yaml:/z2m/configuration.yaml:ro
+      - type: volume
+        source: dida-keys
+        target: /run/dida-db
+        read_only: true
+        volume:
+          subpath: db-dida_app
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: core
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(f\"http://127.0.0.1:${DIDA_API_PORT:-8090}/healthz\", timeout=3).read() else 1)' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  ui:
+    # The browser talks only to the UI; /api/* is proxied to the FastAPI service
+    # (REST + WebSocket + camera streams share an origin, no CORS dance).
+    #   DIDA_UI_TARGET=prod (default) → real vite build (adapter-node) served by
+    #                                   ui/server.js, which does the /api proxy.
+    #   DIDA_UI_TARGET=dev            → Vite dev server + HMR (bind-mounted src).
+    # An installation is a production one unless it says otherwise, so `dev` is
+    # what the one development box opts into — not what everyone else inherits.
+    build:
+      context: .
+      dockerfile: ui/Dockerfile
+      target: ${DIDA_UI_TARGET:-prod}
+      args:
+        # set in the prod .env to restore the "open in BABA" link
+        VITE_BABA_URL: ${DIDA_BABA_URL:-}
+    image: dida/ui:${DIDA_UI_TARGET:-prod}
+    container_name: dida-ui
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      # Follow DIDA_API_PORT so the proxy target never pins a stale port. Read by
+      # both vite.config.ts (dev) and server.js (prod).
+      DIDA_API_URL: http://api:${DIDA_API_PORT:-8090}
+      # The Vite dev server accepts only the hosts named here (plus IPs/localhost).
+      DIDA_PUBLIC_URL: ${DIDA_PUBLIC_URL:-}
+      DIDA_CORS_ORIGINS: ${DIDA_CORS_ORIGINS:-}
+    # LAN-exposed (like BABA web) so it's reachable from a workstation at
+    # http://<host>:${DIDA_UI_PORT}. The API/NATS/MQTT stay loopback — the
+    # browser reaches the API through this UI's internal /api proxy over the
+    # Docker network (service name api:8090), not via a host port. Both stages
+    # listen on 5173 (server.js honours PORT, defaulting to it).
+    ports:
+      - "${DIDA_UI_PORT:-5273}:5173"
+    # Dev: bind-mount source from the host so Vite HMR sees edits live (BABA's
+    # web pattern). node_modules and .svelte-kit stay in the image — their
+    # native bindings are built in-container, so the host must NOT shadow them.
+    # In the prod stage these mounts are inert: server.js serves the baked
+    # ./build, never ./src, so they overlay unused (identical) files.
+    volumes:
+      - ./ui/src:/app/src
+      - ./ui/static:/app/static
+      - ./ui/svelte.config.js:/app/svelte.config.js
+      - ./ui/vite.config.ts:/app/vite.config.ts
+      - ./ui/tsconfig.json:/app/tsconfig.json
+      - ./ui/package.json:/app/package.json
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      # vite dev serves the app on 5173 in-container. node is always present;
+      # avoid a wget/curl dependency the slim node image may not carry.
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:5173/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  adapter-mqtt:
+    build:
+      context: .
+      dockerfile: adapters/mqtt/Dockerfile
+    image: dida/adapter-mqtt:latest
+    container_name: dida-adapter-mqtt
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["mqtt"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: mqtt
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-mqtt 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-denon:
+    # Denon/Marantz AV receiver control via the native Telnet protocol (port 23):
+    # power, master volume, mute and input source, per zone (Main + Zone2). The
+    # socket is event-driven, so state is push. Host networking for SSDP
+    # discovery; set DIDA_DENON_HOST to pin the receiver IP and skip discovery.
+    build:
+      context: .
+      dockerfile: adapters/denon/Dockerfile
+    image: dida/adapter-denon:latest
+    container_name: dida-adapter-denon
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["denon"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+      # Names the LAN leg SSDP binds to (local_ip() reads the host out of it) — this
+      # host routes by default over the IoT VLAN, where no renderer lives.
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: denon
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-denon 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-heos:
+    # Denon/Marantz players via the HEOS CLI (TCP 1255) — the real control plane
+    # for volume/transport/sources (their UPnP RenderingControl is a no-op, so
+    # the DLNA adapter skips them). Host networking for SSDP discovery; one
+    # connected device enumerates the whole HEOS system. Set DIDA_HEOS_HOST to
+    # pin a device and skip discovery. NATS via the published loopback port.
+    build:
+      context: .
+      dockerfile: adapters/heos/Dockerfile
+    image: dida/adapter-heos:latest
+    container_name: dida-adapter-heos
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["heos"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      # Names the LAN leg SSDP binds to (local_ip() reads the host out of it) — this
+      # host routes by default over the IoT VLAN, where no renderer lives.
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: heos
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-heos 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-baba:
+    # BABA (vision/NVR) → DIDA. Two planes: (1) subscribes BABA's OWN NATS
+    # (nats://127.0.0.1:4222 — a separate server from DIDA's, both loopback-
+    # published on this shared host) for semantic events, translating them into
+    # motion/occupancy/person_count/object_class/scene_state; (2) enumerates
+    # go2rtc streams and registers each camera as an entity with a stream
+    # descriptor (the UI pulls WebRTC/HLS straight from go2rtc — pixels never
+    # touch the bus). Host networking so it reaches BOTH NATS servers (DIDA via
+    # the published :4232, BABA via :4222) and go2rtc over loopback. Read-only.
+    build:
+      context: .
+      dockerfile: adapters/baba/Dockerfile
+    image: dida/adapter-baba:latest
+    container_name: dida-adapter-baba
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["baba"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: baba
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-baba 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-frigate:
+    # Frigate NVRs at OTHER locations → DIDA. One adapter, many sites (Coast,
+    # Island, …), each configured in Settings → Adapters. The vision sibling of
+    # adapter-baba (home) but off-site: per site it reads the camera roster over
+    # HTTP (registering each camera as a `frigate:<cam>` entity with a `site`
+    # label) and, for a LOCAL Frigate that declares a broker, consumes its MQTT
+    # topics (events/objects/zones/motion/feature switches). Plain bridged egress
+    # (NOT host net like baba): it dials OUT to each site's HTTP/broker and reaches
+    # DIDA's nats + postgres by service name. Read-only except the per-camera
+    # feature switches. Idle until a location is configured.
+    build:
+      context: .
+      dockerfile: adapters/frigate/Dockerfile
+    image: dida/adapter-frigate:latest
+    container_name: dida-adapter-frigate
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["frigate"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: frigate
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-frigate 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-cast:
+    # Google Cast (Chromecast / Android TV / Nest) via pychromecast. Each Cast
+    # device becomes a media-player entity (now-playing + transport + volume).
+    # Host networking for mDNS discovery + the per-device CASTV2 sockets.
+    build:
+      context: .
+      dockerfile: adapters/cast/Dockerfile
+    image: dida/adapter-cast:latest
+    container_name: dida-adapter-cast
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["cast"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      # Host-net → reach Postgres (for wall-panel config + token) via the
+      # published loopback port. The /panel cast URL is built LAN-local — the Hub
+      # is on the same switch, so its page, camera MJPEG and photo slideshow have
+      # no business round-tripping through the public tunnel — from the host's
+      # declared LAN leg (lan_ip) plus the published UI port. DIDA_APP_URL
+      # remains the fallback for a host that declares no LAN leg.
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+      DIDA_UI_PORT: ${DIDA_UI_PORT:-5273}
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: cast
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-cast 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-dlna:
+    # Discovers DLNA/UPnP MediaRenderers (TVs, AV receivers, the iFi Zen Stream)
+    # via SSDP and drives them as media-player entities. Needs host networking:
+    # SSDP discovery is LAN multicast (doesn't cross the docker bridge), and it
+    # future-proofs GENA event callbacks (renderer → us). Because it shares the
+    # host net namespace, NATS is reached at the published loopback port, not the
+    # `nats` service DNS name.
+    build:
+      context: .
+      dockerfile: adapters/dlna/Dockerfile
+    image: dida/adapter-dlna:latest
+    container_name: dida-adapter-dlna
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["dlna"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+      # SSDP binds to the host's declared LAN leg (lan_ip, read by local_ip()):
+      # this host routes by default over the IoT VLAN, where no renderer lives.
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: dlna
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-dlna 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-volumio:
+    # iFi Zen Stream via its NATIVE Volumio REST API (state, control, cast, config)
+    # — replaces the generic DLNA path for that one device (dlna excludes it). Bridge
+    # net: reaches the Zen and NATS/Postgres by name, no SSDP.
+    build:
+      context: .
+      dockerfile: adapters/volumio/Dockerfile
+    image: dida/adapter-volumio:latest
+    container_name: dida-adapter-volumio
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["volumio"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: volumio
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-volumio 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-androidtv:
+    # NVIDIA Shield / any Android TV / Google TV box via the Android TV Remote v2
+    # protocol (power, D-pad nav, app launch, media keys, volume). Bridge net:
+    # reaches the box on the LAN and NATS/Postgres by name. Added by PAIRING (the
+    # TV shows a 6-digit code) — the cert lives encrypted in adapter_config.
+    build:
+      context: .
+      dockerfile: adapters/androidtv/Dockerfile
+    image: dida/adapter-androidtv:latest
+    container_name: dida-adapter-androidtv
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["androidtv"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: androidtv
+      - androidtv_snap:/snap
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-androidtv 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-opus:
+    # The OPUS TV screen as a media player: reads what OPUS · Player says the
+    # television is doing and hands the house's orders to the player's mailbox
+    # for it — never a second connection to the box. Where the player answers and
+    # its token are Settings → Network (opus_url / opus_token), not config here.
+    build:
+      context: .
+      dockerfile: adapters/opus/Dockerfile
+    image: dida/adapter-opus:latest
+    container_name: dida-adapter-opus
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["opus"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: opus
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-opus 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-samsungtv:
+    # Samsung Tizen TV over its own LAN API (REST 8001, remote websocket 8002). Host
+    # net: turning the TV on is a wake-on-LAN broadcast, which does not leave the
+    # docker bridge, so NATS and Postgres are reached at the published loopback ports.
+    build:
+      context: .
+      dockerfile: adapters/samsungtv/Dockerfile
+    image: dida/adapter-samsungtv:latest
+    container_name: dida-adapter-samsungtv
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["samsungtv"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: samsungtv
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-samsungtv 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-esphome:
+    # Connects directly to ESPHome nodes over their native API (port 6053).
+    # Device list + per-node keys live in state/adapter-esphome/esphome_devices.json
+    # (carries secrets, off-repo). Needs network reachability to the nodes.
+    build:
+      context: .
+      dockerfile: adapters/esphome/Dockerfile
+    image: dida/adapter-esphome:latest
+    container_name: dida-adapter-esphome
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["esphome"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: esphome
+      - ${DIDA_STATE_HOST}/adapter-esphome:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-esphome 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-shelly:
+    # Drives Shelly Gen2+ devices over their local RPC (HTTP for reads/commands,
+    # an outbound WebSocket per device for NotifyStatus push). Fully local — no
+    # cloud, no keys. Device IPs in DIDA_SHELLY_HOSTS; needs network reachability
+    # to them (VLAN20 here, like esphome).
+    build:
+      context: .
+      dockerfile: adapters/shelly/Dockerfile
+    image: dida/adapter-shelly:latest
+    container_name: dida-adapter-shelly
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["shelly"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      # Host list now comes from the DB (Settings → Adapters); this env is the
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: shelly
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-shelly 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-tuya:
+    # Tuya Wi-Fi devices over the LOCAL protocol (tinytuya) — no cloud in the
+    # runtime path. Per-device id/local_key/ip + an explicit DPS->capability map
+    # live in state/adapter-tuya/devices.json (carries the local_key, off-repo).
+    # Needs network reachability to the devices (VLAN20 here).
+    build:
+      context: .
+      dockerfile: adapters/tuya/Dockerfile
+    image: dida/adapter-tuya:latest
+    container_name: dida-adapter-tuya
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["tuya"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: tuya
+      - ${DIDA_STATE_HOST}/adapter-tuya:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-tuya 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-homekit:
+    # HomeKit (HAP-IP) accessories via aiohomekit. DIDA is its own HAP
+    # controller; pairings (minted once via `python -m dida_adapter_homekit.pair`)
+    # live in state/adapter-homekit/pairings.json (carries this controller's
+    # keypair, off-repo). Host networking: HAP discovery/reconnect is mDNS
+    # multicast (doesn't cross the docker bridge); NATS via the loopback port.
+    build:
+      context: .
+      dockerfile: adapters/homekit/Dockerfile
+    image: dida/adapter-homekit:latest
+    container_name: dida-adapter-homekit
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["homekit"]
+    <<: *dida-logging
+    network_mode: host
+    environment:
+      <<: *dida-env
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: homekit
+      - ${DIDA_STATE_HOST}/adapter-homekit:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-homekit 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-astro:
+    # Sun-position source: publishes astro:sun / sun_elevation (degrees) + sun_state
+    # (night/dawn/day/dusk, the trigger-shaped sibling) + time of
+    # day, so automations gate on daylight ("night" = sun_elevation <= 0) as a
+    # native condition. Location comes from the home zone (Zones → the one flagged
+    # Home); altitude/tz/cadence from the DB config. No device, no network — pure
+    # local computation (astral) over Postgres-sourced location.
+    build:
+      context: .
+      dockerfile: adapters/astro/Dockerfile
+    image: dida/adapter-astro:latest
+    container_name: dida-adapter-astro
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: astro
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-astro 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-virtual:
+    # DIDA-owned "helper" entities (virtual:* — boolean/enum/number), the native
+    # replacement for HA input_boolean/select/number. Reads definitions from the
+    # virtual_entities table and maps commands to validated state updates. Its
+    # "device" is the DB, so it needs Postgres (not network to any hardware).
+    build:
+      context: .
+      dockerfile: adapters/virtual/Dockerfile
+    image: dida/adapter-virtual:latest
+    container_name: dida-adapter-virtual
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: virtual
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-virtual 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-calendar:
+    # DIDA's light "beat" scheduler — user-defined schedules from the `schedules`
+    # table become entities: each is a day-level `schedule_active` boolean, true
+    # on days matching its recurrence (daily/weekly/monthly/yearly/once) within an
+    # optional yearly window. Its "device" is the DB + the clock, so it needs
+    # Postgres (no hardware).
+    build:
+      context: .
+      dockerfile: adapters/calendar/Dockerfile
+    image: dida/adapter-calendar:latest
+    container_name: dida-adapter-calendar
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["calendar"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: calendar
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-calendar 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-contacts:
+    # The household's address book. Reads the contacts book (Google People API, or
+    # an export file) into `people` once a day and publishes contacts:birthdays —
+    # whether anyone has a birthday in the announce window, and who. DIDA is the
+    # one reader in the house; OPUS Library asks it over HTTP rather than holding a
+    # second Google grant. Needs Postgres and the internet, no hardware.
+    build:
+      context: .
+      dockerfile: adapters/contacts/Dockerfile
+    image: dida/adapter-contacts:latest
+    container_name: dida-adapter-contacts
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["contacts"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: contacts
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-contacts 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-notify:
+    # Push notifications via ntfy (no HA, no vendor lock-in). Automations fire a
+    # `notify` command on a notify:<who> entity; this relays it to that person's
+    # ntfy topic. Core/untagged (always on) — idles until DIDA_NTFY_TARGETS is set.
+    build:
+      context: .
+      dockerfile: adapters/notify/Dockerfile
+    image: dida/adapter-notify:latest
+    container_name: dida-adapter-notify
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      # Only for the ntfy attachment: that server fetches the picture itself, so it
+      # needs an absolute origin. Web push doesn't — the phone resolves the path
+      # against DIDA's own origin, which works on the LAN and through the tunnel.
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: notify
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-notify 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-announce:
+    # Spoken TTS announcements on a Cast speaker (no HA). Automations fire a `say`
+    # command on an announce:<where> entity; this builds a TTS URL and routes a
+    # play_media command over the bus to the cast adapter. Core/untagged (always
+    # on) — idles until targets are set in Settings → Adapters. Needs the `av`
+    # profile's cast adapter running to actually play.
+    build:
+      context: .
+      dockerfile: adapters/announce/Dockerfile
+    image: dida/adapter-announce:latest
+    container_name: dida-adapter-announce
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: announce
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-announce 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-presence:
+    # Presence: OwnTracks GPS reports (MQTT) → zone resolution → presence:*
+    # entities. Joins the broker (DIDA's mosquitto by default) with the `zones`
+    # table (read-only reference data, like the virtual adapter reads the DB),
+    # so it needs BOTH Postgres and the broker. Read-only — no commands.
+    build:
+      context: .
+      dockerfile: adapters/presence/Dockerfile
+    image: dida/adapter-presence:latest
+    container_name: dida-adapter-presence
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["presence"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      # Credentials for the built-in broker, used until Settings → Adapters names
+      # another one. The UI-set password is stored encrypted → needs the key.
+      DIDA_MQTT_USERNAME: ${DIDA_MQTT_USERNAME:-dida}
+      DIDA_MQTT_PASSWORD: ${DIDA_MQTT_PASSWORD}
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: presence
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-presence 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-unifi:
+    # Presence from the UniFi controller's association table: a phone that dozes its
+    # Wi-Fi keeps its 802.11 association, so it stays visible while it sits at home —
+    # which the router's ARP table does not. Also publishes each access point's
+    # up/down. Plain bridge networking: it needs the controller + NATS/Postgres.
+    build:
+      context: .
+      dockerfile: adapters/unifi/Dockerfile
+    image: dida/adapter-unifi:latest
+    container_name: dida-adapter-unifi
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["unifi"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: unifi
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-unifi 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-cloudflare:
+    # Edits the ingress this installation carries, from the UI. Which one that is
+    # depends on what is mounted below:
+    #   services.conf  — the house: one source that also drives Caddy (LAN), the
+    #     router's split-DNS and Homepage. The adapter does NOT apply it; a systemd
+    #     path unit on the Proxmox host runs apply-ingress.sh, the only place all of
+    #     those can be reached.
+    #   config.yml     — an installation where DIDA owns the tunnel outright: the
+    #     connectors' own config IS the ingress, so the adapter renders it and asks
+    #     the runner to roll the connectors (it holds the docker socket, we do not).
+    # Plain bridge networking: it needs NATS + Postgres, nothing else.
+    build:
+      context: .
+      dockerfile: adapters/cloudflare/Dockerfile
+    image: dida/adapter-cloudflare:latest
+    container_name: dida-adapter-cloudflare
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["cloudflare"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: cloudflare
+      # The ingress source, bind-mounted through from /mnt/docker/main/ingress on the
+      # host. Read-write: the UI edits it, and the host applies what it reads back.
+      # Absent (an empty dir) on an installation that has no host applier.
+      - ${DIDA_STATE_HOST}/ingress:/ingress
+      # The connectors' own config — the ingress itself where there is no applier.
+      # The same directory cloudflared reads, so there is one file, not a copy.
+      - ${DIDA_STATE_HOST}/cloudflared:/cloudflared
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-cloudflare 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  # The Cloudflare tunnel itself — co-located with DIDA so the adapter owns and
+  # restarts it locally (over the Docker socket). Host networking: it must reach
+  # every origin service across the LAN + VLANs (this host routes to all of them).
+  # config.yml, credentials.json and cert.pem belong to this installation, so they
+  # sit in its own state dir. Anything else (a dir on a retired host's dataset) makes
+  # the tunnel outlive-dependent on a box DIDA no longer owns. The connectors run as
+  # the uid that writes that dir (adapter-cloudflare), because the credentials a
+  # created tunnel gets are 0600.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.3
+    container_name: dida-cloudflared
+    user: "1000:1000"
+    security_opt:
+      - "no-new-privileges:true"
+    # Its OWN profile, apart from the adapter's. The adapter is a control plane
+    # and is useful wherever routes are edited; a connector is a data plane and
+    # only makes sense where this installation actually terminates the tunnel.
+    # Sharing one profile meant an install that wanted the former got the latter
+    # too, and with no credentials on disk both connectors crash-looped forever
+    # (measured on the dev box: 4429 restarts, drowning its logs).
+    profiles: ["cloudflare-tunnel"]
+    network_mode: host
+    command: tunnel --protocol http2 --config /etc/cloudflared/config.yml run
+    volumes:
+      - ${DIDA_STATE_HOST}/cloudflared:/etc/cloudflared:ro
+    <<: *dida-logging
+    restart: always
+
+  # Second connector on the SAME tunnel — Cloudflare balances across both, so the
+  # adapter can rolling-restart them (one at a time) to apply a config change with
+  # no user-visible outage (the other keeps serving during each restart).
+  cloudflared-2:
+    image: cloudflare/cloudflared:2026.7.3
+    container_name: dida-cloudflared-2
+    user: "1000:1000"
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["cloudflare-tunnel"]
+    network_mode: host
+    command: tunnel --protocol http2 --config /etc/cloudflared/config.yml run
+    volumes:
+      - ${DIDA_STATE_HOST}/cloudflared:/etc/cloudflared:ro
+    <<: *dida-logging
+    restart: always
+
+  adapter-midea:
+    # Midea AC over the LOCAL LAN protocol (msmart-ng) — no cloud at runtime.
+    # host/id/token/key live in state/adapter-midea/midea_data.json (off-repo,
+    # carries the local key). Needs network reachability to the AC (VLAN20).
+    build:
+      context: .
+      dockerfile: adapters/midea/Dockerfile
+    image: dida/adapter-midea:latest
+    container_name: dida-adapter-midea
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["midea"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: midea
+      - ${DIDA_STATE_HOST}/adapter-midea:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-midea 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-panasonic:
+    # Panasonic AC via Panasonic Comfort Cloud. The unit's WiFi module has no
+    # local control plane at all, so this one needs the internet, not the IoT
+    # VLAN. Account credentials live encrypted in the DB (Settings → Adapters).
+    build:
+      context: .
+      dockerfile: adapters/panasonic/Dockerfile
+    image: dida/adapter-panasonic:latest
+    container_name: dida-adapter-panasonic
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["panasonic"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: panasonic
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-panasonic 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-ecowitt:
+    # Ecowitt weather gateway via its LOCAL JSON API (polled, read-only) — so it
+    # coexists with the gateway's existing push (e.g. to HA), no reconfig. Gateway
+    # IPs in DIDA_ECOWITT_HOSTS (CSV). Needs network reachability (VLAN20 here).
+    build:
+      context: .
+      dockerfile: adapters/ecowitt/Dockerfile
+    image: dida/adapter-ecowitt:latest
+    container_name: dida-adapter-ecowitt
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["ecowitt"]
+    ports:
+      - "4199:4199"   # Ecowitt "Customized/Ecowitt" push receiver (point console uploads here)
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: ecowitt
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-ecowitt 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-solar:
+    # PV inverter via its datalogger's LOCAL JSON API (polled, read-only) — so it
+    # coexists with the logger's existing cloud/HA uploads, no reconfig. Logger URL
+    # in Settings → Adapters (DB). Needs network reachability (VLAN20 here).
+    build:
+      context: .
+      dockerfile: adapters/solar/Dockerfile
+    image: dida/adapter-solar:latest
+    container_name: dida-adapter-solar
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["solar"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: solar
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-solar 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-iammeter:
+    # IAMMETER WiFi grid meter (WEM3080) via its LOCAL /monitorjson (polled,
+    # read-only) — no cloud, no HA/emqx. Net grid power (± = import/export) +
+    # import/export energy, pairs with the solar adapter. Meter URL in Settings →
+    # Adapters (DB). Needs network reachability (VLAN20 here).
+    build:
+      context: .
+      dockerfile: adapters/iammeter/Dockerfile
+    image: dida/adapter-iammeter:latest
+    container_name: dida-adapter-iammeter
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["iammeter"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: iammeter
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-iammeter 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-peer:
+    # Another DIDA installation (a second house), mirrored read-only into this one:
+    # logs in as an ordinary user on the remote's public HTTPS surface, takes a
+    # catalog+state snapshot and tails its /ws event stream. Locations and the
+    # entity allowlist in Settings → Adapters (DB). Outbound HTTPS only — nothing
+    # of this installation is exposed to the peer.
+    build:
+      context: .
+      dockerfile: adapters/peer/Dockerfile
+    image: dida/adapter-peer:latest
+    container_name: dida-adapter-peer
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["peer"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: peer
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-peer 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-roidmi:
+    # Roidmi robot vacuum (Xiaomi ecosystem) over the LOCAL miio/MiOT protocol —
+    # one configured host + device token (Settings → Adapters), no cloud in the
+    # control path. Bridge net: plain unicast UDP to the robot, no discovery.
+    build:
+      context: .
+      dockerfile: adapters/roidmi/Dockerfile
+    image: dida/adapter-roidmi:latest
+    container_name: dida-adapter-roidmi
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["roidmi"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: roidmi
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-roidmi 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-dreame:
+    # Dreame robot vacuum through the Dreamehome CLOUD — the robot's local API is
+    # off once it is registered there, so there is no LAN path to prefer. Bridge
+    # net: outbound HTTPS only.
+    build:
+      context: .
+      dockerfile: adapters/dreame/Dockerfile
+    image: dida/adapter-dreame:latest
+    container_name: dida-adapter-dreame
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["dreame"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: dreame
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-dreame 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-landroid:
+    # Worx Landroid robotic mower via the Worx CLOUD (pyworxcloud) — no local
+    # protocol exists for Landroid. email/password in state/adapter-landroid/
+    # landroid.json (off-repo). Needs outbound internet to the Worx cloud.
+    build:
+      context: .
+      dockerfile: adapters/landroid/Dockerfile
+    image: dida/adapter-landroid:latest
+    container_name: dida-adapter-landroid
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["landroid"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      # Flip to DEBUG (DIDA_LOG_LEVEL=DEBUG docker compose up -d adapter-landroid)
+      # to see pyworxcloud's MQTT push traffic when diagnosing the cloud link.
+      DIDA_LOG_LEVEL: ${DIDA_LOG_LEVEL:-INFO}
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: landroid
+      - ${DIDA_STATE_HOST}/adapter-landroid:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-landroid 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  adapter-smartthings:
+    # Samsung appliances/AV (TV, soundbar, AC, washer, fridge, robot vacuum) via
+    # the SmartThings CLOUD (OAuth 2.0) — these devices have no local API. Client
+    # creds + the rolling refresh token live encrypted in the DB (Settings →
+    # Adapters → Connect); needs outbound internet to the SmartThings cloud.
+    build:
+      context: .
+      dockerfile: adapters/smartthings/Dockerfile
+    image: dida/adapter-smartthings:latest
+    container_name: dida-adapter-smartthings
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["smartthings"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+      DIDA_LOG_LEVEL: ${DIDA_LOG_LEVEL:-INFO}
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: smartthings
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-smartthings 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  adapter-harmony:
+    # Logitech Harmony Hub over its LOCAL API (aioharmony) — no cloud. The hub
+    # is one entity with an `enum` activity selector (Watch TV / PowerOff / …).
+    # Hub IP in DIDA_HARMONY_HOST. Needs network reachability (VLAN20 here).
+    build:
+      context: .
+      dockerfile: adapters/harmony/Dockerfile
+    image: dida/adapter-harmony:latest
+    container_name: dida-adapter-harmony
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["harmony"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: harmony
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-harmony 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  adapter-broadlink:
+    # Broadlink RM IR/RF blaster over its LOCAL protocol (python-broadlink) — no
+    # cloud. A `remote` capability whose value lists the learned command labels;
+    # `send` fires a code. host/mac/type in env; learned codes (exported from HA)
+    # in state/adapter-broadlink/codes.json. Needs network reachability (VLAN20).
+    build:
+      context: .
+      dockerfile: adapters/broadlink/Dockerfile
+    image: dida/adapter-broadlink:latest
+    container_name: dida-adapter-broadlink
+    security_opt:
+      - "no-new-privileges:true"
+    profiles: ["broadlink"]
+    <<: *dida-logging
+    environment:
+      <<: *dida-env
+    volumes:
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: broadlink
+      - ${DIDA_STATE_HOST}/adapter-broadlink:/state
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_adapter-broadlink 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  planvision:
+    # One-shot raster floor-plan → vector room polygons (classical CV on CPU:
+    # adaptive threshold → wall thickness filter → seal doors → watershed to the
+    # true walls → sliver merge → Douglas-Peucker). Stateless HTTP: the api reads
+    # a floor's scaffold from /state and POSTs the bytes here. Its own base, no
+    # core / DB / NATS. Bridge net; the api reaches it at planvision:8094 (no host
+    # port needed).
+    build:
+      context: .
+      dockerfile: services/planvision/Dockerfile
+    image: dida/planvision:latest
+    container_name: dida-planvision
+    security_opt:
+      - "no-new-privileges:true"
+    <<: *dida-logging
+    # Backstop against a CV-pathology OOM (a huge/adversarial floor-plan raster
+    # blowing up watershed/skeletonize) taking the host down.
+    mem_limit: 512m
+    environment:
+      DIDA_PLANVISION_PORT: "8094"
+      # Decompression-bomb guard (~64 MPx) for OpenCV image decode; paired with a
+      # server-side pixel-count check in the planvision code.
+      OPENCV_IO_MAX_IMAGE_PIXELS: "67108864"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8094/healthz\", timeout=3).read() else 1)' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+
+  matter-bridge:
+    # Exposes DIDA entities as Matter devices so any Matter controller (Google
+    # Home / Alexa / Apple) adopts and controls them LOCALLY — no cloud, no
+    # OAuth, no public endpoint. Matter advertises over mDNS and must share the
+    # LAN with the controller, so this runs with host networking. Fabric +
+    # commissioning credentials persist under state/matter-bridge. Opt-in
+    # `matter` profile (experimental). Node/TS service on matter.js.
+    profiles: ["matter"]
+    build:
+      context: .
+      dockerfile: services/matter-bridge/Dockerfile
+    image: dida/matter-bridge:latest
+    container_name: dida-matter-bridge
+    security_opt:
+      - "no-new-privileges:true"
+    # PID-1 reaper + SIGTERM forwarding: Node as PID 1 gets no default SIGTERM
+    # action, so `docker stop` would wait the full stop-timeout then SIGKILL. tini
+    # forwards the signal (the in-process handler in index.ts drains cleanly).
+    init: true
+    network_mode: host
+    <<: *dida-logging
+    environment:
+      DIDA_MATTER_STORAGE: /state
+      DIDA_MATTER_PORT: ${DIDA_MATTER_PORT:-5540}
+      # Activity pickers (source/source_options entities, e.g. harmony:hub):
+      # every source option becomes a voiceable Matter plug ("turn on PS5").
+      DIDA_MATTER_ACTIVITY_ENTITIES: ${DIDA_MATTER_ACTIVITY_ENTITIES:-}
+      # Host networking exposes every Docker veth — pin Matter/mDNS to the LAN
+      # NIC so the controller only ever sees the reachable host address, and
+      # quiet matter.js's debug firehose.
+      MATTER_MDNS_NETWORKINTERFACE: ${DIDA_MATTER_INTERFACE:-ens18}
+      MATTER_LOG_LEVEL: info
+      # host networking: reach DIDA's bus via the host-published localhost port
+      DIDA_NATS_URL: nats://127.0.0.1:4232
+      DIDA_NATS_PASSWORD_FILE: /run/dida-key/nats
+    volumes:
+      - ${DIDA_STATE_HOST}/matter-bridge:/state
+      - type: volume
+        source: dida-keys
+        target: /run/dida-key
+        read_only: true
+        volume:
+          subpath: matter-bridge
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/dida_healthy_matter-bridge 2>/dev/null || echo 0) )) -lt 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+
+volumes:
+  dida-keys:
+  # Filtered Docker API sockets, one per consumer (see docker-proxy-*). tmpfs owned
+  # by the proxy's uid: it runs as nobody and must create its socket here.
+  docker_api_netmgr:
+    driver: local
+    driver_opts: &docker-api-tmpfs
+      type: tmpfs
+      device: tmpfs
+      o: "uid=65534,gid=65534,mode=0755"
+  docker_api_govee:
+    driver: local
+    driver_opts: *docker-api-tmpfs
+  # Govee account creds, rendered by the govee adapter for the bridge to source.
+  # tmpfs (RAM) — the encrypted `adapter_config` DB row is the single source of
+  # truth; this is a transient render that never touches disk, shared between the
+  # adapter (writer) and the bridge (reader). Empty after a host reboot → the
+  # adapter repopulates it from the DB on start, so it self-heals.
+  govee_creds:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+  # govee2mqtt's persistent API cache + AWS IoT key. Named volume so it inits with
+  # the image's /data ownership (uid 1000) — a root-owned bind would crash the
+  # non-root process on cache open.
+  govee_data:
+  # Live screen snapshots (ADB screencap) — adapter-androidtv writes, api serves.
+  androidtv_snap:

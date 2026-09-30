@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+ROOT="$(git rev-parse --show-toplevel)"
+REFS=$(cat)
+
+# 1) Pre-publication gate — the owner's clones also answer to a private check
+#    (real names, plates, MACs, secrets) that no commit carries, found through
+#    the clone's own config. A push to the owner's account without it is refused.
+GATE=$(git config --get publicgate.command)
+if [ -n "$GATE" ]; then
+    printf '%s\n' "$REFS" | "$GATE" pre-push "$@" || exit 1
+else
+    case "$2" in
+        *[:/][Bb]acinac/*) echo "✗ $2 is the owner's and this clone has no publicgate.command — push blocked" >&2; exit 1 ;;
+    esac
+fi
+
+# 2) Re-stamp revision.json so the running instance reflects what was pushed.
+#    Never blocks the push on a stamp failure.
+"$ROOT/scripts/gen-revision.sh" || true
+
+# 3) Local CI gate — ruff + the test suite, on this box, before the push leaves.
+#    Blocks the push on failure. Skip once with DIDA_SKIP_TESTS=1, or bypass all
+#    hooks with `git push --no-verify`.
+[ "${DIDA_SKIP_TESTS:-0}" = "1" ] && exit 0
+"$ROOT/scripts/pre-push-tests.sh"

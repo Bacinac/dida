@@ -1,25 +1,19 @@
 <script lang="ts">
   // What DIDA says in the frame's top bar on every page: the live system signals
-  // (API health, bus connection), help and the assistant. Who is signed in is the
-  // frame's own.
+  // (API health, bus connection) and the assistant. Help and who is signed in are
+  // the frame's own.
   //
   // Theme and language are NOT here. They are set-once preferences that Account
   // already owns and persists to the profile, and the theme's "system" mode covers
   // the one case for flipping it often — so a permanent copy in the chrome was
   // duplication that had to be kept in sync, on every screen, for a yearly action.
   import { onMount } from "svelte";
-  import { page } from "$app/state";
   import { devices } from "$lib/store.svelte";
   import { api } from "$lib/api";
   import { auth } from "$lib/auth.svelte";
   import { ui } from "$lib/shell.svelte";
-  import { pageNameKey } from "$lib/help";
   import { t } from "$lib/i18n";
   import { Tag, type TagTone } from "$lib/kit";
-
-  // Help is the assistant, asked about where you are standing — DIDA has no help
-  // pages. Hidden on a route with no name of its own (login, onboarding, panel).
-  const pageKey = $derived(pageNameKey(page.url.pathname));
 
   const conn = $derived(devices.conn);
   const connLabel = $derived(
@@ -50,22 +44,6 @@
 {#if auth.isAdmin}
   <Tag tone={apiTone} title="{t('system.api')}: {apiLabel}">{t("system.api")}</Tag>
   <Tag tone={busTone} title="{t('system.bus')}: {connLabel}">{t("system.busShort")}</Tag>
-{/if}
-{#if auth.canSee("assistant") && pageKey}
-  <button
-    type="button"
-    onclick={() => ui.askAssistant(t("help.question", { page: t(pageKey) }))}
-    aria-label={t("help.explainPage")}
-    title={t("help.explainPage")}
-    class="rounded p-1.5 text-dida-text-muted hover:bg-dida-panel-2 hover:text-dida-text"
-  >
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-         stroke-linecap="round" stroke-linejoin="round" class="size-5" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/>
-      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.6.2-1 .8-1 1.4v.4"/>
-      <path d="M12 17h.01"/>
-    </svg>
-  </button>
 {/if}
 {#if auth.canSee("assistant")}
   <!-- The assistant opens OVER the page rather than replacing it, so it lives

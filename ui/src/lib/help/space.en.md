@@ -1,0 +1,3 @@
+- **Floor plans** — the drawn plan of each floor. Devices are placed on it, and it is the main page of the app.
+- **Rooms** (areas) — an entity belongs to one room. That is what "the kitchen light" or "everything downstairs" is resolved against.
+- **Zones** — geographic geofences for [presence](/help/presence): home, work, school. A zone is matched against a person's GPS position; it has nothing to do with the floor plan or with rooms.

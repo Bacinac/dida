@@ -19,5 +19,7 @@ USER dida
 WORKDIR /app
 COPY services/api/ ./services/api/
 RUN uv pip install --python /opt/venv/bin/python ./services/api
+# The /help articles: explain_dida answers from the same ones (dida_api.help_docs).
+COPY ui/src/lib/help/ ./help/
 
 CMD ["python", "-m", "dida_api"]

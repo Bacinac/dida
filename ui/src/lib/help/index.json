@@ -1,0 +1,289 @@
+[
+	{
+		"slug": "overview",
+		"group": "concepts",
+		"pages": [
+			"/floorplan"
+		],
+		"title": {
+			"en": "What DIDA is",
+			"hr": "Što je DIDA"
+		},
+		"summary": {
+			"en": "How the house is put together, and what each page is for.",
+			"hr": "Kako je kuća složena i čemu služi svaka stranica."
+		}
+	},
+	{
+		"slug": "devices",
+		"group": "concepts",
+		"pages": [
+			"/settings/devices"
+		],
+		"title": {
+			"en": "Devices",
+			"hr": "Uređaji"
+		},
+		"summary": {
+			"en": "Entities, device types and what gets shown.",
+			"hr": "Entiteti, vrste uređaja i što se prikazuje."
+		}
+	},
+	{
+		"slug": "adapters",
+		"group": "concepts",
+		"pages": [
+			"/settings/adapters"
+		],
+		"title": {
+			"en": "Adapters",
+			"hr": "Adapteri"
+		},
+		"summary": {
+			"en": "How protocols get in, and what to do when one is unhealthy.",
+			"hr": "Kako protokoli ulaze u kuću i što kad adapter nije zdrav."
+		}
+	},
+	{
+		"slug": "space",
+		"group": "concepts",
+		"pages": [
+			"/settings/floors",
+			"/settings/areas",
+			"/settings/zones"
+		],
+		"title": {
+			"en": "Floor plans, rooms and zones",
+			"hr": "Tlocrti, prostori i zone"
+		},
+		"summary": {
+			"hr": "Tlocrti, prostori i zone — tri stvari koje se lako pomiješaju.",
+			"en": "Floor plans, rooms and zones — three things that are easy to mix up."
+		}
+	},
+	{
+		"slug": "automations",
+		"group": "concepts",
+		"pages": [
+			"/automations"
+		],
+		"title": {
+			"en": "Automations",
+			"hr": "Automatizacije"
+		},
+		"summary": {
+			"en": "How rules work: triggers, conditions, actions, and the Starlark layer.",
+			"hr": "Kako rade pravila: okidač, uvjeti, akcije i Starlark."
+		}
+	},
+	{
+		"slug": "helpers",
+		"group": "concepts",
+		"pages": [
+			"/settings/helpers"
+		],
+		"title": {
+			"en": "Helpers",
+			"hr": "Helperi"
+		},
+		"summary": {
+			"en": "Virtual entities: values automations build on.",
+			"hr": "Virtualne vrijednosti na kojima se grade automatizacije."
+		}
+	},
+	{
+		"slug": "schedules",
+		"group": "concepts",
+		"pages": [
+			"/automations/schedules"
+		],
+		"title": {
+			"en": "Schedules",
+			"hr": "Rasporedi"
+		},
+		"summary": {
+			"en": "Recurring calendar schedules (bin collection, irrigation season).",
+			"hr": "Kalendarski rasporedi koji se ponavljaju (odvoz smeća, sezona zalijevanja)."
+		}
+	},
+	{
+		"slug": "scenes",
+		"group": "concepts",
+		"pages": [
+			"/settings/scenes"
+		],
+		"title": {
+			"en": "Scenes",
+			"hr": "Scene"
+		},
+		"summary": {
+			"en": "Captured device states, recalled as one action.",
+			"hr": "Zapamćena stanja uređaja, vraćena jednom akcijom."
+		}
+	},
+	{
+		"slug": "users",
+		"group": "concepts",
+		"pages": [
+			"/settings/users"
+		],
+		"title": {
+			"en": "Users and permissions",
+			"hr": "Korisnici i dozvole"
+		},
+		"summary": {
+			"en": "Roles, page visibility and control grants.",
+			"hr": "Uloge, vidljivost stranica i dozvole upravljanja."
+		}
+	},
+	{
+		"slug": "presence",
+		"group": "concepts",
+		"title": {
+			"en": "Presence",
+			"hr": "Prisutnost"
+		},
+		"summary": {
+			"en": "Who is home, and where people are.",
+			"hr": "Tko je kod kuće i gdje su ljudi."
+		}
+	},
+	{
+		"slug": "history",
+		"group": "concepts",
+		"pages": [
+			"/history",
+			"/settings/commands"
+		],
+		"title": {
+			"en": "History and commands",
+			"hr": "Povijest i komande"
+		},
+		"summary": {
+			"en": "Where past values and past commands live.",
+			"hr": "Gdje žive prošle vrijednosti i prošle komande."
+		}
+	},
+	{
+		"slug": "media",
+		"group": "operating",
+		"pages": [
+			"/media"
+		],
+		"title": {
+			"en": "Media",
+			"hr": "Mediji"
+		},
+		"summary": {
+			"en": "The Media page: spaces, sources, the OPUS shelf and radio.",
+			"hr": "Stranica Mediji: prostori, izvori, OPUS police i radio."
+		}
+	},
+	{
+		"slug": "heating",
+		"group": "operating",
+		"pages": [
+			"/heating"
+		],
+		"title": {
+			"en": "Heating",
+			"hr": "Grijanje"
+		},
+		"summary": {
+			"en": "The Heating page: room targets, schedules and the boiler.",
+			"hr": "Stranica Grijanje: ciljne temperature soba, rasporedi i kotao."
+		}
+	},
+	{
+		"slug": "cameras",
+		"group": "operating",
+		"pages": [
+			"/cameras"
+		],
+		"title": {
+			"en": "Cameras",
+			"hr": "Kamere"
+		},
+		"summary": {
+			"en": "Cameras, and how BABA relates to DIDA.",
+			"hr": "Kamere i kako je BABA povezana s DIDA-om."
+		}
+	},
+	{
+		"slug": "notifications",
+		"group": "operating",
+		"pages": [
+			"/account"
+		],
+		"title": {
+			"en": "Notifications and the app",
+			"hr": "Obavijesti i aplikacija"
+		},
+		"summary": {
+			"en": "Push to phones, and the companion app.",
+			"hr": "Push obavijesti na mobitel i prateća aplikacija."
+		}
+	},
+	{
+		"slug": "entry",
+		"group": "operating",
+		"pages": [
+			"/entry"
+		],
+		"title": {
+			"en": "Entry",
+			"hr": "Ulaz"
+		},
+		"summary": {
+			"en": "The Entry page — the least-privilege surface.",
+			"hr": "Stranica Ulaz — najmanje ovlasti."
+		}
+	},
+	{
+		"slug": "voice",
+		"group": "operating",
+		"title": {
+			"en": "Voice assistants",
+			"hr": "Glasovni asistenti"
+		},
+		"summary": {
+			"en": "Talking to the house through Google, Alexa or Siri.",
+			"hr": "Razgovor s kućom preko Googlea, Alexe ili Siri."
+		}
+	},
+	{
+		"slug": "assistant",
+		"group": "operating",
+		"title": {
+			"en": "The assistant",
+			"hr": "Asistent"
+		},
+		"summary": {
+			"en": "What the assistant can and cannot do, and what runs it.",
+			"hr": "Što asistent može, a što ne, i što ga pokreće."
+		}
+	},
+	{
+		"slug": "system",
+		"group": "operating",
+		"pages": [
+			"/settings/system",
+			"/settings/alerts",
+			"/settings/backup",
+			"/settings/retention",
+			"/settings/logs",
+			"/settings/network",
+			"/settings/panel",
+			"/settings/keys",
+			"/settings/translations"
+		],
+		"title": {
+			"en": "System and data",
+			"hr": "Sustav i podaci"
+		},
+		"summary": {
+			"en": "Health, alerts, backup, retention and the rest of Settings → System and Data.",
+			"hr": "Zdravlje, upozorenja, sigurnosne kopije, retencija i ostatak postavki sustava."
+		}
+	}
+]

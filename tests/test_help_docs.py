@@ -1,16 +1,18 @@
 """Unit test — the assistant's explain-itself corpus (dida_api.help_docs).
 
-PURE: dict lookups + string formatting, no Postgres, no bus, no LLM.
+PURE: files + string formatting, no Postgres, no bus, no LLM.
 
-DIDA ships no help pages; `explain_dida` is the whole help system. So the corpus
-itself is the thing to guard: a topic that renders empty, or a page nobody can ask
-about, is a hole in the only documentation the app has.
+The corpus is the /help articles (ui/src/lib/help/) plus the generated
+`capabilities` topic. The kit's articles.mjs holds the articles to their shape;
+this guards what the assistant makes of them: a topic that renders empty, or a
+page nobody can ask about, is a hole in what it can explain.
 """
-from dida_api.help_docs import HELP_TOPIC_NAMES, help_index, help_text
+import json
 
-# Every named surface a user can stand on and press "Explain this page". The
-# header button sends the page's NAME, so the corpus must have something to say
-# about each one.
+from dida_api.help_docs import HELP_DIR, HELP_TOPIC_NAMES, help_index, help_text
+
+# Every named surface a user can stand on and ask the assistant about, so the
+# corpus must have something to say about each one.
 SURFACES = (
     "floor plan", "cameras", "media", "automations", "schedules", "scenes", "helpers",
     "history", "presence", "entry", "devices", "adapters", "users", "voice",
@@ -54,3 +56,12 @@ def test_every_page_a_user_can_ask_about_is_covered():
     corpus = " ".join([help_index(), *(help_text(n) for n in HELP_TOPIC_NAMES)]).lower()
     missing = [s for s in SURFACES if s not in corpus]
     assert not missing, f"the assistant cannot explain: {missing}"
+
+
+def test_every_article_is_a_topic_and_reads_as_its_english_body():
+    # One source: what the assistant answers from is what /help shows.
+    index = json.loads((HELP_DIR / "index.json").read_text(encoding="utf-8"))
+    assert [e["slug"] for e in index] + ["capabilities"] == list(HELP_TOPIC_NAMES)
+    for e in index:
+        body = (HELP_DIR / f"{e['slug']}.en.md").read_text(encoding="utf-8").strip()
+        assert help_text(e["slug"]) == body

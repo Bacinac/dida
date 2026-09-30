@@ -491,6 +491,8 @@ export interface Me {
    * otherwise these follow the user across devices (applied on login). */
   theme: Theme | null;
   locale: Locale | null;
+  /** an assistant key is set, so the assistant can answer */
+  assistant: boolean;
 }
 
 /** A per-user control exception. Meaning flips on can_control: a deny when the

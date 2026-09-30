@@ -17,6 +17,7 @@
   import TopBar from "$lib/TopBar.svelte";
   import AssistantPanel from "$lib/AssistantPanel.svelte";
   import { version } from "$lib/version.svelte";
+  import { help } from "$lib/help";
 
   let { children } = $props();
 
@@ -221,6 +222,7 @@
       href: "/account",
       onlogout: logout,
     }}
+    {help}
     version={version.label}
     focus={ui.focusMode}
   >

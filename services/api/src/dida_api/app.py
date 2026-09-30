@@ -91,7 +91,7 @@ from dida_api.auth import (
 from dida_api.backup import backup_scheduler
 from dida_api.backup import router as backup_router
 from dida_api.broker import serve_broker
-from dida_api.common import get_setting, resolve_assistant_client
+from dida_api.common import get_setting, resolve_assistant_client, stored_api_key
 from dida_api.contacts import router as contacts_router
 from dida_api.hub import Hub
 from dida_api.opus_media import router as opus_router
@@ -277,6 +277,13 @@ class MeResponse(BaseModel):
     # uses its device default; otherwise these follow the user across devices.
     theme: str | None = None
     locale: str | None = None
+    # An assistant key is set, so the assistant can answer — the client offers it
+    # under a help article only then.
+    assistant: bool = False
+
+
+async def _assistant_ready() -> bool:
+    return bool(await stored_api_key(app.state.pool, "anthropic_api_key"))
 
 
 @app.post("/auth/login", response_model=MeResponse)
@@ -305,7 +312,7 @@ async def login(
     return MeResponse(
         id=str(row["id"]), username=row["username"], role=row["role"],
         allowed_pages=row["allowed_pages"], can_control=row["can_control"],
-        theme=row["theme"], locale=row["locale"],
+        theme=row["theme"], locale=row["locale"], assistant=await _assistant_ready(),
     )
 
 
@@ -339,7 +346,7 @@ async def auth_panel(
     return MeResponse(
         id=str(user.id), username=user.username, role=user.role,
         allowed_pages=user.allowed_pages, can_control=user.can_control,
-        theme=user.theme, locale=user.locale,
+        theme=user.theme, locale=user.locale, assistant=await _assistant_ready(),
     )
 
 
@@ -412,7 +419,7 @@ async def me(
     return MeResponse(
         id=str(user.id), username=user.username, role=user.role,
         allowed_pages=user.allowed_pages, can_control=user.can_control,
-        theme=user.theme, locale=user.locale,
+        theme=user.theme, locale=user.locale, assistant=await _assistant_ready(),
     )
 
 

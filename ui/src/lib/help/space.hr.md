@@ -1,0 +1,3 @@
+- **Tlocrti** — nacrtani tlocrt svakog kata. Na njega se postavljaju uređaji, a on je i glavna stranica aplikacije.
+- **Prostori** (sobe) — entitet pripada jednom prostoru. Prema tome se razrješava „svjetlo u kuhinji” ili „sve u prizemlju”.
+- **Zone** — geografske granice za [prisutnost](/help/presence): kuća, posao, škola. Zona se uspoređuje s GPS položajem osobe i nema veze ni s tlocrtom ni s prostorima.

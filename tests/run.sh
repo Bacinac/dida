@@ -565,6 +565,13 @@ echo "== ui (type) =="
 docker run --rm $NODE_AS_ME -v "$ROOT:/repo:ro" -w /repo node:24-slim node ui/src/lib/kit/type.mjs ui/src \
   || { echo "FAILED: ui type" >&2; exit 1; }
 
+# --- UI (help) — the /help articles, which the assistant's explain_dida reads too:
+# every one whole in both languages, every link, Hint and page it names real.
+echo ""
+echo "== ui (help) =="
+docker run --rm $NODE_AS_ME -v "$ROOT:/repo:ro" -w /repo node:24-slim node ui/src/lib/kit/articles.mjs ui/src/lib/help ui/src \
+  || { echo "FAILED: ui help" >&2; exit 1; }
+
 # --- UI (kit) — the kit's own checks, tested where they run: in this product's gate.
 echo ""
 echo "== ui (kit checks) =="

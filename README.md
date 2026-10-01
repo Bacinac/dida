@@ -8,6 +8,8 @@ clears the hill, and the lights go off behind everyone. DIDA runs a house the
 same way. It is the sibling of [BABA](https://github.com/Bacinac/baba): BABA at
 the window sees everything, DIDA keeps the house running.
 
+**Try it:** [demo-dida.boskovic.biz](https://demo-dida.boskovic.biz), the real interface with a made-up household inside.
+
 ## What it does
 
 It keeps every device in the house in hand through isolated adapters, from

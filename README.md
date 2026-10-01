@@ -10,6 +10,29 @@ the window sees everything, DIDA keeps the house running.
 
 **Try it:** [demo-dida.boskovic.biz](https://demo-dida.boskovic.biz), the real interface with a made-up household inside.
 
+<p align="center"><img src="docs/screenshots/tour.webp" alt="DIDA in the demo: floor plan, cameras, automations and heating" width="100%"></p>
+
+<details>
+<summary>More screenshots</summary>
+
+**Floor plan:** the house controlled from its own plan, with who is at home.
+
+![Floor plan](docs/screenshots/floorplan.webp)
+
+**Cameras:** in the same interface as the lights and the heating.
+
+![Cameras](docs/screenshots/cameras.webp)
+
+**Automations:** grouped by what they do, each a typed rule or a Starlark script.
+
+![Automations](docs/screenshots/automations.webp)
+
+**Heating:** per room, with comfort, eco and night temperatures.
+
+![Heating](docs/screenshots/heating.webp)
+
+</details>
+
 ## What it does
 
 It keeps every device in the house in hand through isolated adapters, from

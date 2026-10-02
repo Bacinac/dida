@@ -4,7 +4,7 @@
   import { errMsg } from "$lib/errors";
   import { devices } from "$lib/store.svelte";
   import { capBadge, capLabel, capMeta, capRank, cmdLabel, commandsFor, entityType, isActuator, typeLabel, valueKind, optionLabel } from "$lib/capabilities";
-  import { Button, Notice, PageHead, Picks, SaveButton, Toggle, dialog, formatNumber } from "$lib/kit";
+  import { Button, Notice, PageActions, Picks, SaveButton, Toggle, dialog, formatNumber } from "$lib/kit";
   import { t, type MessageKey } from "$lib/i18n";
   import { dateTime } from "$lib/dt";
   import { SECTION_TITLE_CLASS, SUBSECTION_TITLE_CLASS } from "$lib/ui";
@@ -516,12 +516,10 @@
 <svelte:head><title>{t("nav.automations")}</title></svelte:head>
 
 {#if !form}
-  <PageHead sticky={false}>
-    {#snippet aside()}
-      <Button onclick={toggleRuns}>{t("auto.runs")}</Button>
-      <Button tone="primary" onclick={startCreate}>{t("auto.new")}</Button>
-    {/snippet}
-  </PageHead>
+  <PageActions>
+    <Button selected={showRuns} onclick={toggleRuns}>{t("auto.runs")}</Button>
+    <Button tone="primary" onclick={startCreate}>{t("auto.new")}</Button>
+  </PageActions>
 {/if}
 
 {#if showRuns && !form}

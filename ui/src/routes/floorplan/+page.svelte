@@ -21,7 +21,7 @@
   import FloorReplay from "$lib/FloorReplay.svelte";
   import { replay } from "$lib/replay.svelte";
   import PresencePanel from "$lib/PresencePanel.svelte";
-  import { Button, Picks, SaveButton, formatNumber, toasts } from "$lib/kit";
+  import { Button, PageActions, Picks, SaveButton, formatNumber, toasts } from "$lib/kit";
   import { t } from "$lib/i18n";
   import { auth } from "$lib/auth.svelte";
   import { ui } from "$lib/shell.svelte";
@@ -1174,7 +1174,7 @@
 
 <svelte:head><title>{t("nav.floorplan")}</title></svelte:head>
 
-<div class="mb-3 flex items-center justify-end gap-2">
+<PageActions>
   {#if !edit}
     <Button selected={replay.active} onclick={toggleReplay} disabled={replay.loading || replayEntities.length === 0} title={replayEntities.length === 0 ? t("replay.noEntities") : undefined}>{t("replay.open")}</Button>
   {/if}
@@ -1191,7 +1191,7 @@
     {/if}
     <Button selected={edit} onclick={() => { edit = !edit; picking = null; selected = null; configItem = null; hist = null; camSnap = null; roomOpen = null; roomSel = null; mergeFrom = null; mergePreview = null; selBorder = null; addingBorder = false; drawBorder = null; snapDot = null; }}>{edit ? t("fp.done") : t("fp.arrange")}</Button>
   {/if}
-</div>
+</PageActions>
 
 {#if replay.active || replay.loading || replay.error}
   <div class="mb-3">

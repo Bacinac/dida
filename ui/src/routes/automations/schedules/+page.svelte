@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { api, type Schedule } from "$lib/api";
   import { errMsg } from "$lib/errors";
-  import { Button, Card, Picks, SaveButton, dialog, i18n } from "$lib/kit";
+  import { Button, Card, PageActions, Picks, SaveButton, dialog, i18n } from "$lib/kit";
   import { t, type MessageKey } from "$lib/i18n";
   import { isoDate } from "$lib/dt";
   import { auth } from "$lib/auth.svelte";
@@ -287,15 +287,15 @@
 
     <div class="mt-5 flex flex-wrap items-end gap-2 border-t border-dida-border/60 pt-4">
       <input bind:value={name} placeholder={t("schedules.name")} class="min-w-56 flex-1" />
-      <SaveButton size="small" {dirty} {saving} blocked={!name.trim()} onclick={save} label={editingId != null ? undefined : t("schedules.add")} />
+      <SaveButton {dirty} {saving} blocked={!name.trim()} onclick={save} label={editingId != null ? undefined : t("schedules.add")} />
       <Button onclick={closeForm}>{t("common.cancel")}</Button>
       {#if msg}<span class="text-s text-dida-danger">{msg}</span>{/if}
     </div>
   </Card>
   {:else}
-    <div class="mb-4">
+    <PageActions>
       <Button tone="primary" onclick={openAdd}>＋ {t("schedules.new")}</Button>
-    </div>
+    </PageActions>
   {/if}
 
   <div class="mt-4"><Card>

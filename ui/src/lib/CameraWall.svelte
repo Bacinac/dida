@@ -19,7 +19,7 @@
   import { tr } from "$lib/translations.svelte";
   import { auth } from "$lib/auth.svelte";
   import { api, type CameraEvent } from "$lib/api";
-  import { Button, Tag, toasts } from "$lib/kit";
+  import { Button, PageActions, Tag, toasts } from "$lib/kit";
   import { t } from "$lib/i18n";
   import { dateTime } from "$lib/dt";
   import { sceneLit } from "$lib/capabilities";
@@ -282,12 +282,19 @@
 {/snippet}
 
 <div bind:this={wallEl} class={wall ? "flex h-dvh flex-col bg-black p-2" : ""}>
-  <div class="mb-2 flex items-center justify-end gap-2">
-    {#if auth.isAdmin && !wall}
-      <Button size="small" selected={editMode} onclick={() => (editMode = !editMode)}>{editMode ? t("cameras.layoutDone") : t("cameras.editLayout")}</Button>
-    {/if}
-    <Button size="small" onclick={toggleWall}>{wall ? t("cameras.exitWall") : t("cameras.wall")} ⛶</Button>
-  </div>
+  {#if wall}
+    <!-- the wall is full screen: the frame's bar is not there to carry the way out -->
+    <div class="mb-2 flex items-center justify-end gap-2">
+      <Button onclick={toggleWall}>{t("cameras.exitWall")} ⛶</Button>
+    </div>
+  {:else}
+    <PageActions>
+      {#if auth.isAdmin}
+        <Button selected={editMode} onclick={() => (editMode = !editMode)}>{editMode ? t("cameras.layoutDone") : t("cameras.editLayout")}</Button>
+      {/if}
+      <Button onclick={toggleWall}>{t("cameras.wall")} ⛶</Button>
+    </PageActions>
+  {/if}
 
   {#if cameras.length === 0}
     <div class="rounded-xl border border-dashed border-dida-border p-8 text-center text-dida-text-muted">

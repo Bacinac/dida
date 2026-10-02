@@ -13,7 +13,7 @@
   import { auth } from "$lib/auth.svelte";
   import { ui } from "$lib/shell.svelte";
   import { t } from "$lib/i18n";
-  import { Tag, type TagTone } from "$lib/kit";
+  import { Tag, narrow, type TagTone } from "$lib/kit";
 
   const conn = $derived(devices.conn);
   const connLabel = $derived(
@@ -40,10 +40,16 @@
 </script>
 
 <!-- Connection/health signals are ops info — admin only; a regular user (family)
-     doesn't need them (a real outage shows as a stale UI anyway). -->
+     doesn't need them (a real outage shows as a stale UI anyway). A phone's bar
+     has no room for both while all is well, so there each one shows only when it
+     is not. -->
 {#if auth.isAdmin}
-  <Tag tone={apiTone} title="{t('system.api')}: {apiLabel}">{t("system.api")}</Tag>
-  <Tag tone={busTone} title="{t('system.bus')}: {connLabel}">{t("system.busShort")}</Tag>
+  {#if !narrow.current || apiTone !== "ok"}
+    <Tag tone={apiTone} title="{t('system.api')}: {apiLabel}">{t("system.api")}</Tag>
+  {/if}
+  {#if !narrow.current || busTone !== "ok"}
+    <Tag tone={busTone} title="{t('system.bus')}: {connLabel}">{t("system.busShort")}</Tag>
+  {/if}
 {/if}
 {#if auth.canSee("assistant")}
   <!-- The assistant opens OVER the page rather than replacing it, so it lives

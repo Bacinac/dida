@@ -5,7 +5,7 @@
   import { adapterLabel, capLabel, CAP_GROUPS, capGroupIndex, classColor } from "$lib/capabilities";
   import { devices } from "$lib/store.svelte";
   import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
-  import { Button, Card, SaveButton, formatNumber } from "$lib/kit";
+  import { Button, Card, PageActions, SaveButton, formatNumber, toasts } from "$lib/kit";
   import { t, type MessageKey } from "$lib/i18n";
   import { auth } from "$lib/auth.svelte";
   import { SECTION_TITLE_CLASS } from "$lib/ui";
@@ -16,7 +16,6 @@
   let known = $state<string[]>([]);
   let snapshot = $state("");
   let saving = $state(false);
-  let saveMsg = $state<string | null>(null);
   let err = $state<string | null>(null);
 
   // new-override draft
@@ -90,13 +89,12 @@
 
   async function save() {
     saving = true;
-    saveMsg = null;
     try {
       await api.saveRetention({ classes, capabilities: caps, overrides });
       snapshot = snap();
-      saveMsg = t("settings.saved");
+      toasts.success(t("settings.saved"));
     } catch (e) {
-      saveMsg = errMsg(e);
+      toasts.error(errMsg(e));
     } finally {
       saving = false;
     }
@@ -130,10 +128,9 @@
 {:else if err}
   <p class="text-m text-dida-danger">{err}</p>
 {:else}
-  <div class="mb-4 flex items-center gap-3">
-    <SaveButton size="small" {dirty} {saving} onclick={save} />
-    {#if saveMsg}<span class="text-s text-dida-text-muted">{saveMsg}</span>{/if}
-  </div>
+  <PageActions>
+    <SaveButton {dirty} {saving} onclick={save} />
+  </PageActions>
 
   <!-- Classes × tiers matrix -->
   <h2 class="mb-2 {SECTION_TITLE_CLASS}">{t("retention.classes")}</h2>

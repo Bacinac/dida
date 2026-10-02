@@ -337,7 +337,7 @@
         {/if}
 
         <div class="flex items-center gap-2">
-          <SaveButton size="small" {dirty} {saving} blocked={!bName.trim()} onclick={save} label={cEditId !== null ? undefined : t("helpers.add")} />
+          <SaveButton {dirty} {saving} blocked={!bName.trim()} onclick={save} label={cEditId !== null ? undefined : t("helpers.add")} />
           <Button onclick={closeBuilder}>{t("common.cancel")}</Button>
           {#if bMsg}<span class="text-s text-dida-danger">{bMsg}</span>{/if}
         </div>

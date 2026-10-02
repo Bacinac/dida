@@ -87,7 +87,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-3xl space-y-4 p-4">
+<div class="mx-auto max-w-3xl space-y-4">
 
   {#if !auth.isAdmin}
     <Notice tone="err">{t("settings.adminOnly")}</Notice>

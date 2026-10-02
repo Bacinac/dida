@@ -7,7 +7,7 @@
   import { errMsg } from "$lib/errors";
   import { devices } from "$lib/store.svelte";
   import { auth } from "$lib/auth.svelte";
-  import { Button, SaveButton, Tag, formatNumber } from "$lib/kit";
+  import { Button, PageActions, SaveButton, Tag, formatNumber } from "$lib/kit";
   import { t, type MessageKey } from "$lib/i18n";
   import { isoDate } from "$lib/dt";
   import { SECTION_TITLE_CLASS } from "$lib/ui";
@@ -155,7 +155,13 @@
   }
 </script>
 
-<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+{#if auth.isAdmin}
+  <PageActions>
+    <Button selected={cfgOpen} onclick={() => (cfgOpen = !cfgOpen)}>{cfgOpen ? t("common.done") : t("common.edit")}</Button>
+  </PageActions>
+{/if}
+
+<div class="mb-3 flex flex-wrap items-center gap-2">
   <div class="flex items-center gap-1">
     <Button onclick={() => shiftDay(-1)} label={t("energy.prevDay")}>‹</Button>
     <input type="date" bind:value={dateStr} max={todayISO()} />
@@ -164,9 +170,6 @@
       <Button onclick={() => (dateStr = todayISO())}>{t("energy.today")}</Button>
     {/if}
   </div>
-  {#if auth.isAdmin}
-    <Button size="small" onclick={() => (cfgOpen = !cfgOpen)}>{cfgOpen ? t("common.done") : t("common.edit")}</Button>
-  {/if}
 </div>
 
 {#if err}

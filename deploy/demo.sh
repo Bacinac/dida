@@ -129,6 +129,12 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -v "$ROOT/ui":/app -v "$WORK":/w -v "$ROOT/demo-snapshots":/snaps:ro -w /app node:24 \
     sh -lc "./build-demo.sh /w/api-fixtures.json /w/demo-dist /w/plans /snaps" | tail -1
 
+echo "== link card =="
+docker run --rm --user "$(id -u):$(id -g)" -v "$ROOT:$ROOT:ro" -v "$WORK:$WORK" node:24 \
+    node "$ROOT/ui/src/lib/kit/linkcard.mjs" "$WORK/demo-dist" https://demo-dida.boskovic.biz \
+    "$ROOT/docs/screenshots/social-preview.png" "DIDA — live demo" \
+    "Home automation on industrial foundations: every protocol isolated in its own process, a validated capability model at the core, control from the floor plan. A public demo over a recorded, anonymised house."
+
 echo "== deploying to $PROJECT =="
 docker run --rm -v "$WORK/demo-dist":/site -w /site \
     -e CLOUDFLARE_API_TOKEN="$(tr -d ' \n' < "$CF_TOKEN_FILE")" \

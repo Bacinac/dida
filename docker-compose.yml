@@ -198,6 +198,10 @@ services:
       - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./docker/mosquitto.passwd:/mosquitto/config/passwd:ro
       - ${DIDA_STATE_HOST}/mosquitto:/mosquitto/data
+    # The image declares VOLUME /mosquitto/log; left unmounted, every recreate
+    # leaves another anonymous volume behind. The broker logs to stderr.
+    tmpfs:
+      - /mosquitto/log
     restart: unless-stopped
     healthcheck:
       # Liveness (auth is on, so a real MQTT ping would need creds): the broker

@@ -560,6 +560,14 @@ def anonymise() -> None:
                 f"'({pat})(?![a-z])', '{repl}', 'g')::{cast} "
                 f"WHERE {c}::text ~ '({pat})(?![a-z])';")
 
+    # 3b. A parked vehicle BABA has not matched to a person is named by its plate as
+    # read. An empty name means "occupied, not yet read" and stays empty.
+    name = "CASE WHEN value #>> '{}' LIKE '{%' THEN (value #>> '{}')::jsonb ->> 'name' END"
+    stmts.append(
+        "UPDATE current_state SET value = "  # noqa: S608
+        "to_jsonb(jsonb_set((value #>> '{}')::jsonb, '{name}', '\"Guest\"')::text) "
+        f"WHERE capability = 'parked_vehicle' AND {name} NOT IN ('', 'Resident', 'Child', 'child');")
+
     # 4. places, hostnames and camera site labels.
     # These live inside DOUBLE-ENCODED values: the jsonb holds a *string* whose
     # content is itself a JSON document, with ć written as the six characters

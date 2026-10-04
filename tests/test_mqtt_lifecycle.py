@@ -6,16 +6,17 @@ file: connect, notice the connection died, reconnect, and tear the old one down
 before the new one starts — the part that decides whether those 296 entities
 exist at all after the broker hiccups.
 
-Two of the properties here are scars. A failed connect must NOT record itself as
-the active connection, or `key != active` stops being true and the supervisor
-never retries — which is how a broker that was down at boot stayed disconnected
-until someone restarted the container by hand. And `_apply` must await the old
-consume task before opening the new client, because two loops on the same
-subscription briefly coexisting means frames go to the one that is about to be
-thrown away.
+Two of the properties here are scars. A failed connect must leave the supervisor
+wanting to connect, whether it failed at boot or on a reconnect after a live
+connection dropped — both once left the house's zigbee lights unreachable until
+someone restarted the container by hand (the second time on 3 October 2026,
+when a mosquitto recreate made the first retry miss its DNS name). And `_apply`
+must await the old consume task before opening the new client, because two loops
+on the same subscription briefly coexisting means frames go to the one that is
+about to be thrown away.
 
 The whole lifecycle is a supervisor tick: read config, compute a connection key,
-and act only if the key changed or the consumer died. Everything below is that
+and act only if the key changed or there is no live consumer. Everything below is that
 sentence, taken apart.
 """
 
@@ -155,8 +156,7 @@ def test_changing_any_connection_setting_changes_the_key(field, value):
     """Each of these needs a new socket or a new subscription. A key that ignored
     one would leave the adapter connected to the old broker while Settings shows
     the new one."""
-    before = _adapter().conn_key_for_test() if hasattr(MqttAdapter, "conn_key_for_test") \
-        else _adapter()._conn_key()
+    before = _adapter()._conn_key()
     after = _adapter(_Cfg(**{field: value}))._conn_key()
     assert before != after
 
@@ -201,18 +201,59 @@ async def test_the_credentials_reach_the_client():
     a._consume_task.cancel()
 
 
-async def test_a_FAILED_connect_does_not_record_itself_as_active(monkeypatch):
-    """The scar. Pinning `_active_key` on failure makes `key != _active_key` false
-    forever, so the supervisor stops retrying — a broker that was down at boot
-    stayed disconnected until somebody restarted the container."""
-    monkeypatch.setattr(_FakeClient, "__aenter__",
-                        lambda self: (_ for _ in ()).throw(ConnectionRefusedError("down")))
+async def test_a_FAILED_connect_at_boot_is_retried(monkeypatch):
+    """The first scar: a broker that was down at boot stayed disconnected until
+    somebody restarted the container."""
+    async def _boom(self):
+        raise ConnectionRefusedError("down")
+    monkeypatch.setattr(_FakeClient, "__aenter__", _boom)
     a = _adapter()
     key = a._conn_key()
     await a._apply(key)
-    assert a._active_key != key, "a failed connect wedged the supervisor"
     assert a._client is None
     assert a._consume_task is None
+    assert a._needs_apply(key), "a failed connect at boot wedged the supervisor"
+
+
+async def test_a_FAILED_reconnect_after_a_live_connection_is_retried(monkeypatch):
+    """The second scar (3 October 2026). The connection was live, so the active key
+    already equalled the configured one; the broker went away, the first retry
+    failed, and with no consume task left nothing ever looked dead again."""
+    a = _adapter()
+    key = a._conn_key()
+    await a._apply(key)
+    a._consume_task.cancel()
+    await asyncio.gather(a._consume_task, return_exceptions=True)
+    assert a._needs_apply(key), "a lost connection was not noticed"
+
+    async def _boom(self):
+        raise OSError(-2, "Name or service not known")
+    monkeypatch.setattr(_FakeClient, "__aenter__", _boom)
+    await a._apply(key)
+    assert a._needs_apply(key), "a failed reconnect wedged the supervisor"
+
+
+async def test_a_live_connection_is_left_alone():
+    """Ticking every ten seconds, a supervisor that reapplied a healthy connection
+    would flap every zigbee entity in the house."""
+    a = _adapter()
+    key = a._conn_key()
+    await a._apply(key)
+    assert not a._needs_apply(key)
+    a._consume_task.cancel()
+
+
+async def test_an_unconfigured_broker_is_not_retried():
+    a = _adapter(_Cfg(mqtt_url=""))
+    await a._apply(None)
+    assert not a._needs_apply(None)
+
+
+async def test_a_changed_broker_is_applied():
+    a = _adapter()
+    await a._apply(a._conn_key())
+    assert a._needs_apply(_adapter(_Cfg(mqtt_url="mqtt://other-broker:1883"))._conn_key())
+    a._consume_task.cancel()
 
 
 async def test_a_failed_connect_closes_the_half_open_client(monkeypatch):

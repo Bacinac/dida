@@ -138,8 +138,7 @@ class MqttAdapter:
             try:
                 await self._cfg.load()
                 key = self._conn_key()
-                dead = self._consume_task is not None and self._consume_task.done()
-                if key != self._active_key or (key is not None and dead):
+                if self._needs_apply(key):
                     await self._apply(key)
             except asyncio.CancelledError:
                 raise
@@ -147,6 +146,14 @@ class MqttAdapter:
                 log.exception("mqtt: supervise loop error")
                 self.status.error(str(exc) or "connection failed")
             await asyncio.sleep(10)
+
+    def _needs_apply(self, key: tuple | None) -> bool:
+        # Retry on "no live consumer", not on "key changed": a reconnect whose first
+        # attempt fails leaves _active_key equal to key and no consume task at all.
+        if key != self._active_key:
+            return True
+        live = self._consume_task is not None and not self._consume_task.done()
+        return key is not None and not live
 
     def _conn_key(self) -> tuple | None:
         url = (self._cfg.get("mqtt_url") if self._cfg else "").strip()
@@ -189,9 +196,6 @@ class MqttAdapter:
             await client.__aenter__()
             await client.subscribe(f"{prefix}/#")
         except Exception as exc:
-            # Do NOT pin _active_key on a failed connect: leaving it unchanged means
-            # key != _active_key still holds, so supervise retries next tick instead
-            # of wedging forever (the bug that made a broker-down-at-boot permanent).
             with contextlib.suppress(Exception):
                 await client.__aexit__(None, None, None)
             self.status.error(f"connect failed: {exc}" if str(exc) else "connect failed")

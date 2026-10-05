@@ -297,3 +297,40 @@ def test_ci_checks_the_catalog_before_building_and_test_images_cannot_be_pulled(
                              capture_output=True, text=True, check=True).stdout.split()
     assert set(catalog) == set(_required_images())
     assert "adapter-unifi" in catalog
+
+
+@pytest.mark.parametrize("fail_ssh", [False, True])
+def test_instance_lock_is_held_during_deploy_and_released_before_background_work(tmp_path, fail_ssh):
+    source = PROD.read_text()
+    functions = []
+    for name in ("lock_instance", "deploy_one"):
+        match = re.search(rf"(?ms)^{name}\(\).*?^[}})]$", source)
+        assert match is not None
+        functions.append(match.group(0))
+    script = """set -euo pipefail
+REPO_ROOT=$1
+FAIL_SSH=$2
+DRY_RUN=0
+UPGRADE_SH=/unused
+SCRIPT_DIR=/unused
+row_for() { printf 'unused-host\\t/unused\\t-\\n'; }
+say() { :; }
+ok() { :; }
+scp() { :; }
+ssh() {
+    if flock -n "$REPO_ROOT/.deploy.lock.home" true; then echo UNLOCKED >&2; return 78; fi
+    if [[ "$FAIL_SSH" == 1 ]]; then return 1; fi
+    if [[ "$*" == *'tail -n1'* ]]; then echo DIDA_DEPLOY_DONE_0; fi
+}
+sleep() { :; }
+seq() { echo 1; }
+""" + "\n".join(functions) + """
+result=0
+deploy_one home || result=$?
+[[ "$result" == "$FAIL_SSH" ]]
+flock -n "$REPO_ROOT/.deploy.lock.home" true
+"""
+    result = subprocess.run(["bash", "-s", str(tmp_path), str(int(fail_ssh))], input=script,
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert "UNLOCKED" not in result.stderr

@@ -185,7 +185,7 @@ ship_apk() {
 
 # --- one instance ---------------------------------------------------------
 
-deploy_one() {
+deploy_one() (
     local name="$1" row ssh path flags LOCK_FD=
     row="$(row_for "$name")" || die "unknown instance '$name' (see --list)"
     IFS=$'\t' read -r ssh path flags <<<"$row"
@@ -274,7 +274,7 @@ EOF
     esac
 
     ok "$name deployed"
-}
+)
 
 # `all` puts the first instance in the inventory in front of you and lets the
 # rest carry on behind. The inventory is ordered by what it costs to have stale.

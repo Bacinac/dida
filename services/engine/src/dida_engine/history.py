@@ -102,7 +102,7 @@ class HistoryWriter:
             "schema_broken": self.schema_broken,
         }
 
-    async def _ensure(self) -> bool:
+    async def _ensure(self, connection) -> bool:
         """Lazily (re)connect and, once, own the ClickHouse schema. Returns connected?"""
         if self._client is None:
             try:
@@ -118,11 +118,11 @@ class HistoryWriter:
             # gated so an outage reconnect won't re-run it.
             try:
                 await apply_ch_migrations(self._client)
-                tz = (await house_timezone(self._pool)).key
+                tz = (await house_timezone(connection)).key
                 await apply_house_day(self._client, tz)
                 self._day_tz = tz
                 self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
-                await apply_retention(self._client, self._pool)
+                await apply_retention(self._client, connection)
                 self._schema_ready = True
                 self._schema_failures = 0
                 self._schema_first_failure = None
@@ -207,8 +207,8 @@ class HistoryWriter:
         ts = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
         row = [ts, entity_id, capability, command, source,
                json.dumps(args, ensure_ascii=False, default=str) if args else ""]
-        async with self._access(self._pool):
-            if not await self._ensure():
+        async with self._access(self._pool) as connection:
+            if not await self._ensure(connection):
                 raise RuntimeError("clickhouse unavailable — command audit will redeliver")
             try:
                 await self._client.insert("command_history", [row], column_names=CMD_COLUMNS)
@@ -219,23 +219,23 @@ class HistoryWriter:
     async def flush(self) -> bool:
         async with self._flush_lock:
             try:
-                async with self._access(self._pool):
+                async with self._access(self._pool) as connection:
                     self._maintenance = None
-                    return await self._flush_available()
+                    return await self._flush_available(connection)
             except (HistoryBusyError, HistoryRecoveryRequiredError) as exc:
                 if self._maintenance != str(exc):
                     log.error("history writes paused: %s", exc)
                 self._maintenance = str(exc)
                 return False
 
-    async def _flush_available(self) -> bool:
+    async def _flush_available(self, connection) -> bool:
         if not self._buf and not self._pending:
             return False
         if not self._pending and self._schema_ready and time.monotonic() >= self._next_day_tz_check:
             self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
-            if (await house_timezone(self._pool)).key != self._day_tz:
+            if (await house_timezone(connection)).key != self._day_tz:
                 self._schema_ready = False
-        if not await self._ensure():
+        if not await self._ensure(connection):
             return False
         if not self._pending:
             self._pending = tuple(self._buf.popleft() for _ in range(min(len(self._buf), BATCH_SIZE)))

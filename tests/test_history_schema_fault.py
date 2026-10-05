@@ -58,7 +58,7 @@ def _ok_schema(monkeypatch):
 
 async def test_a_healthy_schema_is_not_a_fault(writer, monkeypatch):
     _ok_schema(monkeypatch)
-    assert await writer._ensure() is True
+    assert await writer._ensure(writer._pool) is True
     assert writer.schema_broken is False
     assert writer.stats()["schema_failures"] == 0
 
@@ -66,7 +66,7 @@ async def test_a_healthy_schema_is_not_a_fault(writer, monkeypatch):
 async def test_one_schema_failure_is_still_a_retry_not_a_fault(writer, monkeypatch):
     """A ClickHouse that accepts connections before it is ready must not trip this."""
     _fail_schema(monkeypatch)
-    assert await writer._ensure() is False
+    assert await writer._ensure(writer._pool) is False
     assert writer.schema_broken is False
 
 
@@ -78,7 +78,7 @@ def _age(writer, seconds):
 async def test_repeated_schema_failure_becomes_a_fault(writer, monkeypatch):
     _fail_schema(monkeypatch)
     for _ in range(SCHEMA_FAIL_LIMIT):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
     _age(writer, SCHEMA_FAIL_SECONDS)
     assert writer.schema_broken is True, "a schema that never applies must be reported"
     assert writer.stats()["schema_broken"] is True
@@ -90,14 +90,14 @@ async def test_the_count_alone_is_not_enough(writer, monkeypatch):
     simply still starting."""
     _fail_schema(monkeypatch)
     for _ in range(SCHEMA_FAIL_LIMIT * 4):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
     assert writer.schema_broken is False, "failures within the grace window are a wait"
 
 
 async def test_time_alone_is_not_enough_either(writer, monkeypatch):
     """One failure two minutes ago, then nothing, is not a broken schema."""
     _fail_schema(monkeypatch)
-    await writer._ensure()
+    await writer._ensure(writer._pool)
     _age(writer, SCHEMA_FAIL_SECONDS * 2)
     assert writer.schema_broken is False
 
@@ -106,10 +106,10 @@ async def test_a_slow_clickhouse_that_comes_good_never_reports_a_fault(writer, m
     """The whole reason for the grace window, end to end."""
     _fail_schema(monkeypatch)
     for _ in range(SCHEMA_FAIL_LIMIT * 3):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
         assert writer.schema_broken is False
     _ok_schema(monkeypatch)
-    assert await writer._ensure() is True
+    assert await writer._ensure(writer._pool) is True
     assert writer.schema_broken is False
     assert writer.stats()["schema_failing_for_s"] == 0
 
@@ -118,10 +118,10 @@ async def test_the_fault_says_history_is_being_lost(writer, monkeypatch, caplog)
     """The message has to name the consequence, not just the operation."""
     _fail_schema(monkeypatch)
     for _ in range(SCHEMA_FAIL_LIMIT):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
     _age(writer, SCHEMA_FAIL_SECONDS)
     with caplog.at_level(logging.ERROR, logger="dida.engine.history"):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
     assert "HISTORY IS NOT BEING WRITTEN" in caplog.text
 
 
@@ -129,12 +129,12 @@ async def test_a_schema_that_recovers_clears_the_fault(writer, monkeypatch):
     """Otherwise a slow start would leave the engine permanently unhealthy."""
     _fail_schema(monkeypatch)
     for _ in range(SCHEMA_FAIL_LIMIT):
-        await writer._ensure()
+        await writer._ensure(writer._pool)
     _age(writer, SCHEMA_FAIL_SECONDS)
     assert writer.schema_broken is True
 
     _ok_schema(monkeypatch)
-    assert await writer._ensure() is True
+    assert await writer._ensure(writer._pool) is True
     assert writer.schema_broken is False
 
 
@@ -147,7 +147,7 @@ async def test_clickhouse_merely_being_DOWN_is_not_a_fault(monkeypatch):
 
     w = HistoryWriter(pool=None, access=lambda _: nullcontext())
     for _ in range(SCHEMA_FAIL_LIMIT * 3):
-        assert await w._ensure() is False
+        assert await w._ensure(w._pool) is False
     assert w._schema_first_failure is None, "a connect failure is not a schema failure"
     assert w.schema_broken is False, "an outage is not a schema fault"
 

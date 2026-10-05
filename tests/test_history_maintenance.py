@@ -209,3 +209,25 @@ async def test_invalid_recovery_names_are_rejected_without_clickhouse_mutations(
     with pytest.raises(ValueError, match="staging table"):
         await recover_history(pool, query, "dida", TABLES)
     assert await entities(client) == [["previous"]] * 4
+
+
+@pytest.mark.parametrize("operation", ["schema", "timezone", "command"])
+async def test_history_uses_the_locked_connection_with_a_single_connection_pool(storage, operation):
+    _, client, *_ = storage
+    pool = await pg_pool(min_size=1, max_size=1)
+    try:
+        history = writer(pool, client)
+        if operation == "timezone":
+            history._next_day_tz_check = 0
+        else:
+            history._schema_ready = False
+        if operation == "command":
+            await asyncio.wait_for(history.insert_command("live", "on_off", "turn_on", "test", {}, time.time_ns()), 10)
+            result = await client.query("SELECT count() FROM command_history WHERE entity_id='live'")
+            assert result.first_row == (1,)
+        else:
+            history.enqueue("live", "temperature", "test", 20, time.time_ns())
+            assert await asyncio.wait_for(history.flush(), 10)
+            assert history.stats()["buffered"] == 0
+    finally:
+        await pool.close()

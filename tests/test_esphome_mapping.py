@@ -301,6 +301,13 @@ def test_decode_state_button_is_write_only():
     assert decode_state(btn, SimpleNamespace(state=True)) == [], "button has no readable state"
 
 
+def test_an_event_is_a_momentary_button_carrying_its_type():
+    ev = map_entity(info("EventInfo", key=11, object_id="downstairs_button"))
+    assert ev.etype == "event" and ev.caps == [CapabilityKind.BUTTON.value]
+    assert decode_state(ev, SimpleNamespace(event_type="press")) == [("button", "press", None)]
+    assert decode_state(ev, SimpleNamespace(event_type="")) == []
+
+
 # --- send_command: canonical command -> ESPHome native-API call -------------
 class FakeClient:
     """Records the native-API call send_command makes. Every method returns None

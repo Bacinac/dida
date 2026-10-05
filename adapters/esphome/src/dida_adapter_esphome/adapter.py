@@ -9,6 +9,7 @@ import time
 from dida_core import (
     AdapterConfig,
     Bus,
+    CapabilityKind,
     Command,
     CommandRejected,
     EntityInfo,
@@ -398,7 +399,8 @@ class EsphomeAdapter:
         for cap, value, unit in decode_state(em, state):
             # Dedupe: ESPHome re-pushes states on its own cadence; only forward
             # actual changes so we don't flood the bus / history with repeats.
-            if self._state.get((entity_id, cap)) == value:
+            # An event is never re-pushed, and two presses in a row are equal.
+            if cap != CapabilityKind.BUTTON.value and self._state.get((entity_id, cap)) == value:
                 continue
             self._state[(entity_id, cap)] = value
             self._unit[(entity_id, cap)] = unit

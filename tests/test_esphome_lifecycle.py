@@ -24,6 +24,7 @@ offline, which is worse than no badge because it answers the question wrongly.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -241,6 +242,33 @@ async def test_dropping_a_node_clears_its_signature_so_it_can_be_re_added():
     a._sig = {"kuhinja": "whatever"}
     await a._drop_device("kuhinja")
     assert "kuhinja" not in a._sig
+
+
+async def test_every_press_reaches_the_bus_while_a_repeated_state_does_not():
+    """A wall button sends the same "press" each time; deduping it like a state
+    would swallow every press after the first."""
+    from types import SimpleNamespace
+
+    from dida_adapter_esphome.mapping import map_entity
+
+    class _Bus:
+        def __init__(self) -> None:
+            self.states: list = []
+
+        async def publish_state(self, update) -> None:
+            self.states.append((update.capability, update.value))
+
+    a = _adapter()
+    a._bus = _Bus()
+    conn = _Conn("stairs")
+    button = map_entity(type("EventInfo", (), {"key": 1, "object_id": "downstairs_button"})())
+    relay = map_entity(type("SwitchInfo", (), {"key": 2, "object_id": "relay"})())
+    conn.entities = {1: button, 2: relay}
+    for state in (SimpleNamespace(key=1, event_type="press"), SimpleNamespace(key=1, event_type="press"),
+                  SimpleNamespace(key=2, state=True), SimpleNamespace(key=2, state=True)):
+        a._on_state(conn, state)
+    await asyncio.sleep(0)
+    assert a._bus.states == [("button", "press"), ("button", "press"), ("on_off", True)]
 
 
 async def test_dropping_a_node_that_is_not_there_is_harmless():

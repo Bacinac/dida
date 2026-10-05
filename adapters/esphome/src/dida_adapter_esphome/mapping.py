@@ -75,7 +75,7 @@ class EntityMap:
 
     key: int
     object_id: str
-    etype: str                 # switch|light|sensor|binary_sensor|cover|lock|number|select|climate|fan|button
+    etype: str                 # switch|light|sensor|binary_sensor|cover|lock|number|select|climate|fan|button|event
     caps: list[str] = field(default_factory=list)
     unit: str | None = None
     has_brightness: bool = False
@@ -179,6 +179,7 @@ _MAPPERS = {
         key, oid, "select", [CapabilityKind.ENUM.value, CapabilityKind.ENUM_OPTIONS.value],
         options=list(info.options or [])),
     "ButtonInfo": lambda info, key, oid: EntityMap(key, oid, "button", [CapabilityKind.PRESS.value]),
+    "EventInfo": lambda info, key, oid: EntityMap(key, oid, "event", [CapabilityKind.BUTTON.value]),
     "FanInfo": _map_fan,
     "ClimateInfo": _map_climate,
 }
@@ -319,6 +320,7 @@ _DECODERS = {
     "select": _decode_select,
     "fan": _decode_fan,
     "climate": _decode_climate,
+    "event": lambda em, state: [(CapabilityKind.BUTTON.value, state.event_type, None)] if state.event_type else [],
 }
 
 

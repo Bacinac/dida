@@ -101,7 +101,7 @@ fi
 
 "${RUN[@]}" gradle --no-daemon -q \
   -PversionCode="$CODE" -PversionName="v${BASE}.${COUNT}" -PdidaHost="$DIDA_HOST" \
-  :app:assembleRelease
+  :app:testDebugUnitTest :app:assembleRelease
 
 mkdir -p dist
 cp app/build/outputs/apk/release/app-release.apk dist/dida.apk

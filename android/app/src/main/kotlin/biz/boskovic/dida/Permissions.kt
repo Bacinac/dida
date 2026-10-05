@@ -15,9 +15,9 @@ object Permissions {
     /** "Dopusti cijelo vrijeme" — required for geofence edges and background FLP
      * delivery; without it the app is exactly as blind as a closed browser tab. */
     fun hasBackgroundLocation(ctx: Context): Boolean =
-        Build.VERSION.SDK_INT < 29 ||
+        hasFineLocation(ctx) && (Build.VERSION.SDK_INT < 29 ||
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED)
 
     /** Push-to-talk in the assistant. The WebView can only pass on a grant the app
      * itself holds, so this gates onPermissionRequest. */

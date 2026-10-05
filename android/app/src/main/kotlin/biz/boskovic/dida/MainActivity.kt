@@ -14,6 +14,7 @@ import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -32,6 +33,8 @@ import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,8 +63,7 @@ class MainActivity : ComponentActivity() {
     private val finePermLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             when {
-                grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ->
+                grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ->
                     requestBackground()
                 // Denied with no dialog shown = permanently denied on an earlier
                 // attempt: the OS silently auto-rejects, which reads as "the app
@@ -137,6 +139,7 @@ class MainActivity : ComponentActivity() {
                 provisionRevision++
             }
             Prefs.setBaseUrl(this, origin)
+            if (!installNativeBridge()) return@registerForActivityResult
             webView.loadUrl(text)
         }
     }
@@ -215,27 +218,9 @@ class MainActivity : ComponentActivity() {
             userAgentString = "$userAgentString DIDA-App/${BuildConfig.VERSION_NAME}"
         }
         CookieManager.getInstance().setAcceptCookie(true)
-        webView.addJavascriptInterface(NativeBridge(this), "DidaApp")
+        if (!installNativeBridge()) return
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest,
-            ): Boolean {
-                // Our origin stays in the shell; anything else goes to the browser.
-                if (isOwnOrigin(request.url.toString())) return false
-                runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
-                return true
-            }
-
-            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
-                onOwnOrigin = isOwnOrigin(url)
-            }
-
-            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                onOwnOrigin = isOwnOrigin(url)
-            }
-        }
+        webView.webViewClient = ShellClient()
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onGeolocationPermissionsShowPrompt(
@@ -301,6 +286,24 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent, coldStart = true)
     }
 
+    // WebKit 1.17.1's Java PSI lookup misses the compiled Kotlin override below.
+    @SuppressLint("MissingOnRenderProcessGone")
+    private inner class ShellClient : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            if (!request.isForMainFrame) return !isOwnOrigin(request.url.toString())
+            if (isOwnOrigin(request.url.toString())) return false
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+            return true
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Log.e("DIDA", "WebView renderer stopped; crashed=${detail.didCrash()}")
+            view.destroy()
+            recreate()
+            return true
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent, coldStart = false)
@@ -334,11 +337,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Whether the page the WebView shows is ours. Written on the UI thread by the
-     *  WebViewClient, read by NativeBridge on the JavaBridge thread. */
-    @Volatile
-    var onOwnOrigin = false
-        private set
+    private fun installNativeBridge(): Boolean {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            val origin = requireNotNull(LocationIdentity.origin(Prefs.baseUrl(this)))
+            val bridge = NativeBridge(this, origin)
+            WebViewCompat.removeWebMessageListener(webView, "DidaNative")
+            WebViewCompat.addWebMessageListener(webView, "DidaNative", setOf(origin)) { _, message, source, mainFrame, reply ->
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+                    bridge.dispatch(message.data ?: "", source.toString(), mainFrame)?.let { reply.postMessage(it) }
+                }
+            }
+            return true
+        }
+        Toast.makeText(this, R.string.webview_outdated, Toast.LENGTH_LONG).show()
+        finish()
+        return false
+    }
 
     fun isOwnOrigin(url: String?): Boolean {
         val u = url?.toUri() ?: return false

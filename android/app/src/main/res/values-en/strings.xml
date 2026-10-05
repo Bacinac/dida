@@ -16,4 +16,5 @@
     <string name="perm_open_settings">Permission was denied earlier — opening settings. Choose Permissions → Location → Allow all the time.</string>
     <string name="dl_started">Downloading…</string>
     <string name="dl_failed">Download failed.</string>
+    <string name="webview_outdated">Update Android System WebView to open DIDA.</string>
 </resources>

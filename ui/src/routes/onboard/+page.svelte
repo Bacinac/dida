@@ -5,7 +5,7 @@
   // the root layout).
   //
   // Three flavours of the same walk-through:
-  //  * inside the Android companion app (DIDA-App UA / window.DidaApp bridge):
+  //  * inside the Android companion app:
   //    the native location setup — permissions walkthrough via the bridge, state
   //    re-read on every `dida-native-status` event the app dispatches;
   //  * Android browser: download/open the companion app (APK sideload; the
@@ -19,7 +19,9 @@
   import { api } from "$lib/api";
   import { t } from "$lib/i18n";
   import Brand from "$lib/Brand.svelte";
-  import { nativeMatches } from "$lib/native";
+  import { nativeBridge, nativeMatches, type NativeStatus } from "$lib/native";
+  import { errMsg } from "$lib/errors";
+  import { toasts } from "$lib/kit";
 
   let ready = $state(false);
   let importUrl = $state<string | null>(null); // owntracks:///config?inline=…
@@ -32,37 +34,18 @@
 
   const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
-  // Native bridge the companion app injects; present ⇒ we run inside the app.
-  // scanQr is optional: older installed builds predate the in-app scanner.
-  type Bridge = {
-    status(): string;
-    startLocationSetup(): void;
-    appVersion(): string;
-    scanQr?: () => void;
-  };
-  const bridge: Bridge | null =
-    typeof window !== "undefined" ? ((window as any).DidaApp ?? null) : null;
-
-  type NativeStatus = {
-    version: string;
-    provisioned: boolean;
-    userId: string | null;
-    origin: string | null;
-    fineLocation: boolean;
-    backgroundLocation: boolean;
-    batteryExempt: boolean;
-    zones: number;
-  };
+  const bridge = nativeBridge();
   let native = $state<NativeStatus | null>(null);
   const nativeActive = $derived(nativeMatches(native, auth.user?.id,
     typeof window === "undefined" ? "" : window.location.origin));
 
-  function readNative() {
+  async function readNative() {
     if (!bridge) return;
     try {
-      native = JSON.parse(bridge.status());
-    } catch {
+      native = await bridge.status();
+    } catch (e) {
       native = null;
+      toasts.error(errMsg(e));
     }
   }
 
@@ -85,7 +68,7 @@
           }
         }
       }
-      readNative();
+      await readNative();
       ready = true;
     };
     setup();
@@ -130,10 +113,10 @@
     {:else if !auth.user}
       <div class="rounded-xl border border-dida-border bg-dida-panel p-5 text-center">
         <p class="mb-3 text-dida-text-muted">{t("onboard.needQr")}</p>
-        {#if bridge?.scanQr}
+        {#if bridge}
           <!-- In the app: however it was opened (installer's "Open", the icon),
                ONE button recovers the flow — scan the same setup QR right here. -->
-          <div class="grid"><Button tone="primary" onclick={() => bridge?.scanQr?.()}>{t("onboard.scanQr")}</Button></div>
+          <div class="grid"><Button tone="primary" onclick={() => bridge?.scanQr().catch((e) => toasts.error(errMsg(e)))}>{t("onboard.scanQr")}</Button></div>
           <div class="h-2"></div>
         {/if}
         <!-- Manual escape hatch: inside the companion app there is no address bar,
@@ -165,7 +148,7 @@
             </ul>
           {/if}
           {#if !(nativeActive && native?.backgroundLocation)}
-            <div class="grid"><Button tone="primary" onclick={() => bridge.startLocationSetup()}>{t("onboard.nativeStart")}</Button></div>
+            <div class="grid"><Button tone="primary" onclick={() => bridge.startLocationSetup().catch((e) => toasts.error(errMsg(e)))}>{t("onboard.nativeStart")}</Button></div>
           {/if}
           <!-- Which build is actually installed — kills the "is this the old
                APK?" question over the phone in one glance. -->

@@ -326,10 +326,10 @@ docker run --rm --network "$NET" $PGENV -u 0:0 -e DIDA_SECRET_KEY="$SECRET" -v "
 docker run --rm --network "$NET" $APPENV $CHENV -e UV_CACHE_DIR=/uvcache -v dida-uv-cache:/uvcache \
   -e DIDA_NATS_URL="nats://$NATSC:4222" -e DIDA_MIGRATIONS_DIR=/w/db/migrations \
   -v "$ROOT:/w" -w /w --entrypoint sh dida/engine:latest \
-  -c "$INSTALL; export PYTHONPATH=$PP_ENGINE COVERAGE_FILE=/w/$COVN/.coverage.eng; \
+  -c "$INSTALL; export PYTHONPATH=$PP_ENGINE:/w/services/api/src COVERAGE_FILE=/w/$COVN/.coverage.eng; \
       python -m pytest -q --no-header --cov=dida_engine --cov-report= \
         tests/test_engine_service.py tests/test_engine_projection.py tests/test_engine_lifecycle.py tests/test_history_writer.py tests/test_history_schema_fault.py tests/test_history_retry.py \
-        tests/test_device_rename.py tests/test_engine_reachability.py tests/test_day_rollup.py tests/test_demo_history.py"
+        tests/test_device_rename.py tests/test_engine_reachability.py tests/test_day_rollup.py tests/test_demo_history.py tests/test_history_maintenance.py tests/test_demo_visual.py"
 docker run --rm --network "$NET" $APPENV -e UV_CACHE_DIR=/uvcache -v dida-uv-cache:/uvcache \
   -e DIDA_SECRET_KEY="$SECRET" \
   -v "$ROOT:/w" -w /w --entrypoint sh dida/api:latest \
@@ -500,11 +500,16 @@ $RUN dida/adapter-calendar:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapt
 # it wrote into the mounted source would be a directory its owner cannot delete.
 $RUN -e PYTHONDONTWRITEBYTECODE=1 dida/netmgr:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/services/netmgr/src COVERAGE_FILE=/w/$COVN/.coverage.netmgr; \
   python -m pytest -q --no-header --cov=dida_netmgr --cov-report= tests/test_netmgr.py tests/test_netmgr_journal.py tests/test_netmgr_startup.py"
+sh "$ROOT/tests/netmgr-docker.sh"
 
 # planvision's CV pipeline (test_planvision.py) — needs opencv + numpy, which live
 # only in its own image.
 $RUN dida/planvision:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/services/planvision/src COVERAGE_FILE=/w/$COVN/.coverage.planvision; \
-  python -m pytest -q --no-header --cov=dida_planvision --cov-report= tests/test_planvision.py tests/test_planvision_logging.py"
+  python -m pytest -q --no-header --cov=dida_planvision --cov-report= tests/test_planvision.py tests/test_planvision_logging.py tests/test_planvision_limits.py"
+sh "$ROOT/tests/test_planvision_memory.sh"
+docker run --rm --pull=never --user 0 -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/local/bin/docker:ro -v /usr/libexec/docker/cli-plugins:/usr/local/lib/docker/cli-plugins:ro \
+  -v "$ROOT:/w:ro" -w /w --entrypoint bash dida/base:latest tests/test_rollback_images.sh
 
 # --- UI (vitest) — the frontend's first behavioural tests. Runs in a plain node
 # image against the working tree: node_modules is gitignored, so a fresh clone

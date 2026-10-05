@@ -17,4 +17,5 @@
     <string name="perm_open_settings">Dopuštenje je ranije odbijeno — otvaram postavke. Odaberite Dopuštenja → Lokacija → Dopusti cijelo vrijeme.</string>
     <string name="dl_started">Preuzimanje…</string>
     <string name="dl_failed">Preuzimanje nije uspjelo.</string>
+    <string name="webview_outdated">Ažurirajte Android System WebView kako biste mogli otvoriti DIDA-u.</string>
 </resources>

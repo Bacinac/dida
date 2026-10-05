@@ -10,16 +10,17 @@ different beasts:
 
 2. HISTORY (ClickHouse) — the time-series firehose, optional and separate because
    it is bulk data bounded by retention TTLs. Backed up as a `.tar.gz` of a
-   `FORMAT Native` dump of ALL THREE history tables (raw state_history + the 1h/1d
-   rollups). All three, because the rollups deliberately OUTLIVE the raw (raw ~90 d,
+   `FORMAT Native` dump of command_history and all three state history tables
+   (raw state_history + the 1h/1d rollups). Rollups deliberately OUTLIVE raw (raw ~90 d,
    rollups up to years) — rebuilding them from raw on restore would lose the older
    long-term trends. Native, because the rollups are AggregateFunction states that
    only Native round-trips faithfully (CSV/Parquet would finalize + destroy them).
-   Restore detaches the rollup materialized views, truncates + inserts all three
-   directly, then re-attaches — so the aggregate states are exact, not double-fed.
+   Partition replacement preserves materialized views and aggregate states.
+   Engine writes share a database lock with restore; interrupted cutovers retain
+   the previous partitions until explicit recovery.
 
 Admin-only. Both restores are destructive; the UI gates them behind a typed
-confirmation and the operator should restart the stack afterwards.
+confirmation. Config restore requires a stack restart.
 """
 from __future__ import annotations
 
@@ -38,6 +39,8 @@ import httpx
 from dida_core import set_app_setting
 from dida_core.db import pg_password
 from dida_core.db_roles import grant
+from dida_core.history_access import RECOVERY_KEY, HistoryBusyError, HistoryRecoveryRequiredError
+from dida_core.history_partitions import HistoryRollbackError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -45,6 +48,7 @@ from starlette.background import BackgroundTask
 
 from dida_api.auth import AuthUser, require_admin
 from dida_api.common import get_setting
+from dida_api.history_restore import recover_history, restore_history
 
 log = logging.getLogger("dida.api.backup")
 
@@ -57,7 +61,6 @@ _MAX_HISTORY_BYTES = 4 * 1024 * 1024 * 1024   # 4 GB — history is bigger but r
 # that feed the rollups. Restore detaches the MVs so a raw re-insert doesn't
 # double-populate them.
 _HISTORY_TABLES = ("state_history", "state_history_1h", "state_history_1d", "command_history")
-_HISTORY_MVS = ("state_history_1h_mv", "state_history_1d_mv")
 
 
 def _pg() -> tuple[str, str, str, dict[str, str]]:
@@ -195,12 +198,6 @@ def _ch() -> tuple[str, dict[str, str], str]:
     return f"http://{host}:{port}/", headers, db
 
 
-async def _ch_ddl(client: httpx.AsyncClient, base: str, headers: dict, sql: str) -> None:
-    r = await client.post(base, headers=headers, content=sql.encode())
-    if r.status_code != 200:
-        raise HTTPException(500, f"clickhouse: {r.text[:300]}")
-
-
 async def _ch_export(client: httpx.AsyncClient, base: str, headers: dict, query: str, path: str) -> None:
     """Stream a `... FORMAT Native` query result into a file (no in-memory buffering)."""
     async with client.stream("POST", base, headers=headers, content=query.encode()) as r:
@@ -231,7 +228,7 @@ async def _ch_import_native(client: httpx.AsyncClient, base: str, headers: dict,
 
 
 @router.get("/system/history/info")
-async def history_info(_admin: AuthUser = Depends(require_admin)) -> dict:
+async def history_info(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
     """Row count + on-disk size of the history, so the UI can show what a backup
     will weigh before the operator clicks download."""
     base, headers, db = _ch()
@@ -245,7 +242,8 @@ async def history_info(_admin: AuthUser = Depends(require_admin)) -> dict:
         parts = r.text.strip().split("\t")
     rows = parts[0] if parts and parts[0] else "0"
     byts = parts[1] if len(parts) > 1 and parts[1] else "0"
-    return {"rows": int(rows), "bytes": int(byts)}
+    recovery = await request.app.state.pool.fetchval("SELECT value FROM app_settings WHERE key = $1", RECOVERY_KEY)
+    return {"rows": int(rows), "bytes": int(byts), "recovery_required": bool(recovery)}
 
 
 async def _ch_tar_to(path: str) -> None:
@@ -327,11 +325,6 @@ async def download_history_backup(_admin: AuthUser = Depends(require_admin)) -> 
 
 @router.post("/system/restore/history")
 async def restore_history_backup(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
-    """Restore a history backup over the live ClickHouse. DESTRUCTIVE: truncates all
-    three tables and reloads them from the archive. Detaches the rollup MVs first so
-    the raw re-insert doesn't double-populate the rollups (we load those directly),
-    then re-attaches them — restored in a `finally` so a mid-restore error can't
-    leave the rollups permanently unfed for live data."""
     base, headers, db = _ch()
     tmpdir = tempfile.mkdtemp(prefix="dida-hist-restore-")
     try:
@@ -349,31 +342,49 @@ async def restore_history_backup(request: Request, _admin: AuthUser = Depends(re
         if total == 0:
             raise HTTPException(400, "empty file")
         tables = await asyncio.to_thread(_unpack_history, archive, tmpdir)
+        states = {"state_history", "state_history_1h", "state_history_1d"}
+        if states & set(tables) and not states <= set(tables):
+            raise HTTPException(400, "history backup must contain all three state history tiers")
 
         async with httpx.AsyncClient(timeout=httpx.Timeout(None)) as client:
-            detached: list[str] = []
-            try:
-                for mv in _HISTORY_MVS:
-                    await _ch_ddl(client, base, headers, f"DETACH TABLE {db}.{mv}")
-                    detached.append(mv)
-                for tbl in tables:
-                    await _ch_ddl(client, base, headers, f"TRUNCATE TABLE {db}.{tbl}")
-                for tbl in tables:
-                    await _ch_import_native(client, base, headers, f"{db}.{tbl}",
-                                            os.path.join(tmpdir, f"{tbl}.native"))
-            finally:
-                for mv in detached:
-                    try:
-                        await _ch_ddl(client, base, headers, f"ATTACH TABLE {db}.{mv}")
-                    except Exception:
-                        log.error("restore: %s not re-attached — its rollup gets no live data until it is",
-                                  mv, exc_info=True)
+            query, insert = _restore_transport(client, base, headers, db)
+            await restore_history(request.app.state.pool, query, insert,
+                                  {table: os.path.join(tmpdir, f"{table}.native") for table in tables}, db)
+    except (HistoryBusyError, HistoryRecoveryRequiredError, HistoryRollbackError) as exc:
+        raise HTTPException(409, str(exc)) from exc
     finally:
         await asyncio.to_thread(shutil.rmtree, tmpdir, ignore_errors=True)
 
     log.warning("clickhouse history restored from an uploaded backup by an admin")
     return {"ok": True, "bytes": total,
             "message": "Povijest vraćena iz kopije."}
+
+
+def _restore_transport(client: httpx.AsyncClient, base: str, headers: dict, database: str):
+    async def query(sql):
+        response = await client.post(base, headers=headers, params={"default_format": "TSVRaw"}, content=sql.encode())
+        if response.status_code != 200:
+            raise HTTPException(500, f"clickhouse restore failed: {response.text[:300]}")
+        return response.text
+
+    async def insert(table, path):
+        await _ch_import_native(client, base, headers, f"{database}.{table}", path)
+
+    return query, insert
+
+
+@router.post("/system/restore/history/recover")
+async def recover_history_backup(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
+    base, headers, db = _ch()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None)) as client:
+            query, _ = _restore_transport(client, base, headers, db)
+            recovered = await recover_history(request.app.state.pool, query, db, _HISTORY_TABLES)
+    except (HistoryBusyError, ValueError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    if not recovered:
+        raise HTTPException(409, "no history restore requires recovery")
+    return {"ok": True}
 
 
 # ── Scheduled (automatic) backups ────────────────────────────────────────────

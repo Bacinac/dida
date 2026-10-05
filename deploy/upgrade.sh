@@ -137,6 +137,83 @@ if [ -n "$DESTRUCTIVE" ]; then
   echo "   schema. If health fails, restore $DUMP and check out $PREV_SHA."
 fi
 
+snapshot_images() {
+  local map=$1 ids cid ref image manifest platform status source candidate digest rb details
+  local count=0
+  declare -A captured=() manifests=() platforms=()
+  ids=$(docker image ls -aq --no-trunc | sort -u) || return 1
+  local containers
+  containers=$(docker compose ps -aq) || return 1
+  : > "$map"
+  for cid in $containers; do
+    details=$(docker inspect "$cid" --format \
+      '{{.Config.Image}}|{{.Image}}|{{.State.Status}}|{{if .ImageManifestDescriptor}}{{.ImageManifestDescriptor.Digest}}|{{with .ImageManifestDescriptor.Platform}}{{.OS}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}{{end}}{{end}}') || return 1
+    IFS='|' read -r ref image status manifest platform <<< "$details"
+    case "$ref" in dida/*) ;; *) continue ;; esac
+    case "$status" in running|restarting|paused|exited) ;; *) continue ;; esac
+    source=""
+    if [ -n "$manifest" ] && [ -n "$platform" ]; then
+      # A containerd config digest is not a taggable image ID. Match the exact
+      # platform manifest against local indexes, including dangling older builds.
+      if [ -z "${platforms[$platform]:-}" ]; then
+        for candidate in $ids; do
+          digest=$(docker image inspect --platform "$platform" "$candidate" \
+            --format '{{with .Descriptor}}{{.Digest}}{{end}}' 2>/dev/null) || continue
+          [ -n "$digest" ] && manifests["$platform $digest"]=$candidate
+        done
+        platforms[$platform]=1
+      fi
+      source=${manifests["$platform $manifest"]:-}
+    elif [ -z "$manifest" ]; then
+      source=$(docker image inspect "$image" --format '{{.Id}}' 2>/dev/null) || source=""
+    fi
+    if [ -z "$source" ]; then
+      echo "FAILED: cannot resolve the running image for $ref ($cid) — refusing to upgrade" >&2
+      return 1
+    fi
+    if [ -n "${captured[$ref]:-}" ]; then
+      if [ "${captured[$ref]}" != "$source" ]; then
+        echo "FAILED: containers for $ref run different images — refusing to upgrade" >&2
+        return 1
+      fi
+      continue
+    fi
+    rb=${ref%@*}; rb="${rb%:*}:rollback"
+    docker tag "$source" "$rb" || return 1
+    [ "$(docker image inspect "$rb" --format '{{.Id}}')" = "$source" ] || return 1
+    printf '%s %s %s\n' "$ref" "$rb" "$source" >> "$map"
+    captured[$ref]=$source
+    count=$((count + 1))
+  done
+  if [ "$count" -eq 0 ]; then
+    echo "FAILED: no running DIDA images captured — refusing to upgrade without a way back" >&2
+    return 1
+  fi
+  echo "rollback snapshot: $count image(s) captured from containers"
+}
+
+restore_images() {
+  local map=$1 ref rb expected actual count=0
+  [ -s "$map" ] || { echo "FAILED: rollback manifest is empty" >&2; return 1; }
+  while read -r ref rb expected; do
+    actual=$(docker image inspect "$rb" --format '{{.Id}}') || return 1
+    if [ "$actual" != "$expected" ]; then
+      echo "FAILED: rollback image for $ref changed — refusing an incorrect restore" >&2
+      return 1
+    fi
+  done < "$map"
+  while read -r ref rb expected; do
+    docker tag "$rb" "$ref" || return 1
+    count=$((count + 1))
+  done < "$map"
+  echo "restored $count captured image(s) from :rollback"
+}
+
+echo "== snapshotting the running images =="
+ROLLBACK_MAP=$(mktemp)
+trap 'rm -f "$ROLLBACK_MAP"' EXIT
+snapshot_images "$ROLLBACK_MAP"
+
 git reset --hard origin/main
 # The UI's kit and the backend's home-core are public submodules fetched over
 # https, so the deploy key has nothing to do with them; sync first in case a URL moved.
@@ -166,33 +243,6 @@ for gone in DIDA_MEDIA_BASE_URL DIDA_MEDIA_HTTP_PORT DIDA_MEDIA_RESCAN_SECONDS \
             DIDA_SPOTIFY_CLIENT_ID DIDA_SPOTIFY_CLIENT_SECRET; do
   env_drop "$gone"
 done
-
-# ── 4. snapshot the running images ───────────────────────────────────────────
-# By TAG, not by image id. On Docker 29 with the containerd snapshotter a
-# container's `.Image` is a config digest that `docker tag` and `docker image
-# inspect` cannot resolve, so an id-based snapshot could never be restored — and
-# `docker compose images` aborts wholesale on the first unresolvable one, so the
-# file came out EMPTY and the health gate was guarding nothing. Measured, not
-# inferred: 42 of 48 services failed to restore in a dry run, all "No such image".
-#
-# Pointing :rollback at what :latest is RIGHT NOW also keeps that image alive, so
-# the `docker image prune` at the end of the previous run cannot have taken it.
-echo "== snapshotting the running images =="
-ROLLBACK_TAGGED=0
-for ref in $(docker compose config --images | sort -u); do
-  case "$ref" in
-    dida/*) ;;                      # ours; third-party images are pinned, never rebuilt
-    *) continue ;;
-  esac
-  if docker image inspect "$ref" >/dev/null 2>&1; then
-    docker tag "$ref" "${ref%:*}:rollback" && ROLLBACK_TAGGED=$((ROLLBACK_TAGGED+1))
-  fi
-done
-if [ "$ROLLBACK_TAGGED" -eq 0 ]; then
-  echo "FAILED: could not snapshot any image — refusing to upgrade without a way back" >&2
-  exit 1
-fi
-echo "rollback snapshot: $ROLLBACK_TAGGED image(s) tagged :rollback"
 
 # ── 5. build ─────────────────────────────────────────────────────────────────
 # The base FIRST, unconditionally. dida_core is baked into dida/base and every
@@ -306,15 +356,7 @@ if [ -n "$bad" ]; then
   fi
 
   echo "== rolling back to the previous images =="
-  restored=0
-  for ref in $(docker compose config --images | sort -u); do
-    case "$ref" in dida/*) ;; *) continue ;; esac
-    rb="${ref%:*}:rollback"
-    if docker image inspect "$rb" >/dev/null 2>&1; then
-      docker tag "$rb" "$ref" && restored=$((restored+1))
-    fi
-  done
-  echo "restored $restored image(s) from :rollback"
+  restore_images "$ROLLBACK_MAP"
   # The images are the previous build again, so the tree and the reported revision
   # must go back with them — otherwise /version names a commit whose code is not
   # running, which is the same lie a failed build used to tell.

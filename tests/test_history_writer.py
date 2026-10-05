@@ -9,6 +9,7 @@ hard cap, and 'a failed insert loses nothing' are all in-memory).
       -c "python -m pytest tests/test_history_writer.py"
 """
 import asyncio
+from contextlib import nullcontext
 
 import pytest
 from dida_engine import history
@@ -21,7 +22,7 @@ from dida_engine.history import (
 
 
 def make():
-    return HistoryWriter(None)  # the pool is unused by the buffer paths under test
+    return HistoryWriter(None, access=lambda _: nullcontext())
 
 
 def test_value_coercion():

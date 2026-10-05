@@ -1779,7 +1779,7 @@ export const api = {
     }).then(ok).then(() => undefined),
 
   // ClickHouse history backup (separate from the config backup — bulk time-series).
-  historyInfo: (): Promise<{ rows: number; bytes: number }> =>
+  historyInfo: (): Promise<{ rows: number; bytes: number; recovery_required: boolean }> =>
     request(`/system/history/info`).then(jsonOrThrow),
   backupHistory: (): Promise<Response> =>
     request(`/system/backup/history`, { deadlineMs: TRANSFER_MS }).then(ok),
@@ -1789,6 +1789,8 @@ export const api = {
       headers: { "content-type": "application/octet-stream" },
       body: file,
     }).then(jsonOrThrow),
+  recoverHistory: (): Promise<{ ok: boolean }> =>
+    request(`/system/restore/history/recover`, { method: "POST", deadlineMs: TRANSFER_MS }).then(jsonOrThrow),
 
   // --- scenes (named state snapshots; create/delete admin, recall permission-checked) ---
   scenes: (): Promise<Scene[]> =>

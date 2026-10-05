@@ -4,7 +4,9 @@
   import { auth } from "$lib/auth.svelte";
   import { geo } from "$lib/geolocation.svelte";
   import { push } from "$lib/push.svelte";
-  import { Button, Notice, i18n, theme, type Locale, type Theme } from "$lib/kit";
+  import { Button, Notice, i18n, theme, toasts, type Locale, type Theme } from "$lib/kit";
+  import { errMsg } from "$lib/errors";
+  import { nativeBridge } from "$lib/native";
   import { t, type MessageKey } from "$lib/i18n";
   import { clock } from "$lib/dt";
 
@@ -13,19 +15,12 @@
 
   // The native app's own version (which APK is installed), read from the bridge —
   // distinct from the server version below. Only present inside the app.
-  const appVersion: string | null = (() => {
-    if (typeof window === "undefined") return null;
-    const bridge = (window as any).DidaApp;
-    try {
-      return bridge?.appVersion?.() ?? null;
-    } catch {
-      return null;
-    }
-  })();
+  const bridge = nativeBridge();
+  let appVersion = $state<string | null>(null);
   // Inside the native app, location is shared natively (OwnTracks background +
   // geofences), not the browser geolocation toggle — so that toggle is hidden
   // here to avoid reading as "off" while the app is actually reporting.
-  const inApp = appVersion != null;
+  const inApp = bridge !== null;
 
   // --- web push (this device) ---
   let testState = $state<"idle" | "sending" | "sent" | "err">("idle");
@@ -47,6 +42,13 @@
   let msg = $state<{ kind: "ok" | "err"; text: string } | null>(null);
 
   onMount(async () => {
+    if (bridge) {
+      try {
+        appVersion = await bridge.appVersion();
+      } catch (e) {
+        toasts.error(errMsg(e));
+      }
+    }
     await loadCarApps();
   });
 
@@ -256,7 +258,7 @@
     <dd class="font-mono">v{version.label || "…"}</dd>
   </dl>
   {#if inApp}
-    <div class="mt-3"><Button tone="primary" onclick={() => (window as any).DidaApp?.checkUpdate?.()}>
+    <div class="mt-3"><Button tone="primary" onclick={() => bridge?.checkUpdate().catch((e) => toasts.error(errMsg(e)))}>
       {t("account.updateNow")}
     </Button></div>
   {/if}

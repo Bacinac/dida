@@ -11,10 +11,7 @@ RUN apt-sources && apt-get update && apt-get install -y --no-install-recommends 
 # Pinned to the same uv as docker/base.Dockerfile — `uv:latest` here meant this one
 # image silently re-resolved its toolchain on every rebuild.
 COPY --from=ghcr.io/astral-sh/uv:0.11.28 /uv /uvx /bin/
-# Cap decoded image size (64 MP): OpenCV's imdecode returns empty above this →
-# _load_gray's `undecodable image` ValueError → 415, so a decompression-bomb PNG
-# can't OOM the container.
-ENV OPENCV_IO_MAX_IMAGE_PIXELS=67108864 \
+ENV OPENCV_IO_MAX_IMAGE_PIXELS=8388608 \
     UV_LINK_MODE=copy \
     # Its own base inherits nothing from docker/base.Dockerfile — including the
     # download timeout a slow uplink needs. See the note there.

@@ -1,21 +1,40 @@
 package biz.boskovic.dida
 
-import android.webkit.JavascriptInterface
+import android.util.Log
 import org.json.JSONObject
 
-/** `window.DidaApp` inside the WebView. A JavascriptInterface is injected into
- * every page the WebView loads, so each call first checks that the page is ours
- * (MainActivity.onOwnOrigin) and does nothing for any other origin. */
-class NativeBridge(private val activity: MainActivity) {
+class NativeBridge(private val activity: MainActivity, private val origin: String,
+                   private val currentOrigin: () -> String = { Prefs.baseUrl(activity) }) {
+    fun dispatch(data: String, sourceOrigin: String, isMainFrame: Boolean): String? {
+        if (!isMainFrame || LocationIdentity.origin(sourceOrigin) != origin ||
+            LocationIdentity.origin(currentOrigin()) != origin) {
+            Log.w("DIDA", "Rejected native message from an untrusted frame")
+            return null
+        }
+        var id = 0L
+        return try {
+            require(data.length <= 16_384) { "Native message is too large" }
+            val request = JSONObject(data)
+            id = request.getLong("id")
+            val args = request.optJSONObject("args") ?: JSONObject()
+            val result: Any = when (request.getString("method")) {
+                "appVersion" -> BuildConfig.VERSION_NAME
+                "status" -> status()
+                "startLocationSetup" -> { activity.startLocationSetup(); JSONObject.NULL }
+                "syncIdentity" -> { activity.syncIdentity(args.getString("userId"), args.getString("origin")); JSONObject.NULL }
+                "scanQr" -> { activity.launchQrScan(); JSONObject.NULL }
+                "checkUpdate" -> { UpdateManager.check(activity, force = true); JSONObject.NULL }
+                "setLocale" -> { activity.applyLocale(args.getString("tag")); JSONObject.NULL }
+                else -> error("Unknown native method")
+            }
+            JSONObject().put("id", id).put("result", result).toString()
+        } catch (exc: Exception) {
+            Log.e("DIDA", "Native message failed", exc)
+            JSONObject().put("id", id).put("error", exc.message ?: "Native message failed").toString()
+        }
+    }
 
-    @JavascriptInterface
-    fun appVersion(): String = if (activity.onOwnOrigin) BuildConfig.VERSION_NAME else ""
-
-    /** Snapshot for the onboarding page: what's granted, what's armed. The page
-     * re-reads this on every `dida-native-status` window event. */
-    @JavascriptInterface
-    fun status(): String {
-        if (!activity.onOwnOrigin) return "{}"
+    private fun status(): JSONObject {
         val ctx = activity.applicationContext
         return JSONObject()
             .put("version", BuildConfig.VERSION_NAME)
@@ -27,43 +46,5 @@ class NativeBridge(private val activity: MainActivity) {
             .put("backgroundLocation", Permissions.hasBackgroundLocation(ctx))
             .put("batteryExempt", Permissions.isBatteryExempt(ctx))
             .put("zones", Prefs.waypoints(ctx)?.length() ?: 0)
-            .toString()
-    }
-
-    /** Kicks the native permission walkthrough → provisioning. */
-    @JavascriptInterface
-    fun startLocationSetup() {
-        if (!activity.onOwnOrigin) return
-        activity.runOnUiThread { activity.startLocationSetup() }
-    }
-
-    @JavascriptInterface
-    fun syncIdentity(userId: String, origin: String) {
-        if (!activity.onOwnOrigin) return
-        activity.runOnUiThread { activity.syncIdentity(userId, origin) }
-    }
-
-    /** Opens the in-app QR scanner (signed-out onboarding): scanning the setup
-     * QR redeems it in THIS WebView's cookie jar — signed in, walkthrough next. */
-    @JavascriptInterface
-    fun scanQr() {
-        if (!activity.onOwnOrigin) return
-        activity.runOnUiThread { activity.launchQrScan() }
-    }
-
-    /** "Update now" from the account page — force an update check + one-tap install. */
-    @JavascriptInterface
-    fun checkUpdate() {
-        if (!activity.onOwnOrigin) return
-        activity.runOnUiThread { UpdateManager.check(activity, force = true) }
-    }
-
-    /** Apply the DIDA UI language to the app's OWN strings (toasts, update dialog,
-     * permission prompts) so they match the language the user picked in the web,
-     * not the device locale. Called by the page on load and on a language switch. */
-    @JavascriptInterface
-    fun setLocale(tag: String) {
-        if (!activity.onOwnOrigin) return
-        activity.runOnUiThread { activity.applyLocale(tag) }
     }
 }

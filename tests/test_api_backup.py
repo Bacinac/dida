@@ -106,6 +106,7 @@ async def test_backup_admin_boundary():
                 ("get", "/system/history/info", None),
                 ("get", "/system/backup/history", None),
                 ("post", "/system/restore/history", b""),
+                ("post", "/system/restore/history/recover", b""),
                 ("get", "/system/backup/schedule", None),
                 ("get", "/system/backup/list", None),
                 ("post", "/system/backup/run", None),

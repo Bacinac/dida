@@ -135,6 +135,10 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$ROOT:$ROOT:ro" -v "$WORK:$WORK" 
     "$ROOT/docs/screenshots/social-preview.png" "DIDA — live demo" \
     "Home automation on industrial foundations: every protocol isolated in its own process, a validated capability model at the core, control from the floor plan. A public demo over a recorded, anonymised house."
 
+echo "== visual privacy gate =="
+docker run --rm --pull=never -v "$ROOT:/w:ro" -v "$WORK/demo-dist:/site:ro" \
+    --entrypoint python dida/api:latest /w/scripts/demo-visual-gate.py /site
+
 echo "== deploying to $PROJECT =="
 docker run --rm -v "$WORK/demo-dist":/site -w /site \
     -e CLOUDFLARE_API_TOKEN="$(tr -d ' \n' < "$CF_TOKEN_FILE")" \

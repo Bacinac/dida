@@ -1659,6 +1659,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "numpy" },
     { name = "opencv-python-headless" },
+    { name = "pillow" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1667,6 +1668,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "numpy", specifier = ">=2.1" },
     { name = "opencv-python-headless", specifier = ">=4.10" },
+    { name = "pillow", specifier = ">=12.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 

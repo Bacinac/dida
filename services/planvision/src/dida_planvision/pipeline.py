@@ -22,11 +22,16 @@ are [[x, y], …] in % (0..100), the FloorPoly the UI stores in areas.fp_poly.
 
 from __future__ import annotations
 
+import warnings
+from io import BytesIO
+
 import cv2
 import numpy as np
+from PIL import Image
 
 # ── tunables (fractions of the plan's larger side / area unless noted) ───────
 MAX_DIM = 1024          # work resolution cap
+MAX_IMAGE_PIXELS = 8 * 1024 * 1024
 BORDER_DARK = 50        # a wall pixel is at least this dark (walls are black; floors lighter)
 BORDER_THICK = 0.006    # thickness open (frac of big): drops tile grout / text / fixtures
 BORDER_KEEP_LEN = 0.04  # a wall stroke spans ≥ this — shorter = floating blob, dropped
@@ -39,6 +44,11 @@ MIN_ROOM = 0.004        # drop enclosed regions smaller than this fraction of th
 POLY_EPS = 0.012        # Douglas-Peucker simplification (frac of big) — plans are rectilinear
 
 
+def work_size(w: int, h: int) -> tuple[int, int]:
+    scale = min(1.0, MAX_DIM / max(w, h))
+    return max(1, round(w * scale)), max(1, round(h * scale))
+
+
 def _load_gray(data: bytes) -> tuple[np.ndarray, int, int]:
     """Decode to grayscale at bounded resolution. Returns (gray, W, H).
 
@@ -48,23 +58,31 @@ def _load_gray(data: bytes) -> tuple[np.ndarray, int, int]:
     wrecks all downstream thresholding (the exterior reads as ~35-50 % "wall"). So
     composite over WHITE first: transparent → white background, walls stay black, and a
     plain black threshold isolates the walls exactly."""
-    raw = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_UNCHANGED)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as image:
+                w0, h0 = image.size
+    except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ValueError("undecodable image") from exc
+    if w0 * h0 > MAX_IMAGE_PIXELS:
+        raise ValueError(f"image exceeds {MAX_IMAGE_PIXELS} decoded pixels")
+    try:
+        raw = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_UNCHANGED)
+    except cv2.error as exc:
+        raise ValueError("undecodable image") from exc
     if raw is None:
         raise ValueError("undecodable image")
-    # 16-bit PNGs (uint16) would make the black-threshold read garbage (BORDER_DARK is
-    # an 8-bit level). Down-shift to 8-bit BEFORE the alpha/gray branch so every path
-    # below works on uint8 as intended.
-    if raw.dtype == np.uint16:
-        raw = (raw >> 8).astype(np.uint8)
     # Bound resolution BEFORE the alpha composite: that step allocates several
     # full-res float32 temporaries, which on a large RGBA plan (the normal case)
     # would exceed the 512m container limit and OOM-kill the service. Downscale the
     # raw uint8 raster first, so every float32 allocation below is O(MAX_DIM^2).
     h0, w0 = raw.shape[:2]
-    scale = min(1.0, MAX_DIM / max(w0, h0))
-    if scale < 1.0:
-        raw = cv2.resize(raw, (max(1, round(w0 * scale)), max(1, round(h0 * scale))),
-                         interpolation=cv2.INTER_AREA)
+    w, h = work_size(w0, h0)
+    if (w, h) != (w0, h0):
+        raw = cv2.resize(raw, (w, h), interpolation=cv2.INTER_AREA)
+    if raw.dtype == np.uint16:
+        raw = (raw >> 8).astype(np.uint8)
     if raw.ndim == 3 and raw.shape[2] == 4:
         a = raw[:, :, 3:4].astype(np.float32) / 255.0
         comp = (raw[:, :, :3].astype(np.float32) * a + 255.0 * (1.0 - a)).astype(np.uint8)
@@ -229,7 +247,7 @@ def rooms_from_borders(borders: list[list[float]], w: int, h: int) -> list[list[
     """PHASE 2 — rooms are simply the regions ENCLOSED BY THE BORDERS. Rasterize the
     border rects and flood-fill: every enclosed region is one room. No bitmap — the
     (user-edited) borders are the whole truth."""
-    return _rooms(_rasterize(borders, w, h))
+    return _rooms(_rasterize(borders, *work_size(w, h)))
 
 
 def _poly_mask(poly: list[list[float]], w: int, h: int) -> np.ndarray:
@@ -323,6 +341,7 @@ def erase_border_between(borders: list[list[float]], poly_a: list[list[float]],
     unioning polygons. Returns (kept, removed): the thinned border set plus the erased
     pieces (the UI previews those in red before the user confirms). removed == [] means
     the rooms are not adjacent."""
+    w, h = work_size(w, h)
     big = max(w, h)
     tk = max(3, int(big * BORDER_UNIFORM))
     ma, mb = _poly_mask(poly_a, w, h), _poly_mask(poly_b, w, h)

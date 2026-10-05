@@ -19,6 +19,9 @@
   import AssistantPanel from "$lib/AssistantPanel.svelte";
   import { version } from "$lib/version.svelte";
   import { help } from "$lib/help";
+  import { nativeBridge } from "$lib/native";
+  import { errMsg } from "$lib/errors";
+  import { toasts } from "$lib/kit";
 
   let { children } = $props();
 
@@ -34,7 +37,7 @@
   // on every language switch.
   $effect(() => {
     const tag = i18n.locale;
-    (window as any).DidaApp?.setLocale?.(tag);
+    void nativeBridge()?.setLocale(tag).catch((e) => toasts.error(errMsg(e)));
   });
 
   // Route guard, driven by auth state.
@@ -67,7 +70,7 @@
   });
 
   $effect(() => {
-    if (auth.user) (window as any).DidaApp?.syncIdentity?.(String(auth.user.id), window.location.origin);
+    if (auth.user) void nativeBridge()?.syncIdentity(String(auth.user.id), window.location.origin).catch((e) => toasts.error(errMsg(e)));
   });
 
   // Run the live store only while authenticated; tear it down on logout.

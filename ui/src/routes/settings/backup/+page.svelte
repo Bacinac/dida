@@ -1,7 +1,7 @@
 <script lang="ts">
   // Settings → Backup. Admin-only (guarded by the layout nav). Two independent
   // backups: the CONFIG database (pg_dump), and the HISTORY firehose (ClickHouse,
-  // a .tar.gz of a FORMAT Native dump of all three history tables). Both restores
+  // a .tar.gz of a FORMAT Native dump of the history tables). Both restores
   // are destructive and confirmed.
   import { onMount } from "svelte";
   import { api, type BackupFile, type BackupJob, type BackupSchedule } from "$lib/api";
@@ -17,7 +17,7 @@
   let fileInput: HTMLInputElement | undefined = $state();
 
   // history (ClickHouse)
-  let hist = $state<{ rows: number; bytes: number } | null>(null);
+  let hist = $state<{ rows: number; bytes: number; recovery_required: boolean } | null>(null);
   let histDownloading = $state(false);
   let histRestoring = $state(false);
   let histFile = $state<File | null>(null);
@@ -208,6 +208,32 @@
     } catch (e) {
       err = errMsg(e);
     } finally {
+      try {
+        hist = await api.historyInfo();
+      } catch (e) {
+        err = errMsg(e);
+      }
+      histRestoring = false;
+    }
+  }
+
+  async function recoverHistory() {
+    const ok = await dialog.confirm({
+      title: t("backup.history.recover"),
+      message: t("backup.history.recoverConfirm"),
+      confirmLabel: t("backup.history.recover"),
+      danger: true,
+    });
+    if (!ok) return;
+    err = null;
+    histRestoring = true;
+    try {
+      await api.recoverHistory();
+      hist = await api.historyInfo();
+      toasts.success(t("backup.history.recovered"));
+    } catch (e) {
+      err = errMsg(e);
+    } finally {
       histRestoring = false;
     }
   }
@@ -261,9 +287,17 @@
     <div class="mt-4 border-t border-dida-border pt-4">
       <h3 class="text-m font-semibold">{t("backup.restoreSub")}</h3>
       <p class="mb-2 mt-1 text-m text-dida-text-muted">{t("backup.history.restoreDesc")}</p>
+      {#if hist?.recovery_required}
+        <div class="mb-3 flex flex-col gap-2">
+          <Notice tone="err">{t("backup.history.recoveryRequired")}</Notice>
+          <Button tone="danger" onclick={recoverHistory} disabled={histRestoring}>
+            {histRestoring ? t("backup.restore.working") : t("backup.history.recover")}
+          </Button>
+        </div>
+      {/if}
       <div class="flex flex-wrap items-center gap-3">
         <input bind:this={histInput} type="file" accept=".tar.gz,.gz" onchange={(e) => (histFile = (e.target as HTMLInputElement).files?.[0] ?? null)} class={FILE_CLASS} />
-        <Button tone="danger" onclick={restoreHistory} disabled={!histFile || histRestoring}>
+        <Button tone="danger" onclick={restoreHistory} disabled={!histFile || histRestoring || hist?.recovery_required}>
           {histRestoring ? t("backup.restore.working") : t("backup.restore.btn")}
         </Button>
       </div>

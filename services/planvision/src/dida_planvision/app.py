@@ -9,6 +9,9 @@ from /state and POSTs the raw bytes here; borders and rooms travel as % coords.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from threading import Lock
+
 from fastapi import Body, FastAPI, HTTPException
 
 from dida_planvision.pipeline import (
@@ -20,9 +23,19 @@ from dida_planvision.pipeline import (
 
 app = FastAPI(title="DIDA planvision")
 
-# Max raster canvas per side. `np.zeros((h, w))` allocates h*w bytes, so an
-# unvalidated w/h is a trivial OOM lever — clamp hard at the input boundary.
 MAX_CANVAS = 8192
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+_pipeline_lock = Lock()
+
+
+@contextmanager
+def _pipeline():
+    if not _pipeline_lock.acquire(blocking=False):
+        raise HTTPException(503, "Floor plan processing is busy; retry after the current request")
+    try:
+        yield
+    finally:
+        _pipeline_lock.release()
 
 
 def _dims(body: dict) -> tuple[int, int]:
@@ -32,11 +45,9 @@ def _dims(body: dict) -> tuple[int, int]:
     caller never asked for. Fail loud at the boundary; also caps a huge w*h allocation."""
     if body.get("w") is None or body.get("h") is None:
         raise HTTPException(400, "w and h are required")
-    try:
-        w = int(body["w"])
-        h = int(body["h"])
-    except (TypeError, ValueError) as e:
-        raise HTTPException(400, "w/h must be integers") from e
+    if type(body["w"]) is not int or type(body["h"]) is not int:
+        raise HTTPException(400, "w/h must be integers")
+    w, h = body["w"], body["h"]
     if not (1 <= w <= MAX_CANVAS and 1 <= h <= MAX_CANVAS):
         raise HTTPException(400, f"w/h out of range (1..{MAX_CANVAS})")
     return w, h
@@ -55,9 +66,12 @@ def borders(data: bytes = Body(b"", media_type="application/octet-stream")) -> d
     """Phase 1: the border skeleton as [x, y, w, h] rectangles in % — the editable draft."""
     if not data:
         raise HTTPException(400, "empty body")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "image exceeds 20 MB")
     try:
-        gray, _, _ = _load_gray(data)
-        return {"borders": extract_borders(gray)}
+        with _pipeline():
+            gray, _, _ = _load_gray(data)
+            return {"borders": extract_borders(gray)}
     except ValueError as e:
         raise HTTPException(415, str(e)) from e
 
@@ -67,7 +81,8 @@ def rooms_from_borders_ep(body: dict = Body(...)) -> dict:
     """Phase 2: rooms are the regions enclosed by the borders. Body = {"borders":
     [[x,y,w,h],…] in %, "w": px, "h": px}. No image — the borders are the whole truth."""
     w, h = _dims(body)
-    return {"rooms": rooms_from_borders(body.get("borders") or [], w, h)}
+    with _pipeline():
+        return {"rooms": rooms_from_borders(body.get("borders") or [], w, h)}
 
 
 @app.post("/erase-border")
@@ -79,5 +94,6 @@ def erase_border_ep(body: dict = Body(...)) -> dict:
     polys = body.get("polys") or []
     if len(polys) != 2:
         raise HTTPException(400, "merge needs exactly two areas")
-    kept, removed = erase_border_between(body.get("borders") or [], polys[0], polys[1], w, h)
+    with _pipeline():
+        kept, removed = erase_border_between(body.get("borders") or [], polys[0], polys[1], w, h)
     return {"borders": kept, "removed": removed}

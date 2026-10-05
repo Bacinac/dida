@@ -213,7 +213,7 @@ def test_failed_rollback_keeps_recovery_partitions_and_blocks_another_refresh(hi
         return query(client)(sql)
 
     try:
-        with pytest.raises(HistoryRollbackError, match="engine must remain stopped"):
+        with pytest.raises(HistoryRollbackError, match="recovery tables must be retained"):
             replace_history(fail_all_replacements, insert(client), *snapshots(client, cutoff), pause([]))
         assert client.query("SELECT count() FROM system.tables WHERE database='dida' AND name LIKE 'demo_refresh_%_previous'").first_row == (3,)
         with pytest.raises(HistoryRollbackError, match="Unresolved"):

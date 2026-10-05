@@ -27,6 +27,7 @@ from dida_core import (
     house_timezone,
 )
 from dida_core.capabilities import Value
+from dida_core.history_access import HistoryBusyError, HistoryRecoveryRequiredError, history_access
 
 log = logging.getLogger("dida.engine.history")
 
@@ -66,8 +67,10 @@ MIRRORED_ADAPTER = "peer"
 
 
 class HistoryWriter:
-    def __init__(self, pool) -> None:
+    def __init__(self, pool, *, access=history_access) -> None:
         self._pool = pool
+        self._access = access
+        self._maintenance: str | None = None
         self._client = None
         # deque, not list: at cap during a CH outage every enqueue drops the
         # oldest row — list.pop(0) is O(n) on a 50k buffer, popleft() is O(1).
@@ -90,6 +93,7 @@ class HistoryWriter:
             "cap": BUFFER_CAP,
             "dropped": self._dropped,
             "connected": self._client is not None,
+            "maintenance": self._maintenance,
             "schema_failures": self._schema_failures,
             "schema_failing_for_s": (
                 round(time.monotonic() - self._schema_first_failure)
@@ -203,28 +207,40 @@ class HistoryWriter:
         ts = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
         row = [ts, entity_id, capability, command, source,
                json.dumps(args, ensure_ascii=False, default=str) if args else ""]
-        if not await self._ensure():
-            raise RuntimeError("clickhouse unavailable — command audit will redeliver")
-        try:
-            await self._client.insert("command_history", [row], column_names=CMD_COLUMNS)
-        except Exception:
-            await self._close_client()  # force a reconnect on the next attempt
-            raise
+        async with self._access(self._pool):
+            if not await self._ensure():
+                raise RuntimeError("clickhouse unavailable — command audit will redeliver")
+            try:
+                await self._client.insert("command_history", [row], column_names=CMD_COLUMNS)
+            except Exception:
+                await self._close_client()
+                raise
 
     async def flush(self) -> bool:
         async with self._flush_lock:
-            if not self._buf and not self._pending:
+            try:
+                async with self._access(self._pool):
+                    self._maintenance = None
+                    return await self._flush_available()
+            except (HistoryBusyError, HistoryRecoveryRequiredError) as exc:
+                if self._maintenance != str(exc):
+                    log.error("history writes paused: %s", exc)
+                self._maintenance = str(exc)
                 return False
-            if not self._pending and self._schema_ready and time.monotonic() >= self._next_day_tz_check:
-                self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
-                if (await house_timezone(self._pool)).key != self._day_tz:
-                    self._schema_ready = False
-            if not await self._ensure():
-                return False
-            if not self._pending:
-                self._pending = tuple(self._buf.popleft() for _ in range(min(len(self._buf), BATCH_SIZE)))
-                self._pending_token = uuid4().hex
-            return await self._flush_pending()
+
+    async def _flush_available(self) -> bool:
+        if not self._buf and not self._pending:
+            return False
+        if not self._pending and self._schema_ready and time.monotonic() >= self._next_day_tz_check:
+            self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
+            if (await house_timezone(self._pool)).key != self._day_tz:
+                self._schema_ready = False
+        if not await self._ensure():
+            return False
+        if not self._pending:
+            self._pending = tuple(self._buf.popleft() for _ in range(min(len(self._buf), BATCH_SIZE)))
+            self._pending_token = uuid4().hex
+        return await self._flush_pending()
 
     async def _flush_pending(self) -> bool:
         try:

@@ -136,6 +136,8 @@ class NetManager:
         must then re-`_add` (create-is-idempotent) to reconnect + re-DHCP, or we'd
         wait forever for an address on a network we never joined."""
         st, body = await self._docker("GET", f"/containers/{CONTAINER}/json")
+        if st != 200:
+            raise RuntimeError(f"Inspect netmgr container failed ({st}): {body}")
         out: set[int] = set()
         if st == 200:
             nets = json.loads(body).get("NetworkSettings", {}).get("Networks", {}) or {}
@@ -170,18 +172,29 @@ class NetManager:
         prefix = self._dummy_subnet(vid).rsplit(".", 1)[0] + "."  # '10.240.20.'
         return cidr.split("/", 1)[0].startswith(prefix)
 
-    async def _add(self, vid: int, cfg: dict | None = None) -> None:
+    async def _network(self, vid: int) -> dict | None:
+        st, body = await self._docker("GET", f"/networks/{self._net(vid)}")
+        if st == 404:
+            return None
+        if st != 200:
+            raise RuntimeError(f"Inspect {self._net(vid)} failed ({st}): {body}")
+        return json.loads(body)
+
+    async def _add(self, vid: int, cfg: dict | None = None, *, parent: str | None = None) -> None:
         cfg = cfg or {}
-        parent = f"{await parent_nic(self._pool)}.{vid}"
+        parent = parent or f"{await parent_nic(self._pool)}.{vid}"
+        network = await self._network(vid)
         log.info("creating macvlan network %s (parent %s)", self._net(vid), parent)
-        st, body = await self._docker("POST", "/networks/create", {
-            "Name": self._net(vid), "Driver": "macvlan", "CheckDuplicate": True,
-            "Options": {"parent": parent},
-            "IPAM": {"Config": [{"Subnet": self._dummy_subnet(vid)}]},
-        })
-        if st not in (200, 201) and "exists" not in body:
-            log.warning("create %s failed (%s): %s", self._net(vid), st, body)
-            return
+        if network is None:
+            st, body = await self._docker("POST", "/networks/create", {
+                "Name": self._net(vid), "Driver": "macvlan", "CheckDuplicate": True,
+                "Options": {"parent": parent},
+                "IPAM": {"Config": [{"Subnet": self._dummy_subnet(vid)}]},
+            })
+            if st not in (200, 201):
+                raise RuntimeError(f"Create {self._net(vid)} failed ({st}): {body}")
+        elif network.get("Driver") != "macvlan" or network.get("Options", {}).get("parent") != parent:
+            raise RuntimeError(f"Network {self._net(vid)} does not match parent {parent}")
         before = await self._iface_names()
         connect: dict = {"Container": CONTAINER}
         mac = (cfg.get("mac") or "").strip()
@@ -189,8 +202,7 @@ class NetManager:
             connect["EndpointConfig"] = {"MacAddress": mac}
         st, body = await self._docker("POST", f"/networks/{self._net(vid)}/connect", connect)
         if st not in (200, 201):
-            log.warning("connect self to %s failed (%s): %s", self._net(vid), st, body)
-            return
+            raise RuntimeError(f"Connect self to {self._net(vid)} failed ({st}): {body}")
         await asyncio.sleep(1)
         hostname = (cfg.get("hostname") or "").strip()
         for iface in await self._iface_names() - before:
@@ -199,6 +211,12 @@ class NetManager:
             await self._dhcp(iface, hostname)                  # real lease from the router
 
     async def _remove(self, vid: int) -> None:
+        network = await self._network(vid)
+        if network is None:
+            return
+        if any(endpoint.get("Name", "").lstrip("/") != CONTAINER
+               for endpoint in network.get("Containers", {}).values()):
+            raise RuntimeError(f"Network {self._net(vid)} has foreign endpoints; refusing removal")
         log.info("removing macvlan network %s", self._net(vid))
         # Kill THIS vlan's dhclient (its own pidfile) before the iface disappears — a
         # lingering daemon on a gone iface would zombie, and with a shared pidfile a
@@ -206,8 +224,13 @@ class NetManager:
         iface = await self._iface_for(vid)
         if iface:
             await self._dhcp_release(iface)
-        await self._docker("POST", f"/networks/{self._net(vid)}/disconnect", {"Container": CONTAINER, "Force": True})
-        await self._docker("DELETE", f"/networks/{self._net(vid)}")
+        if network.get("Containers"):
+            st, body = await self._docker("POST", f"/networks/{self._net(vid)}/disconnect", {"Container": CONTAINER, "Force": True})
+            if st not in (200, 204):
+                raise RuntimeError(f"Disconnect {self._net(vid)} failed ({st}): {body}")
+        st, body = await self._docker("DELETE", f"/networks/{self._net(vid)}")
+        if st not in (200, 204, 404):
+            raise RuntimeError(f"Remove {self._net(vid)} failed ({st}): {body}")
 
     @staticmethod
     def _dhcp_files(iface: str) -> tuple[str, str]:
@@ -363,6 +386,15 @@ class NetManager:
         desired = await self._desired()
         config = await self._vlan_config()
         existing = await self._existing()
+        parent = await parent_nic(self._pool) if desired else ""
+        for vid in sorted(desired):
+            network = await self._network(vid)
+            if network is not None and (
+                network.get("Driver") != "macvlan" or network.get("Options", {}).get("parent") != f"{parent}.{vid}"
+            ):
+                log.info("vlan %d parent changed; recreating network on %s", vid, parent)
+                await self._remove(vid)
+                existing.discard(vid)
         # Reconnect a VLAN whose configured MAC no longer matches the live endpoint
         # (the user set/changed a MAC to pin a reserved DHCP lease).
         macs = await self._current_macs()
@@ -373,7 +405,7 @@ class NetManager:
                 await self._remove(vid)
                 existing.discard(vid)
         for vid in desired - existing:
-            await self._add(vid, config.get(str(vid), {}))
+            await self._add(vid, config.get(str(vid), {}), parent=f"{parent}.{vid}")
         for vid in existing - desired:
             await self._remove(vid)
         await self._ensure_dhcp(desired & existing, config)

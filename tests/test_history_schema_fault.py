@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import types
+from contextlib import nullcontext
 
 import pytest
 from dida_engine.history import SCHEMA_FAIL_LIMIT, SCHEMA_FAIL_SECONDS, HistoryWriter
@@ -28,7 +29,7 @@ class _Client:
 
 @pytest.fixture
 def writer(monkeypatch):
-    w = HistoryWriter(pool=None)
+    w = HistoryWriter(pool=None, access=lambda _: nullcontext())
     monkeypatch.setattr("dida_engine.history.ch_client", _ok_client)
     return w
 
@@ -144,7 +145,7 @@ async def test_clickhouse_merely_being_DOWN_is_not_a_fault(monkeypatch):
         raise OSError("connection refused")
     monkeypatch.setattr("dida_engine.history.ch_client", _no_connect)
 
-    w = HistoryWriter(pool=None)
+    w = HistoryWriter(pool=None, access=lambda _: nullcontext())
     for _ in range(SCHEMA_FAIL_LIMIT * 3):
         assert await w._ensure() is False
     assert w._schema_first_failure is None, "a connect failure is not a schema failure"

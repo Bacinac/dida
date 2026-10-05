@@ -42,6 +42,14 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--add-opens=java.base/java.io=ALL-UNNAMED",
+                "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+        }
+    }
+
     // The language is switched inside the app (attachBaseContext), so every
     // locale has to ship in the one sideloaded APK.
     bundle {
@@ -99,6 +107,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.webkit:webkit:1.17.1")
     implementation("com.google.android.gms:play-services-location:21.4.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
@@ -111,4 +120,6 @@ dependencies {
     // notifications through Firebase Cloud Messaging instead.
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
 }

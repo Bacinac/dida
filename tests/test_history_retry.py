@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from uuid import uuid4
 
 import pytest
@@ -37,7 +38,7 @@ def ready(writer, client):
 
 async def test_a_committed_insert_with_lost_response_is_not_repeated_in_raw_or_rollups(client):
     entity = "audit:" + uuid4().hex
-    writer = HistoryWriter(None)
+    writer = HistoryWriter(None, access=lambda _: nullcontext())
     writer.enqueue(entity, "temperature", "audit", 10, time.time_ns())
     lost = LostResponse(client)
     ready(writer, lost)

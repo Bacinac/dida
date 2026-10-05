@@ -110,7 +110,8 @@ def _readings(dev: dict, dps: dict) -> list[tuple[str, object]]:
             if options:
                 readings.append(("enum_options", json.dumps(options, ensure_ascii=False)))
         elif str(dp_id) in dps:
-            value = decode(cap, dps[str(dp_id)])
+            metadata = spec if isinstance(spec, dict) else {}
+            value = decode(cap, dps[str(dp_id)], scale=metadata.get("scale", 0), unit=metadata.get("unit"))
             if value is not None:
                 readings.append((cap, value))
     return readings

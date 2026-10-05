@@ -14,13 +14,22 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from dida_api.auth import AuthUser, current_user, require_admin
+from dida_api.auth import AuthUser, can_see_page, current_user, require_admin
+from dida_api.visibility import can_view_entity
 
 router = APIRouter(prefix="/vacuum", tags=["vacuum"])
 
 MAP_SUBJECT = "dida.vacuum.map"
 LIVE_SUBJECT = "dida.vacuum.live"
 PLACEMENT_KEY = "placement"
+
+
+async def vacuum_user(request: Request, user: AuthUser = Depends(current_user)) -> AuthUser:
+    if not can_see_page(user, "floorplan"):
+        raise HTTPException(403, "floorplan access required")
+    if not await can_view_entity(request.app.state.pool, user, "dreame:vacuum"):
+        raise HTTPException(404, "entity not found")
+    return user
 
 
 class Placement(BaseModel):
@@ -41,7 +50,7 @@ class Placement(BaseModel):
 
 
 @router.get("/map")
-async def vacuum_map(request: Request, _user: AuthUser = Depends(current_user)) -> dict:
+async def vacuum_map(request: Request, _user: AuthUser = Depends(vacuum_user)) -> dict:
     """The robot's map as a PNG (base64) plus the geometry that gives it a scale."""
     try:
         reply = await request.app.state.bus.nc.request(MAP_SUBJECT, b"{}", timeout=25)
@@ -68,7 +77,7 @@ async def vacuum_map(request: Request, _user: AuthUser = Depends(current_user)) 
 
 
 @router.get("/live")
-async def vacuum_live(request: Request, _user: AuthUser = Depends(current_user)) -> dict:
+async def vacuum_live(request: Request, _user: AuthUser = Depends(vacuum_user)) -> dict:
     """Where the robot is right now, the line it has driven, and the area it was sent
     to clean — all in the robot's own millimetres, which the stored placement turns
     back into places on the plan. Polled while it works rather than pushed as state:

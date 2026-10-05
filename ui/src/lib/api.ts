@@ -629,11 +629,12 @@ export const api = {
 
   // Everything the plan's entities held across a past window, in one bundle —
   // the caller scrubs locally, so dragging the timeline costs no round-trip.
-  replayBundle: (frm: number, to: number, entities: string[]): Promise<ReplayBundle> =>
+  replayBundle: (frm: number, to: number, entities: string[], signal?: AbortSignal): Promise<ReplayBundle> =>
     request(`/history/replay`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ frm, to, entities }),
+      signal,
     }).then(jsonOrThrow),
 
   // --- devices ---
@@ -1009,12 +1010,12 @@ export const api = {
 
   // --- presence (this device reports its own location while the app is open) ---
   reportPresence: (
-    latitude: number, longitude: number, accuracy?: number, battery?: number,
+    latitude: number, longitude: number, tst: number, accuracy?: number, battery?: number,
   ): Promise<{ accepted: boolean; zone?: string; reason?: string }> =>
     request(`/presence/report`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ latitude, longitude, accuracy, battery }),
+      body: JSON.stringify({ latitude, longitude, accuracy, battery, tst }),
     }).then(jsonOrThrow),
 
   // Last known real zone (not the network "away") + when, per presence entity —
@@ -1221,12 +1222,14 @@ export const api = {
   askAssistant: async (
     message: string, history: AssistantTurn[] = [],
     onTool?: (name: string) => void,
+    signal?: AbortSignal,
   ): Promise<AssistantReply> => {
     const r = await request(`/assistant`, {
-      method: "POST", deadlineMs: MODEL_MS,
+      method: "POST", deadlineMs: MODEL_MS, signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message, history }),
     });
+    signal?.throwIfAborted();
     if (!r.body) return jsonOrThrow(r);
     await ok(r);
 
@@ -1236,8 +1239,10 @@ export const api = {
     let done: AssistantReply | null = null;
     for (;;) {
       const { value, done: finished } = await reader.read().catch(() => {
+        signal?.throwIfAborted();
         throw new Error(t("assistant.cutOff"));
       });
+      signal?.throwIfAborted();
       if (finished) break;
       buffer += decoder.decode(value, { stream: true });
       // SSE frames are separated by a blank line; keep the trailing partial.
@@ -1696,6 +1701,10 @@ export const api = {
   // --- schedules / "beats" (admin) ---
   listSchedules: (): Promise<Schedule[]> =>
     request(`/schedules`).then(jsonOrThrow),
+
+  previewSchedules: (days: string[], signal?: AbortSignal): Promise<{ id: number; days: string[] }[]> =>
+    request("/schedules/preview", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ days }), signal }).then(jsonOrThrow),
 
   createSchedule: (name: string, kind: string, params: Record<string, unknown>): Promise<Schedule> =>
     request(`/schedules`, {
@@ -2513,4 +2522,3 @@ export interface VacuumLive {
   track: [number, number][];
   at_ms: number;
 }
-

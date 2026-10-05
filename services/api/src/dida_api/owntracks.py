@@ -43,6 +43,7 @@ from home_core.rate_limit import TokenBucketLimiter, client_ip
 
 from dida_api.common import get_setting
 from dida_api.presence import publish_report, publish_transition
+from dida_api.presence_order import frame_timing
 from dida_api.rate_limit import TRUSTED_PROXIES
 
 log = logging.getLogger("dida.api.owntracks")
@@ -172,7 +173,7 @@ async def owntracks_report(request: Request) -> list:
         # published zone is the clean DB zone name.
         desc = re.sub(r"\|\d+\|\d+$", "", str(body.get("desc") or ""))
         result = await publish_transition(
-            request.app.state, username, body.get("event", ""), desc
+            request.app.state, username, body.get("event", ""), desc, **frame_timing(body)
         )
         log.info("owntracks: %s transition %s %r -> %s (%s) [%s]", username,
                  body.get("event"), body.get("desc"), result.get("zone"),
@@ -201,6 +202,7 @@ async def owntracks_report(request: Request) -> list:
         lon,
         accuracy=float(acc) if isinstance(acc, int | float) else None,
         battery=float(batt) if isinstance(batt, int | float) and 0 <= batt <= 100 else None,
+        **frame_timing(body),
     )
     # Which reporter sent this — "DIDA-App/vX" (companion app) vs "Owntracks/…".
     # During the OwnTracks→companion migration this is the ONLY place the two

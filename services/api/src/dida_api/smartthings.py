@@ -17,18 +17,17 @@ from __future__ import annotations
 import json
 import logging
 import os
-import secrets as pysecrets
 import time
 import urllib.parse
 from urllib.parse import urlsplit
 
 import httpx
-import jwt
 from dida_core import decrypt_secret, encrypt_secret
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from dida_api.auth import AuthUser, require_admin
+from dida_api.oauth import consume_state, issue_state
 
 log = logging.getLogger("dida.api.smartthings")
 
@@ -118,11 +117,7 @@ async def login(request: Request, _admin: AuthUser = Depends(require_admin)) -> 
     cfg = await _cfg(request)
     if not (cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]):
         raise HTTPException(503, "Unesi Client ID, Client Secret i Redirect URI pa spremi.")
-    # Signed state: CSRF + survives the top-level redirect (no cookie reliance).
-    state = jwt.encode(
-        {"a": "smartthings", "n": pysecrets.token_hex(8), "exp": int(time.time()) + 600},
-        request.app.state.secret_key, algorithm="HS256",
-    )
+    state = await issue_state(request, _admin, "smartthings")
     params = {
         "client_id": cfg["client_id"], "response_type": "code",
         "redirect_uri": cfg["redirect_uri"], "scope": _SCOPES, "state": state,
@@ -145,9 +140,7 @@ async def callback(
         return back("error", error)
     if not (cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]) or not code or not state:
         return back("error", "config")
-    try:
-        jwt.decode(state, request.app.state.secret_key, algorithms=["HS256"])  # CSRF + expiry
-    except jwt.PyJWTError:
+    if not await consume_state(request, "smartthings", state):
         return back("error", "state")
 
     async with httpx.AsyncClient(timeout=20) as cx:

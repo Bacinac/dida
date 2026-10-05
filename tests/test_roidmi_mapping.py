@@ -14,6 +14,9 @@ its invariants are gated here.
 import hashlib
 import json
 import struct
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from dida_adapter_roidmi.mapping import FAN_OPTIONS, fan_id, status_caps
@@ -122,6 +125,93 @@ def test_key_derivation_matches_protocol():
     key = hashlib.md5(token).digest()
     assert c._key == key
     assert c._iv == hashlib.md5(key + token).digest()
+
+
+@pytest.mark.parametrize("result", [None, {}, [], {"code": -704040001}, {"code": False}])
+def test_action_requires_a_successful_operation_result(monkeypatch, result):
+    client = _client()
+    monkeypatch.setattr(client, "request", lambda *args: result)
+    with pytest.raises(MiioError):
+        client.action(2, 1)
+
+
+@pytest.mark.parametrize("result", [None, [], [{}], [{"code": -704030013}],
+                                    [{"code": 0}, {"code": -1}]])
+def test_set_property_requires_exactly_one_successful_result(monkeypatch, result):
+    client = _client()
+    monkeypatch.setattr(client, "request", lambda *args: result)
+    with pytest.raises(MiioError):
+        client.set_property(2, 3, 42)
+
+
+def test_successful_operations_are_accepted(monkeypatch):
+    client = _client()
+    monkeypatch.setattr(client, "request", lambda *args: {"code": 0})
+    client.action(2, 1)
+    monkeypatch.setattr(client, "request", lambda *args: [{"code": 0}])
+    client.set_property(2, 3, 42)
+
+
+def test_poll_and_action_do_not_overlap_the_encrypted_socket(monkeypatch):
+    client = _client()
+    client._session_at = time.monotonic()
+    sent, release, poll_started, second_send = (threading.Event() for _ in range(4))
+    packets = []
+
+    class Socket:
+        def sendto(self, packet, addr):
+            request = client._parse(packet)
+            packets.append(request)
+            if len(packets) > 1:
+                second_send.set()
+            sent.set()
+
+        def recvfrom(self, size):
+            assert release.wait(1)
+            request = packets[-1]
+            result = [] if request["method"] == "get_properties" else {"code": 0}
+            return client._build(client._encrypt(json.dumps({"id": request["id"], "result": result}).encode())), client._addr
+
+    monkeypatch.setattr(client, "_socket", lambda: Socket())
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        action = executor.submit(client.action, 2, 1)
+        assert sent.wait(1)
+
+        def poll():
+            poll_started.set()
+            return client.get_properties([])
+
+        polling = executor.submit(poll)
+        try:
+            assert poll_started.wait(1)
+            assert not second_send.wait(0.05)
+        finally:
+            release.set()
+        assert action.result(timeout=1) is None
+        assert polling.result(timeout=1) == []
+    assert [packet["method"] for packet in packets] == ["action", "get_properties"]
+
+
+def test_a_lost_action_reply_is_not_retried(monkeypatch):
+    client = _client()
+    client._session_at = time.monotonic()
+    packets = []
+
+    class Socket:
+        def sendto(self, packet, addr):
+            packets.append(client._parse(packet))
+
+        def recvfrom(self, size):
+            raise TimeoutError("reply lost")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(client, "_socket", lambda: Socket())
+    monkeypatch.setattr(client, "_handshake", lambda: None)
+    with pytest.raises(MiioError, match="unknown"):
+        client.action(2, 1)
+    assert len(packets) == 1
 
 
 # --- reachability: the verdict from the source, edge-triggered --------------------

@@ -20,17 +20,21 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import fcntl
 import hashlib
 import io
 import json
 import math
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
 import uuid
 from pathlib import Path
+
+from demo_history import HistoryRollbackError, replace_history
 
 
 def _load_anon() -> dict:
@@ -676,24 +680,53 @@ def copy_settings() -> None:
                  f"ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;")
 
 
+def _prod_history(sql: str) -> bytes:
+    command = shlex.join(["docker", "exec", "dida-clickhouse", "clickhouse-client", "-q", sql])
+    return subprocess.run(["ssh", "-o", "BatchMode=yes", PROD, command],
+                          capture_output=True, check=True).stdout
+
+
+def _dev_history(sql: str) -> str:
+    return sh(["docker", "exec", "dida-clickhouse", "clickhouse-client", "--format", "TSVRaw", "-q", sql])
+
+
+def _insert_history(table: str, data: bytes) -> None:
+    subprocess.run(["docker", "exec", "-i", "dida-clickhouse", "clickhouse-client", "-q",
+                    f"INSERT INTO dida.{table} FORMAT Native"], input=data, capture_output=True, check=True)
+
+
+@contextlib.contextmanager
+def _pause_history_writer():
+    running = sh(["docker", "inspect", "--format", "{{.State.Running}}", "dida-engine"]).strip() == "true"
+    resume = True
+    try:
+        if running:
+            sh(["docker", "stop", "dida-engine"])
+        yield
+    except HistoryRollbackError:
+        resume = False
+        raise
+    finally:
+        if running and resume:
+            sh(["docker", "start", "dida-engine"])
+
+
 def copy_history(days: int = 8) -> None:
-    """Energy history lives in ClickHouse; the dashboard reads both tiers."""
-    for table, where in (("state_history_1h", f"bucket >= now() - INTERVAL {days} DAY"),
-                         ("state_history", "ts >= now() - INTERVAL 3 DAY")):
-        # Native is a BINARY format — read it as bytes, not text
-        proc = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", PROD,
-             f"docker exec dida-clickhouse clickhouse-client -q "  # noqa: S608
-             f"\"SELECT * FROM dida.{table} WHERE capability IN ('energy','power') "
-             f"AND {where} FORMAT Native\""],
-            capture_output=True, check=True)
-        with tempfile.NamedTemporaryFile("wb", suffix=".native", delete=False) as fh:
-            fh.write(proc.stdout)
-            tmp = fh.name
-        sh(["docker", "cp", tmp, f"dida-clickhouse:/tmp/{table}.native"])
-        sh(["docker", "exec", "dida-clickhouse", "sh", "-c",
-            f"clickhouse-client -q 'INSERT INTO dida.{table} FORMAT Native' < /tmp/{table}.native"])
-        Path(tmp).unlink(missing_ok=True)
+    """Replace the demo's energy window without replaying it through the rollup views."""
+    if type(days) is not int or days < 1:
+        raise ValueError("history days must be a positive integer")
+    lock_path = Path(__file__).resolve().parent.parent / "state" / ".demo-history.lock"
+    with lock_path.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        cutoff = int(_prod_history("SELECT toUnixTimestamp(toStartOfHour(now('UTC')))").strip())
+        snapshots = []
+        for table, column, window in (("state_history_1h", "bucket", days),
+                                      ("state_history", "ts", min(days, 3))):
+            snapshots.append(_prod_history(
+                f"SELECT * FROM dida.{table} WHERE capability IN ('energy','power') "  # noqa: S608
+                f"AND {column} >= toDateTime({cutoff}) - INTERVAL {window} DAY "
+                f"AND {column} < toDateTime({cutoff}) FORMAT Native"))
+        replace_history(_dev_history, _insert_history, *snapshots, _pause_history_writer)
 
     # point the dashboard at meters that actually report (production's own config
     # names plugs that have gone quiet, which would render an empty chart)

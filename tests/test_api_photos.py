@@ -16,6 +16,7 @@ from typing import ClassVar
 import dida_api.app as appmod
 import dida_api.opus as opus
 import dida_api.photos as photos
+from dida_api.auth import TOKEN_TTL, encode_session_token, ensure_wallpanel, fetch_user_by_username
 from dida_core import apply_migrations, jsonb_init, pg_pool
 from home_core.auth import hash_password
 from httpx import ASGITransport, AsyncClient, ConnectError
@@ -148,6 +149,7 @@ async def test_photos_come_from_opus(monkeypatch):
         assert r.status_code == 200
         assert r.headers["content-type"] == "image/jpeg"
         assert "private" in r.headers["cache-control"]
+        assert "no-store" in r.headers["cache-control"]
         w, h = _jpeg_size(r.content)
         assert w == photos._MAX_EDGE, f"not fitted under the panel's cap ({w}x{h})"
         assert abs(w / h - 2048 / 1152) < 0.01, "aspect ratio preserved"
@@ -170,7 +172,21 @@ async def test_photos_come_from_opus(monkeypatch):
         r = await c.post("/auth/login", json={"username": "photouser", "password": "userpw12"})
         assert r.status_code == 200
         r = await c.get("/photos/random")
-        assert r.status_code == 200, "any signed-in user (the wall panel) gets the slideshow"
+        assert r.status_code == 403
+        count = len(StubPlayer.calls)
+        assert (await c.get(f"/photos/{PHOTO_A}/preview")).status_code == 403
+        await pool.execute("UPDATE users SET allowed_pages = ARRAY['entry'] WHERE username = 'photouser'")
+        assert (await c.get("/photos/random")).status_code == 403
+        assert (await c.get(f"/photos/{PHOTO_A}/preview")).status_code == 403
+        assert len(StubPlayer.calls) == count
+
+    await ensure_wallpanel(pool)
+    panel = await fetch_user_by_username(pool, "wallpanel")
+    token = encode_session_token(panel.id, appmod.app.state.secret_key, token_version=panel.token_version, ttl=TOKEN_TTL)
+    async with AsyncClient(transport=ASGITransport(app=appmod.app), base_url="http://itest",
+                           headers={"Authorization": f"Bearer {token}"}) as c:
+        assert (await c.get("/photos/random")).status_code == 200
+        assert (await c.get(f"/photos/{PHOTO_A}/preview")).status_code == 200
 
     await _cleanup(pool)
     await pool.close()

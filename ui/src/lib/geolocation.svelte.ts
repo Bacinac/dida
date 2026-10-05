@@ -47,6 +47,7 @@ const FIX_OPTS: PositionOptions = {
 const FORCE_FIX_OPTS: PositionOptions = { ...FIX_OPTS, maximumAge: 0 };
 
 export type GeoStatus = "off" | "starting" | "active" | "denied" | "error" | "unsupported";
+type Fix = { lat: number; lon: number; accuracy: number; t: number };
 
 function readStored(): boolean {
   if (typeof window === "undefined") return false;
@@ -75,7 +76,9 @@ class GeoReporter {
 
   #watchId: number | null = null;
   #heartbeat: ReturnType<typeof setInterval> | null = null;
-  #last: { lat: number; lon: number; t: number } | null = null;
+  #last: Fix | null = null;
+  #attempt: Fix | null = null;
+  #revision = 0;
 
   #onVisibility = (): void => {
     // Foregrounded: force a fresh fix NOW — unlocking the phone at a new place
@@ -104,9 +107,11 @@ class GeoReporter {
       return;
     }
     this.status = "starting";
+    const revision = ++this.#revision;
     this.#watchId = navigator.geolocation.watchPosition(
-      (pos) => this.#onPosition(pos),
+      (pos) => { if (revision === this.#revision) this.#onPosition(pos); },
       (err) => {
+        if (revision !== this.#revision) return;
         this.status = err.code === err.PERMISSION_DENIED ? "denied" : "error";
       },
       FIX_OPTS,
@@ -118,6 +123,7 @@ class GeoReporter {
 
   /** Stop watching (called on logout + on disable). */
   stop(): void {
+    this.#revision++;
     if (this.#watchId !== null && typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.clearWatch(this.#watchId);
     }
@@ -125,6 +131,9 @@ class GeoReporter {
     if (this.#heartbeat !== null) clearInterval(this.#heartbeat);
     this.#heartbeat = null;
     this.#last = null;
+    this.#attempt = null;
+    this.lastAt = null;
+    this.zone = null;
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.#onVisibility);
       window.removeEventListener("online", this.#onOnline);
@@ -136,8 +145,9 @@ class GeoReporter {
    *  fine — the watch keeps trying. */
   #fix(): void {
     if (this.#watchId === null) return; // not running
+    const revision = this.#revision;
     navigator.geolocation.getCurrentPosition(
-      (pos) => this.#onPosition(pos, true),
+      (pos) => { if (revision === this.#revision) this.#onPosition(pos, true); },
       () => { /* transient */ },
       FORCE_FIX_OPTS,
     );
@@ -150,30 +160,40 @@ class GeoReporter {
   #flush(): void {
     if (!this.#last || Date.now() - this.#last.t > HEARTBEAT_MS) return;
     if (typeof navigator.sendBeacon !== "function") return;
-    const body = JSON.stringify({ latitude: this.#last.lat, longitude: this.#last.lon });
+    const body = JSON.stringify({ latitude: this.#last.lat, longitude: this.#last.lon,
+      accuracy: this.#last.accuracy, tst: this.#last.t / 1000 });
     navigator.sendBeacon("/api/presence/report", new Blob([body], { type: "application/json" }));
   }
 
   #onPosition(pos: GeolocationPosition, force = false): void {
     const { latitude, longitude, accuracy } = pos.coords;
     const now = Date.now();
-    if (!force && this.#last) {
-      const moved = distM(this.#last.lat, this.#last.lon, latitude, longitude);
-      if (now - this.#last.t < MIN_INTERVAL_MS && moved < MIN_MOVE_M) return; // throttle
+    if (!Number.isFinite(accuracy) || accuracy < 0) {
+      this.status = "error";
+      return;
     }
-    this.#last = { lat: latitude, lon: longitude, t: now };
+    if (!force && this.#attempt) {
+      const moved = distM(this.#attempt.lat, this.#attempt.lon, latitude, longitude);
+      if (now - this.#attempt.t < MIN_INTERVAL_MS && moved < MIN_MOVE_M && accuracy >= this.#attempt.accuracy) return;
+    }
+    const fix = { lat: latitude, lon: longitude, accuracy, t: pos.timestamp };
+    const revision = this.#revision;
+    this.#attempt = fix;
     api
-      .reportPresence(latitude, longitude, accuracy ?? undefined)
+      .reportPresence(latitude, longitude, fix.t / 1000, accuracy)
       .then((r) => {
+        if (revision !== this.#revision || (this.#last && fix.t < this.#last.t)) return;
         this.status = "active";
         // A rejected coarse fix isn't an error — the watch retries; keep the
         // last REGISTERED report time/zone so the UI reflects reality.
         if (r.accepted) {
-          this.lastAt = now;
+          this.#last = fix;
+          this.lastAt = fix.t;
           this.zone = r.zone ?? null;
         }
       })
       .catch(() => {
+        if (revision !== this.#revision || this.#attempt !== fix) return;
         this.status = "error";
       });
   }

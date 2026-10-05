@@ -21,6 +21,8 @@ class NativeBridge(private val activity: MainActivity) {
             .put("version", BuildConfig.VERSION_NAME)
             .put("provisioned", Prefs.isProvisioned(ctx))
             .put("username", Prefs.username(ctx) ?: JSONObject.NULL)
+            .put("userId", Prefs.userId(ctx) ?: JSONObject.NULL)
+            .put("origin", Prefs.identity(ctx)?.origin ?: JSONObject.NULL)
             .put("fineLocation", Permissions.hasFineLocation(ctx))
             .put("backgroundLocation", Permissions.hasBackgroundLocation(ctx))
             .put("batteryExempt", Permissions.isBatteryExempt(ctx))
@@ -33,6 +35,12 @@ class NativeBridge(private val activity: MainActivity) {
     fun startLocationSetup() {
         if (!activity.onOwnOrigin) return
         activity.runOnUiThread { activity.startLocationSetup() }
+    }
+
+    @JavascriptInterface
+    fun syncIdentity(userId: String, origin: String) {
+        if (!activity.onOwnOrigin) return
+        activity.runOnUiThread { activity.syncIdentity(userId, origin) }
     }
 
     /** Opens the in-app QR scanner (signed-out onboarding): scanning the setup

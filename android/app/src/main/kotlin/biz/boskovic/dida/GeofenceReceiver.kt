@@ -22,8 +22,11 @@ class GeofenceReceiver : BroadcastReceiver() {
             Geofence.GEOFENCE_TRANSITION_EXIT -> "leave"
             else -> return
         }
+        val revision = Prefs.revision(context) ?: return
+        val observedAtMs = System.currentTimeMillis()
         for (fence in event.triggeringGeofences.orEmpty()) {
-            TransitionWorker.enqueue(context, kind, fence.requestId)
+            val zone = GeofenceManager.zone(context, fence.requestId) ?: continue
+            TransitionWorker.enqueue(context, kind, zone, revision, observedAtMs)
         }
         // A fresh fix alongside the edge keeps the map current, not just presence.
         LocationEngine.requestOneFix(context.applicationContext)

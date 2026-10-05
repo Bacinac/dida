@@ -6,6 +6,7 @@ Runs in the api image; the runner supplies the ephemeral Postgres (tests/run.sh)
 import time
 
 import dida_api.app as appmod
+import pytest
 from dida_core import apply_migrations, jsonb_init, pg_pool
 from home_core.auth import hash_password
 from httpx import ASGITransport, AsyncClient
@@ -205,4 +206,40 @@ async def test_heating_config_round_trip():
     await pool.execute("DELETE FROM areas WHERE id = $1", area_id)
     await pool.execute("DELETE FROM entities WHERE entity_id LIKE 'zztest:heat:%'")
     await pool.execute("DELETE FROM app_settings WHERE key = 'heating'")
+    await pool.close()
+
+
+@pytest.mark.parametrize("operation", ["boost", "clear"])
+@pytest.mark.parametrize("access", ["allowed", "mixed_deny", "mixed_grant", "hidden", "empty_user", "empty_admin"])
+async def test_room_override_requires_every_destination(operation, access):
+    pool = await pg_pool(min_size=1, max_size=4, init=jsonb_init)
+    await apply_migrations(pool, "db/migrations")
+    area_id = await _setup(pool)
+    initial = {"override_target": 21, "override_until": time.time() + 3600}
+    await pool.execute("UPDATE areas SET heating_config = $2 WHERE id = $1", area_id, initial)
+    uid = await pool.fetchval("SELECT id FROM users WHERE username = 'heatuser'")
+    if access in ("mixed_deny", "mixed_grant", "hidden"):
+        if access == "mixed_grant":
+            await pool.execute("UPDATE users SET can_control = false WHERE id = $1", uid)
+        await pool.execute(
+            "INSERT INTO user_access_rules (user_id, kind, scope, ref) VALUES ($1, $2, 'entity', $3)",
+            uid, "view" if access == "hidden" else "control", DEAD_VALVE,
+        )
+    if access.startswith("empty"):
+        await pool.execute("UPDATE entities SET area_id = NULL WHERE area_id = $1", area_id)
+    appmod.app.state.pool = pool
+    appmod.app.state.secret_key = "heating-test-secret-0123456789abcdef"
+    appmod.app.state.bus = StubBus()
+    async with AsyncClient(transport=ASGITransport(app=appmod.app), base_url="http://itest") as client:
+        await _login(client, "heatadmin" if access == "empty_admin" else "heatuser")
+        path = f"/heating/rooms/{area_id}/boost"
+        response = (await client.post(path, json={"target": 24, "minutes": 30})
+                    if operation == "boost" else await client.delete(path))
+        expected = 200 if access in ("allowed", "empty_admin") else 404 if access == "hidden" else 403
+        assert response.status_code == expected
+        stored = await pool.fetchval("SELECT heating_config FROM areas WHERE id = $1", area_id)
+        if expected != 200:
+            assert stored == initial
+        else:
+            assert stored["override_target"] == (24 if operation == "boost" else None)
     await pool.close()

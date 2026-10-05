@@ -18,12 +18,14 @@ const api = {
   listAreas: vi.fn(),
   listDevices: vi.fn(),
 };
+const auth = { user: null as { id: string } | null, revision: 0 };
+class Unauthorized extends Error {}
 vi.mock("$lib/api", () => ({
   api,
   stateWs: vi.fn(),
-  Unauthorized: class Unauthorized extends Error {},
+  Unauthorized,
 }));
-vi.mock("$lib/auth.svelte", () => ({ auth: { user: null } }));
+vi.mock("$lib/auth.svelte", () => ({ auth }));
 vi.mock("$lib/translations.svelte", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
 
 const { devices, prettify } = await import("$lib/store.svelte");
@@ -42,6 +44,8 @@ function seed(entityId: string, patch: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks(); // these are hand-rolled vi.fn()s, not spies — restoreMocks doesn't reset their history
   for (const k of Object.keys(devices.byId)) delete devices.byId[k];
+  auth.user = null;
+  auth.revision++;
 });
 
 describe("optimistic updates", () => {
@@ -144,5 +148,39 @@ describe("snapshot load", () => {
     await devices.load();
     await devices.load();
     expect(api.listEntities).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts B's load while A's snapshot is pending and discards A's later response", async () => {
+    let release: (rows: never[]) => void = () => {};
+    api.listEntities.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    api.listState.mockResolvedValue([]);
+    api.listAreas.mockResolvedValue([]);
+    api.listDevices.mockResolvedValue([]);
+    auth.user = { id: "a" };
+    const first = devices.load();
+    auth.user = { id: "b" };
+    auth.revision++;
+    api.listEntities.mockResolvedValue([]);
+    await devices.load();
+    expect(api.listEntities).toHaveBeenCalledTimes(2);
+    release([{ entity_id: "private:a", capabilities: [], name: "Private A" } as never]);
+    await first;
+    expect(devices.byId["private:a"]).toBeUndefined();
+    expect(auth.user.id).toBe("b");
+  });
+
+  it("a rejected old snapshot cannot sign out the new user", async () => {
+    let reject: (error: Error) => void = () => {};
+    api.listEntities.mockImplementationOnce(() => new Promise((_, no) => { reject = no; }));
+    api.listState.mockResolvedValue([]);
+    api.listAreas.mockResolvedValue([]);
+    api.listDevices.mockResolvedValue([]);
+    auth.user = { id: "a" };
+    const first = devices.load();
+    auth.user = { id: "b" };
+    auth.revision++;
+    reject(new Unauthorized());
+    await first;
+    expect(auth.user.id).toBe("b");
   });
 });

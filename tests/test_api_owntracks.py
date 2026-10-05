@@ -15,6 +15,7 @@ dida_api.owntracks, capacity 5, separate from rate_limit.LOGIN and never reset
 between tests) is why this test only makes a handful of Basic-auth attempts.
 """
 import base64
+import time
 
 import dida_api.app as appmod
 from dida_core import apply_migrations, jsonb_init, pg_pool
@@ -29,6 +30,10 @@ class StubBus:
 
     def __init__(self):
         self.calls = []
+        self.nc = self
+
+    async def flush(self):
+        pass
 
     async def publish_state(self, update):
         self.calls.append(update)
@@ -74,12 +79,12 @@ async def test_owntracks_location_report():
 
     async with AsyncClient(transport=ASGITransport(app=appmod.app), base_url="http://itest") as c:
         # no Authorization header at all -> 401, no limiter/DB hit
-        r = await c.post("/owntracks", json={"_type": "location", "lat": lat, "lon": lon})
+        r = await c.post("/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon})
         assert r.status_code == 401, "a missing Authorization header is rejected"
 
         # well-formed Basic creds, wrong token -> 401, nothing published
         r = await c.post(
-            "/owntracks", json={"_type": "location", "lat": lat, "lon": lon},
+            "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon},
             headers=_basic("zzotuser", "wrong-token"),
         )
         assert r.status_code == 401, "a bad location token is rejected"
@@ -88,7 +93,7 @@ async def test_owntracks_location_report():
         # valid Basic creds + a minimal OwnTracks location frame -> accepted
         r = await c.post(
             "/owntracks",
-            json={"_type": "location", "lat": lat, "lon": lon, "tst": 1735689600, "acc": 10, "batt": 87},
+            json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon, "acc": 10, "batt": 87},
             headers=_basic("zzotuser", token),
         )
         assert r.status_code == 200, "a valid location report is accepted"
@@ -104,7 +109,7 @@ async def test_owntracks_location_report():
         # username matching is case-insensitive (phone keyboards auto-capitalize)
         bus.calls.clear()
         r = await c.post(
-            "/owntracks", json={"_type": "location", "lat": lat, "lon": lon},
+            "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon},
             headers=_basic("ZZOtUser", token),
         )
         assert r.status_code == 200, "username match is case-insensitive"

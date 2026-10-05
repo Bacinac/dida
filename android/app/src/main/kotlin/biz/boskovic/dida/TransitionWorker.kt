@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -20,8 +21,11 @@ class TransitionWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result {
         val event = inputData.getString("event") ?: return Result.failure()
         val zone = inputData.getString("zone") ?: return Result.failure()
+        val revision = inputData.getString("revision") ?: return Result.failure()
+        val stamp = LocationStamp(revision, inputData.getLong("observed_at", 0), inputData.getLong("sequence", -1))
+        if (!stamp.belongsTo(Prefs.revision(applicationContext))) return Result.success()
         val ok = withContext(Dispatchers.IO) {
-            OwnTracksClient.postTransition(applicationContext, event, zone)
+            OwnTracksClient.postTransition(applicationContext, event, zone, stamp)
         }
         return when {
             ok -> Result.success()
@@ -31,10 +35,14 @@ class TransitionWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     companion object {
-        fun enqueue(ctx: Context, event: String, zone: String) {
-            WorkManager.getInstance(ctx).enqueue(
+        fun enqueue(ctx: Context, event: String, zone: String, revision: String, observedAtMs: Long) {
+            val stamp = Prefs.stamp(ctx, observedAtMs, revision) ?: return
+            WorkManager.getInstance(ctx).enqueueUniqueWork(
+                "dida-transitions-${stamp.revision}", ExistingWorkPolicy.APPEND_OR_REPLACE,
                 OneTimeWorkRequestBuilder<TransitionWorker>()
-                    .setInputData(workDataOf("event" to event, "zone" to zone))
+                    .setInputData(workDataOf("event" to event, "zone" to zone, "revision" to stamp.revision,
+                        "observed_at" to stamp.observedAtMs, "sequence" to stamp.sequence))
+                    .addTag("dida-location")
                     .setConstraints(
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
                     )

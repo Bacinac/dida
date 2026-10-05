@@ -3,10 +3,26 @@
 
 import { api, Unauthorized, type Me } from "$lib/api";
 import { i18n, theme, type Locale, type Theme } from "$lib/kit";
+import { assistant } from "$lib/assistant.svelte";
 
 class AuthStore {
-  user = $state<Me | null>(null);
+  #user = $state<Me | null>(null);
+  #revision = 0;
   checked = $state(false); // initial /me probe done?
+
+  get user(): Me | null {
+    return this.#user;
+  }
+
+  get revision(): number {
+    return this.#revision;
+  }
+
+  set user(user: Me | null) {
+    this.#revision++;
+    assistant.setIdentity(user?.id ?? null);
+    this.#user = user;
+  }
 
   /** Admins configure (settings, rooms, automations, users); users only operate. */
   get isAdmin(): boolean {
@@ -32,8 +48,11 @@ class AuthStore {
   }
 
   async load(): Promise<void> {
+    const revision = this.#revision;
     try {
-      this.user = await api.me();
+      const user = await api.me();
+      if (revision !== this.#revision) return;
+      this.user = user;
       this.#applyPrefs();
     } catch (e) {
       // Only a 401 means "not authenticated". A 502/500/network failure means the
@@ -41,7 +60,7 @@ class AuthStore {
       // clearing `user` there logged an open tab out and bounced it to /login even
       // though its cookie was still perfectly valid. Keep the session on anything
       // that isn't a definitive rejection.
-      if (e instanceof Unauthorized) this.user = null;
+      if (e instanceof Unauthorized && revision === this.#revision) this.user = null;
     } finally {
       this.checked = true;
     }
@@ -49,7 +68,10 @@ class AuthStore {
 
   /** Throws on bad credentials / rate limit — the login page shows the message. */
   async login(username: string, password: string): Promise<void> {
-    this.user = await api.login(username, password);
+    const revision = ++this.#revision;
+    const user = await api.login(username, password);
+    if (revision !== this.#revision) return;
+    this.user = user;
     this.#applyPrefs();
   }
 
@@ -81,11 +103,8 @@ class AuthStore {
   }
 
   async logout(): Promise<void> {
-    try {
-      await api.logout();
-    } finally {
-      this.user = null;
-    }
+    this.user = null;
+    await api.logout();
   }
 }
 

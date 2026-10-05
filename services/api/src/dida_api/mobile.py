@@ -79,6 +79,7 @@ async def my_mobile_config(request: Request, user: AuthUser = Depends(current_us
             503, "DIDA_PUBLIC_URL is not externally reachable — set it to the tunnel origin"
         )
     return {
+        "user_id": str(user.id),
         "username": username,
         "token": token,
         "url": f"{public}/api/owntracks",

@@ -10,6 +10,7 @@ counters, not on delivery).
 """
 import asyncio
 import contextlib
+import json
 import time
 
 import msgspec
@@ -53,6 +54,28 @@ class StubHistory:
 
 def upd(cap, value, ts):
     return StateUpdate(entity_id="test:sensor:1", capability=cap, value=value, adapter="test", ts_ns=ts)
+
+
+async def test_next_occurrence_clear_replaces_the_persisted_date_and_is_published():
+    pool = await pg_pool(min_size=1, max_size=2, init=jsonb_init)
+    await apply_migrations(pool, "db/migrations")
+    eid = "test:calendar:1"
+    try:
+        await pool.execute("DELETE FROM current_state WHERE entity_id=$1", eid)
+        bus, history = StubBus(), StubHistory()
+        engine = Engine(bus, pool, history)
+        for value, stamp in [("2026-10-05", 1000), ("", 2000)]:
+            await engine.on_state(StateUpdate(entity_id=eid, capability="next_occurrence", value=value,
+                                              adapter="test", ts_ns=stamp))
+        assert engine._accepted == 2 and engine._rejected == 0
+        stored = await pool.fetchval("SELECT value FROM current_state WHERE entity_id=$1 AND capability='next_occurrence'", eid)
+        assert json.loads(stored) == ""
+        queued = await pool.fetch("SELECT payload FROM state_outbox")
+        updates = [_decode(bytes(row["payload"])) for row in queued]
+        assert [update.value for update in updates if update.entity_id == eid] == ["2026-10-05", ""]
+        assert [row[3] for row in history.rows] == ["2026-10-05", ""]
+    finally:
+        await pool.close()
 
 
 async def test_engine_projection_and_ts_ns_idempotency():

@@ -28,6 +28,30 @@ from fastapi import HTTPException
 ADMIN = AuthUser(id=1, username="marko", role="admin")
 
 
+@pytest.mark.parametrize("interval", [0, -1, True, 1.5, "2"])
+def test_invalid_intervals_are_rejected_at_the_api(interval):
+    with pytest.raises(HTTPException) as caught:
+        mod._validate("calendar", {"recurrence_type": "daily", "start_date": "2026-10-05", "interval": interval})
+    assert caught.value.status_code == 400
+
+
+def test_multiple_cycle_interval_requires_a_stable_start():
+    with pytest.raises(HTTPException, match="start_date"):
+        mod._validate("calendar", {"recurrence_type": "daily", "interval": 2})
+
+
+async def test_preview_uses_the_executed_interval_and_excludes_disabled_schedules():
+    from datetime import date
+    from unittest.mock import AsyncMock
+
+    params = {"recurrence_type": "weekly", "start_date": "2026-10-05", "weekdays": [0], "interval": 2}
+    pool = _Pool()
+    pool.fetch = AsyncMock(return_value=[{"id": 7, "kind": "calendar", "params": params, "enabled": True},
+                                        {"id": 8, "kind": "calendar", "params": params, "enabled": False}])
+    body = mod.SchedulePreviewIn(days=[date(2026, 10, 5), date(2026, 10, 12), date(2026, 10, 19)])
+    assert await mod.preview_schedules(body, _Request(pool), ADMIN) == [{"id": 7, "days": ["2026-10-05", "2026-10-19"]}]
+
+
 _DEFAULT_ROW = {"id": 7, "name": "Grijanje", "kind": "calendar", "params": {},
                 "enabled": True, "created_at": None}
 _ABSENT = object()  # `None` IS the case under test, so it cannot double as "unset"

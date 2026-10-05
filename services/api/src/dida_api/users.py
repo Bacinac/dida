@@ -149,45 +149,35 @@ async def update_user(user_id: int, body: UserPatch, request: Request,
     """Set role and/or reset password. A password reset bumps token_version so
     that user's other sessions are revoked."""
     pool = request.app.state.pool
+    fields = {}
     if body.role is not None:
-        role = _norm_role(body.role)
-        if role == "user" and await _is_last_admin(pool, user_id):
-            raise HTTPException(400, "at least one administrator must remain")
-        res = await pool.execute("UPDATE users SET role = $2 WHERE id = $1", user_id, role)
-        if res.endswith("0"):
-            raise HTTPException(404, "user does not exist")
+        fields["role"] = _norm_role(body.role)
     if body.password is not None:
-        # Reset severs EVERYTHING: bump token_version (kills live JWT sessions) and
-        # null the QR login_token (+ its expiry) so a leaked setup QR can't outlive
-        # the reset — the "changing a password severs every session" guarantee now
-        # holds for the bearer-token path too, not just cookies.
-        res = await pool.execute(
-            "UPDATE users SET password_hash = $2, token_version = token_version + 1, "
-            "login_token = NULL, login_token_expires_at = NULL WHERE id = $1",
-            user_id, await hash_password(body.password),
-        )
-        if res.endswith("0"):  # missing user → 404, matching the sibling branches
-            raise HTTPException(404, "user does not exist")
+        fields.update(password_hash=await hash_password(body.password),
+                      login_token=None, login_token_expires_at=None)
     if "allowed_pages" in body.model_fields_set:
-        res = await pool.execute(
-            "UPDATE users SET allowed_pages = $2 WHERE id = $1",
-            user_id, _norm_pages(body.allowed_pages),
-        )
-        if res.endswith("0"):
-            raise HTTPException(404, "user does not exist")
+        fields["allowed_pages"] = _norm_pages(body.allowed_pages)
     if body.can_control is not None:
-        res = await pool.execute(
-            "UPDATE users SET can_control = $2 WHERE id = $1", user_id, body.can_control
-        )
-        if res.endswith("0"):
+        fields["can_control"] = body.can_control
+    async with pool.acquire() as conn, conn.transaction():
+        if await conn.fetchval("SELECT id FROM users WHERE id = $1 FOR UPDATE", user_id) is None:
             raise HTTPException(404, "user does not exist")
-    # Full-replace the user's scoped rules, each kind independently, in one tx.
-    if "control_rules" in body.model_fields_set or "view_hides" in body.model_fields_set:
-        async with pool.acquire() as conn, conn.transaction():
-            if "control_rules" in body.model_fields_set:
-                await _replace_rules(conn, user_id, "control", body.control_rules)
-            if "view_hides" in body.model_fields_set:
-                await _replace_rules(conn, user_id, "view", body.view_hides)
+        if fields.get("role") == "user" and await _is_last_admin(conn, user_id):
+            raise HTTPException(400, "at least one administrator must remain")
+        if fields:
+            sets = [f"{key} = ${i + 2}" for i, key in enumerate(fields)]
+            if body.password is not None:
+                sets.append("token_version = token_version + 1")
+            await conn.execute(
+                f"UPDATE users SET {', '.join(sets)} WHERE id = $1",  # noqa: S608
+                user_id, *fields.values(),
+            )
+        if "control_rules" in body.model_fields_set:
+            await _replace_rules(conn, user_id, "control", body.control_rules)
+        if "view_hides" in body.model_fields_set:
+            await _replace_rules(conn, user_id, "view", body.view_hides)
+    if body.model_fields_set:
+        await request.app.state.hub.disconnect_user(user_id, 4401 if body.password is not None else 1012)
 
 
 @router.delete("/users/{user_id}", status_code=204)
@@ -200,6 +190,7 @@ async def delete_user(user_id: int, request: Request, admin: AuthUser = Depends(
     res = await pool.execute("DELETE FROM users WHERE id = $1", user_id)
     if res.endswith("0"):
         raise HTTPException(404, "user does not exist")
+    await request.app.state.hub.disconnect_user(user_id, 4401)
 
 
 # --- Phone setup provisioning ---

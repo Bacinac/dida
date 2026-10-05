@@ -115,6 +115,29 @@ async def _store(ctx: Ctx, adapter: str, key: str, value: str) -> None:
         adapter, key, value)
 
 
+async def _store_if_current(ctx: Ctx, adapter: str, key: str, current: str, value: str) -> bool:
+    if key != "_oauth":
+        raise Refused("only the OAuth grant supports conditional storage")
+    async with ctx.pool.acquire() as conn, conn.transaction():
+        previous = await conn.fetchval(
+            "SELECT value FROM adapter_config WHERE adapter = $1 AND key = $2 FOR UPDATE", adapter, key)
+        if previous is None:
+            return False
+        plain = decrypt_secret(ctx.secret, previous, adapter=adapter, key=key, raise_on_error=True)
+        if plain != current:
+            return False
+        await conn.execute(
+            "UPDATE adapter_config SET value = $3, updated_at = now() WHERE adapter = $1 AND key = $2",
+            adapter, key, encrypt_secret(ctx.secret, value))
+    return True
+
+
+async def _frigate_migrate(ctx: Ctx, adapter: str) -> dict:
+    from dida_api.frigate_identity import migrate_sites
+
+    return await migrate_sites(ctx.pool, ctx.secret)
+
+
 async def _entities(ctx: Ctx, adapter: str, prefix: str | None = None,
                     capability: str | None = None, own: bool = False) -> list[dict]:
     where, args = [], []
@@ -357,6 +380,8 @@ OPS: dict[str, tuple[Handler, frozenset[str] | None]] = {
     "config": (_config, None),
     "stored": (_stored, None),
     "store": (_store, None),
+    "store_if_current": (_store_if_current, frozenset({"smartthings"})),
+    "frigate_migrate": (_frigate_migrate, frozenset({"frigate"})),
     "entities": (_entities, None),
     "forget": (_forget, None),
     "state": (_state, None),

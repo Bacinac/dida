@@ -11,6 +11,7 @@
 # the end and the run FAILS if total line coverage drops below COV_MIN.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+sh "$ROOT/tests/image-catalog.sh" --check
 # Per-run coverage dir (PID-suffixed) so CONCURRENT gate runs — e.g. a parallel
 # session's own pre-push hook — don't clobber each other's data files under the
 # shared /w mount (a shared .cov gave a partial combine → false low coverage).
@@ -81,7 +82,7 @@ trap 'cleanup; rm -rf "$COV"' EXIT
 trap 'cleanup; rm -rf "$COV"; exit 143' INT TERM HUP
 PYDEPS="pytest pytest-cov pytest-asyncio coverage"
 INSTALL="uv pip install --python /opt/venv/bin/python -q $PYDEPS >/dev/null 2>&1"
-RUN="docker run --rm -e UV_CACHE_DIR=/uvcache -v dida-uv-cache:/uvcache -v $ROOT:/w -w /w --entrypoint sh"
+RUN="docker run --rm --pull=never -e UV_CACHE_DIR=/uvcache -v dida-uv-cache:/uvcache -v $ROOT:/w -w /w --entrypoint sh"
 
 # Supply chain, before any test: a secret or a known-vulnerable dependency stops the
 # push instead of being found after it. Both scan what git would ship (tracked and
@@ -133,7 +134,7 @@ fi
 # we REQUIRE every image, so a partial build is a loud failure, never a quiet pass.)
 REQUIRED="base api automation engine journal netmgr adapter-notify adapter-frigate adapter-broadlink adapter-homekit adapter-govee adapter-announce adapter-ecowitt adapter-mqtt adapter-shelly adapter-esphome adapter-tuya adapter-smartthings \
   adapter-androidtv adapter-samsungtv adapter-opus adapter-cast adapter-dlna adapter-denon adapter-harmony adapter-heos adapter-volumio \
-  adapter-calendar adapter-contacts adapter-baba adapter-roidmi adapter-dreame adapter-panasonic adapter-cloudflare planvision"
+  adapter-calendar adapter-contacts adapter-baba adapter-roidmi adapter-dreame adapter-panasonic adapter-cloudflare adapter-presence adapter-unifi planvision"
 missing=""
 for name in $REQUIRED; do
   docker image inspect "dida/$name:latest" >/dev/null 2>&1 || missing="$missing dida/$name"
@@ -327,25 +328,25 @@ docker run --rm --network "$NET" $APPENV $CHENV -e UV_CACHE_DIR=/uvcache -v dida
   -v "$ROOT:/w" -w /w --entrypoint sh dida/engine:latest \
   -c "$INSTALL; export PYTHONPATH=$PP_ENGINE COVERAGE_FILE=/w/$COVN/.coverage.eng; \
       python -m pytest -q --no-header --cov=dida_engine --cov-report= \
-        tests/test_engine_service.py tests/test_engine_projection.py tests/test_engine_lifecycle.py tests/test_history_writer.py tests/test_history_schema_fault.py \
-        tests/test_device_rename.py tests/test_engine_reachability.py tests/test_day_rollup.py"
+        tests/test_engine_service.py tests/test_engine_projection.py tests/test_engine_lifecycle.py tests/test_history_writer.py tests/test_history_schema_fault.py tests/test_history_retry.py \
+        tests/test_device_rename.py tests/test_engine_reachability.py tests/test_day_rollup.py tests/test_demo_history.py"
 docker run --rm --network "$NET" $APPENV -e UV_CACHE_DIR=/uvcache -v dida-uv-cache:/uvcache \
   -e DIDA_SECRET_KEY="$SECRET" \
   -v "$ROOT:/w" -w /w --entrypoint sh dida/api:latest \
   -c "$INSTALL; export PYTHONPATH=$PP_API COVERAGE_FILE=/w/$COVN/.coverage.apiint; \
       python -m pytest -q --no-header --cov=dida_api --cov-report= \
-        tests/test_api_auth.py tests/test_api_command_permissions.py tests/test_api_users.py \
+        tests/test_api_auth.py tests/test_api_live_access.py tests/test_api_command_permissions.py tests/test_api_users.py \
         tests/test_api_zones.py tests/test_api_areas.py tests/test_api_floors.py \
         tests/test_api_devices.py tests/test_api_settings.py tests/test_api_scenes.py \
         tests/test_api_automations.py tests/test_api_retention.py tests/test_api_adapters.py \
-        tests/test_api_owntracks.py tests/test_api_virtual.py tests/test_api_computed.py \
+        tests/test_api_owntracks.py tests/test_presence_order.py tests/test_api_virtual.py tests/test_api_computed.py \
         tests/test_api_entry.py tests/test_api_system.py tests/test_api_entities.py \
         tests/test_api_backup.py tests/test_api_floors_more.py tests/test_api_energy_more.py \
         tests/test_api_owntracks_more.py tests/test_api_users_more.py tests/test_api_alerts.py \
         tests/test_api_boundary_more.py tests/test_api_mobile.py tests/test_api_photos.py \
         tests/test_api_translations.py tests/test_onboarding_flow.py \
         tests/test_api_panel.py tests/test_api_assistant.py tests/test_api_heating.py \
-        tests/test_api_contacts.py tests/test_api_upkeep.py tests/test_api_broker.py"
+        tests/test_api_contacts.py tests/test_api_oauth.py tests/test_api_upkeep.py tests/test_api_broker.py"
 # The roles themselves, in their own database from the superuser's seat: the upgrade
 # a house takes (tables the superuser owns, handed over, the new migration applied by
 # the app role) and what each role is refused.
@@ -447,7 +448,10 @@ adapter_test mqtt tests/test_mqtt_lifecycle.py tests/test_zigbee_onboarding.py
 adapter_test shelly
 adapter_test esphome tests/test_esphome_lifecycle.py
 adapter_test tuya tests/test_tuya_lifecycle.py
-adapter_test smartthings tests/test_smartthings_reachability.py
+echo "== presence report freshness =="
+$RUN dida/adapter-presence:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters/presence/src COVERAGE_FILE=/w/$COVN/.coverage.presence; \
+  python -m pytest -q --no-header --cov=dida_adapter_presence --cov-report= tests/test_presence_adapter.py"
+adapter_test smartthings tests/test_smartthings_reachability.py tests/test_smartthings_lifecycle.py
 adapter_test contacts
 adapter_test androidtv tests/test_androidtv_lifecycle.py
 adapter_test cast
@@ -481,13 +485,13 @@ $RUN dida/adapter-denon:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters
 # cloudflare parses and rewrites whichever ingress the installation carries, so its
 # tests are named for the two files rather than the _mapping.py the helper assumes —
 # there is no device state to map, only a file whose round-trip must not move a route.
-$RUN dida/adapter-cloudflare:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters/cloudflare/src COVERAGE_FILE=/w/$COVN/.coverage.cloudflare; \
-  python -m pytest -q --no-header --cov=dida_adapter_cloudflare --cov-report= tests/test_cloudflare_source.py tests/test_cloudflare_tunnel.py"
+$RUN dida/adapter-cloudflare:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters/cloudflare/src:/w/services/runner/src COVERAGE_FILE=/w/$COVN/.coverage.cloudflare; \
+  python -m pytest -q --no-header --cov=dida_adapter_cloudflare --cov-report= tests/test_cloudflare_source.py tests/test_cloudflare_tunnel.py tests/test_cloudflare_apply.py"
 
 # calendar's recurrence math (test_calendar.py) — its own image: the suite imports
 # dida_adapter_calendar, which the api image does not carry.
 $RUN dida/adapter-calendar:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters/calendar/src COVERAGE_FILE=/w/$COVN/.coverage.calendar; \
-  python -m pytest -q --no-header --cov=dida_adapter_calendar --cov-report= tests/test_calendar.py"
+  python -m pytest -q --no-header --cov=dida_adapter_calendar --cov=dida_core.schedules --cov-report= tests/test_calendar.py tests/test_calendar_lifecycle.py"
 
 # netmgr's VLAN reconcile primitives — its own image (dida_netmgr isn't in the api
 # image). The placeholder-vs-lease distinction and the dhclient host-name escaping
@@ -495,7 +499,7 @@ $RUN dida/adapter-calendar:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapt
 # attacker-shaped text into a dhclient config. The image runs as root, so bytecode
 # it wrote into the mounted source would be a directory its owner cannot delete.
 $RUN -e PYTHONDONTWRITEBYTECODE=1 dida/netmgr:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/services/netmgr/src COVERAGE_FILE=/w/$COVN/.coverage.netmgr; \
-  python -m pytest -q --no-header --cov=dida_netmgr --cov-report= tests/test_netmgr.py tests/test_netmgr_journal.py"
+  python -m pytest -q --no-header --cov=dida_netmgr --cov-report= tests/test_netmgr.py tests/test_netmgr_journal.py tests/test_netmgr_startup.py"
 
 # planvision's CV pipeline (test_planvision.py) — needs opencv + numpy, which live
 # only in its own image.

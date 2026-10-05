@@ -1,16 +1,19 @@
 """Regression tests for the engine HistoryWriter buffer (dida_engine.history) —
 the ClickHouse firehose's degraded-path robustness the audit flagged as untested.
 
-Pure buffer logic + the re-buffer-on-failure path over a stub CH client; no infra
+Pure buffer logic + immutable retry batches over a stub CH client; no infra
 (the pool + real ClickHouse are never touched — value coercion, the drop-oldest
 hard cap, and 'a failed insert loses nothing' are all in-memory).
 
     docker run --rm -v /mnt/docker/dida:/w -w /w --entrypoint sh dida/engine:latest \
       -c "python -m pytest tests/test_history_writer.py"
 """
+import asyncio
+
+import pytest
+from dida_engine import history
 from dida_engine.history import (
     BUFFER_CAP,
-    COLUMNS,
     MIRRORED_ADAPTER,
     NON_HISTORIZED,
     HistoryWriter,
@@ -63,28 +66,139 @@ def test_drop_oldest_at_cap_never_ooms():
 
 
 class StubClient:
-    """A CH client whose insert always fails — to exercise the re-buffer path."""
+    """A CH client whose insert always fails."""
 
     def __init__(self):
         self.closed = False
 
-    async def insert(self, table, rows, column_names):
+    async def insert(self, table, rows, column_names, settings):
         raise RuntimeError("clickhouse down")
 
     async def close(self):
         self.closed = True
 
 
-async def test_flush_rebuffers_on_insert_failure():
-    # A ClickHouse insert failing mid-flush must RE-BUFFER the rows (order preserved),
-    # never lose them, and drop the client so the next flush reconnects. This is the
-    # whole reason HistoryWriter buffers instead of writing inline.
+def ready(writer, client):
+    writer._client = client
+    writer._schema_ready = True
+    writer._next_day_tz_check = float("inf")
+
+
+async def test_flush_preserves_retry_on_insert_failure():
     hw = make()
     hw.enqueue("s:1", "temperature", "test", 1.0, 1_000_000_000)
     hw.enqueue("s:1", "temperature", "test", 2.0, 2_000_000_000)
     client = StubClient()
-    hw._client = client
-    await hw._flush_table("state_history", hw._buf, COLUMNS)
-    assert len(hw._buf) == 2, "a failed insert re-buffers both rows — nothing is lost"
-    assert [r[4] for r in hw._buf] == [1.0, 2.0], "re-buffer preserves original order"
+    ready(hw, client)
+    await hw.flush()
+    assert hw.stats()["buffered"] == 2
+    assert [r[4] for r in hw._pending] == [1.0, 2.0]
     assert hw._client is None and client.closed, "the client is dropped+closed so the next flush reconnects"
+
+
+class BlockedClient(StubClient):
+    def __init__(self, fail=True):
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.calls = []
+        self.fail = fail
+
+    async def insert(self, table, rows, column_names, settings):
+        self.calls.append((rows, dict(settings)))
+        self.started.set()
+        await self.release.wait()
+        if self.fail:
+            raise RuntimeError("lost insert response")
+
+
+async def test_rollup_reconfiguration_waits_for_the_pending_retry(monkeypatch):
+    hw = make()
+    hw.enqueue("s:1", "temperature", "test", 1, 1_000_000_000)
+    ready(hw, StubClient())
+    assert await hw.flush() is False
+    hw.enqueue("s:1", "temperature", "test", 2, 2_000_000_000)
+    client = BlockedClient(fail=False)
+    client.release.set()
+    ready(hw, client)
+    hw._day_tz = "UTC"
+    hw._next_day_tz_check = 0
+    checks = []
+
+    async def timezone(pool):
+        from zoneinfo import ZoneInfo
+        checks.append(pool)
+        return ZoneInfo("UTC")
+
+    monkeypatch.setattr(history, "house_timezone", timezone)
+    assert await hw.flush() is True
+    assert checks == []
+    assert await hw.flush() is True
+    assert checks == [None]
+
+
+@pytest.mark.parametrize("batch_size", [2, 3])
+async def test_slow_repeated_failures_bound_retry_and_new_rows_together(monkeypatch, batch_size):
+    monkeypatch.setattr(history, "BUFFER_CAP", 3)
+    monkeypatch.setattr(history, "BATCH_SIZE", batch_size)
+    hw = make()
+    for value in range(3):
+        hw.enqueue("s:1", "temperature", "test", value, 1_000_000_000)
+    batches = []
+    for attempt in range(4):
+        client = BlockedClient()
+        ready(hw, client)
+        task = asyncio.create_task(hw.flush())
+        await client.started.wait()
+        for value in range(3):
+            hw.enqueue("s:1", "temperature", "test", 10 + attempt * 3 + value, 1_000_000_000)
+            assert len(hw._buf) + len(hw._pending) == 3
+            assert hw.stats()["buffered"] == 3
+        client.release.set()
+        assert await task is False
+        batches.extend(client.calls)
+    assert hw.stats()["dropped"] == 12
+    assert all(batch == batches[0] for batch in batches)
+    if batch_size == 2:
+        assert [row[4] for row in hw._buf] == [21.0]
+
+
+async def test_cancellation_keeps_the_same_batch_before_new_rows():
+    hw = make()
+    hw.enqueue("s:1", "temperature", "test", 1, 1_000_000_000)
+    first = BlockedClient()
+    ready(hw, first)
+    task = asyncio.create_task(hw.flush())
+    await first.started.wait()
+    hw.enqueue("s:1", "temperature", "test", 2, 2_000_000_000)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    second = BlockedClient(fail=False)
+    second.release.set()
+    ready(hw, second)
+    assert await hw.flush() is True
+    assert second.calls == first.calls
+    assert hw.stats()["buffered"] == 1
+    assert await hw.flush() is True
+    assert second.calls[-1][0][0][4] == 2.0
+    assert second.calls[-1][1] != first.calls[0][1]
+
+
+async def test_concurrent_flushes_and_close_drain_separate_batches(monkeypatch):
+    monkeypatch.setattr(history, "BATCH_SIZE", 1)
+    hw = make()
+    for value in range(3):
+        hw.enqueue("s:1", "temperature", "test", value, 1_000_000_000)
+    client = BlockedClient(fail=False)
+    ready(hw, client)
+    first = asyncio.create_task(hw.flush())
+    await client.started.wait()
+    second = asyncio.create_task(hw.flush())
+    await asyncio.sleep(0)
+    assert len(client.calls) == 1
+    client.release.set()
+    assert await first is True and await second is True
+    await hw.close()
+    assert [batch[0][0][4] for batch in client.calls] == [0.0, 1.0, 2.0]
+    assert hw.stats()["buffered"] == 0 and client.closed

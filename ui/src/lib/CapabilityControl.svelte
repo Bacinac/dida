@@ -248,6 +248,7 @@
       <span class="min-w-0 flex-1 [overflow-wrap:anywhere] text-right font-mono text-m tabular-nums">
         {#if capability === "object_class"}{objectClass}
         {:else if capability === "mower_error"}{mowerErrorLabel(String(cs.value))}
+        {:else if capability === "next_occurrence" && cs.value === ""}—
         {:else if capability === "identity_presence"}<span class="flex min-w-0 flex-col items-end gap-0.5 text-right"><span>{identityPresence}</span>{#if identityNote}<span class="text-s font-sans tabular-nums text-dida-text-faint">{identityNote}</span>{/if}</span>
         {:else}{typeof cs.value === "number" ? formatValue(capability, cs.value) : tr(String(cs.value))}{/if}
         <span class="text-dida-text-faint">{unit}</span>

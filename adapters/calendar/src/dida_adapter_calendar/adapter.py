@@ -3,35 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import math
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from dida_core import AdapterConfig, Bus, EntityInfo, StateUpdate
+from dida_core.schedules import next_occurrence, schedule_active
 from home_core.tasks import spawn
 
 log = logging.getLogger("dida.adapter.calendar")
 
 NAMESPACE = "calendar"
 RELOAD_INTERVAL = 5.0
-
-
-def _parse_ymd(s) -> date | None:
-    try:
-        y, m, d = (int(x) for x in str(s).split("-"))
-        return date(y, m, d)
-    except (ValueError, AttributeError):
-        return None
-
-
-def _in_yearly_window(today: date, start: tuple[int, int], end: tuple[int, int]) -> bool:
-    """True if today's (month, day) is within the yearly window [start, end] —
-    repeats every year (year is ignored). end < start wraps the New Year."""
-    md = (today.month, today.day)
-    if start <= end:
-        return start <= md <= end
-    return md >= start or md <= end
 
 
 class CalendarAdapter:
@@ -47,10 +30,10 @@ class CalendarAdapter:
         month-day to end_date's month-day (so "daily 05-01 → 10-01" recurs every
         year while enabled), and
       * (D − day_offset) matches the recurrence pattern:
-          daily   → every day
-          weekly  → the selected weekdays
-          monthly → a day-of-month, or the Nth weekday (e.g. 3rd Friday)
-          yearly  → start_date's month-day
+          daily   → every interval days
+          weekly  → the selected weekdays every interval weeks
+          monthly → a day-of-month or Nth weekday every interval months
+          yearly  → start_date's month-day every interval years
           once    → exactly start_date
     `day_offset` shifts the active day off the pattern day (e.g. notify the day
     BEFORE the 3rd Friday → offset −1). Implements `dida_core.Adapter`.
@@ -68,7 +51,7 @@ class CalendarAdapter:
         self._tz = ZoneInfo("Europe/Zagreb")
         self._known: set[str] = set()
         self._active: dict[str, bool] = {}
-        self._next: dict[str, str | None] = {}  # dedupe — republish only when the date moves
+        self._next: dict[str, str] = {}  # dedupe — republish only when the date moves
 
     async def start(self, bus: Bus) -> None:
         self._bus = bus
@@ -114,7 +97,8 @@ class CalendarAdapter:
                     params = json.loads(params or "{}")
                 if not isinstance(params, dict):
                     params = {}
-                active = bool(row["enabled"]) and self._beat_active(today, params)
+                active = bool(row["enabled"]) and schedule_active(today, params)
+                nxt = (next_occurrence(today, params) or "") if row["enabled"] else ""
             except Exception as exc:
                 log.warning("calendar %s: bad config (%s)", name, exc, exc_info=True)
                 continue
@@ -126,11 +110,9 @@ class CalendarAdapter:
             # "When is the next bin collection" is the question people actually ask;
             # schedule_active only answers "is it today". Disabled schedules publish
             # no date — an announced date for a rule that will not fire is a lie.
-            nxt = self._next_occurrence(today, params) if row["enabled"] else None
             if self._next.get(eid) != nxt:
                 self._next[eid] = nxt
-                if nxt is not None:
-                    self._pub_next(eid, nxt, name)
+                self._pub_next(eid, nxt, name)
         self.status.ok(f"{live} schedule{'s' if live != 1 else ''}")
 
     async def _resolve_tz(self) -> ZoneInfo:
@@ -152,51 +134,6 @@ class CalendarAdapter:
             except Exception as exc:
                 log.warning("calendar: invalid tz %r (%s); keeping %s", name, exc, self._tz_name, exc_info=True)
         return self._tz
-
-    def _next_occurrence(self, today: date, params: dict, horizon: int = 400) -> str | None:
-        """ISO date of the next day this schedule is active, today included.
-
-        A forward scan over the SAME `_beat_active` the live value uses — so the
-        announced date and the day the schedule actually fires can never disagree.
-        The horizon covers a yearly recurrence with room to spare; past it there is
-        genuinely nothing to announce (an expired end_date), and None is the honest
-        answer rather than a wrong date.
-        """
-        for delta in range(horizon):
-            day = today + timedelta(days=delta)
-            if self._beat_active(day, params):
-                return day.isoformat()
-        return None
-
-    def _beat_active(self, today: date, params: dict) -> bool:
-        offset = int(params.get("day_offset", 0) or 0)
-        sd = _parse_ymd(params.get("start_date")) or today
-        anchor = today - timedelta(days=offset)  # the recurrence day this active-day maps to
-        if anchor < sd:
-            return False
-        ed = _parse_ymd(params.get("end_date"))
-        if ed is not None and not _in_yearly_window(today, (sd.month, sd.day), (ed.month, ed.day)):
-            return False
-        return self._recurrence_matches(anchor, params, sd)
-
-    def _recurrence_matches(self, d: date, params: dict, sd: date) -> bool:
-        rt = str(params.get("recurrence_type", "daily"))
-        if rt == "daily":
-            return True
-        if rt == "once":
-            return d == sd
-        if rt == "weekly":
-            days = [int(x) for x in (params.get("weekdays") or [])]
-            return d.weekday() in days  # Mon=0 … Sun=6, matches the UI
-        if rt == "monthly":
-            if str(params.get("monthly_mode", "day")) == "day":
-                return d.day == int(params.get("monthly_day", sd.day))
-            wd = int(params.get("monthly_weekday", 0))
-            occ = int(params.get("week_occurrence", 1))
-            return d.weekday() == wd and math.ceil(d.day / 7) == occ
-        if rt == "yearly":
-            return (d.month, d.day) == (sd.month, sd.day)
-        return False
 
     def _announce(self, eid: str, name: str) -> None:
         if eid in self._known or self._bus is None:

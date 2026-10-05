@@ -17,6 +17,8 @@ import logging
 
 from dida_core import probe_hosts, subnet_hosts
 
+from dida_adapter_tuya.mapping import NUMERIC_CAPS
+
 log = logging.getLogger("dida.adapter.tuya.cloud")
 
 TUYA_PORT = 6668
@@ -95,7 +97,12 @@ def auto_dps(mapping: dict | None) -> tuple[dict, list[str]]:
         code = str(info.get("code") or "").lower()
         typ = str(info.get("type") or "").lower()
         if code in _CODE_CAP:
-            dps[str(dp_id)] = _CODE_CAP[code]
+            cap = _CODE_CAP[code]
+            if cap in NUMERIC_CAPS:
+                values = _values(info)
+                dps[str(dp_id)] = {"cap": cap, "scale": values.get("scale", 0), "unit": values.get("unit")}
+            else:
+                dps[str(dp_id)] = cap
         elif code in _ENUM_CODES or typ == "enum":
             rng = _values(info).get("range")
             if isinstance(rng, list) and rng:

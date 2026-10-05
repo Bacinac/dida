@@ -10,17 +10,17 @@ published non-diagnostic so the entity stays a curated presence card.
 
 from __future__ import annotations
 
-import json
+import math
 import re
-import time
 
-from dida_core import MAX_ACCURACY_M, StateUpdate, resolve_zone
+from dida_core import MAX_ACCURACY_M, resolve_zone
+
+from dida_api.presence_order import publish_ordered
+from dida_api.presence_order import timestamp_ns as timestamp_ns
 
 AWAY = "away"
 
 _SLUG = re.compile(r"[^a-z0-9_-]+")
-
-Scalar = bool | int | float | str
 
 
 def _entity_for(username: str) -> tuple[str, str]:
@@ -30,7 +30,8 @@ def _entity_for(username: str) -> tuple[str, str]:
     return f"presence:{slug}", username[:1].upper() + username[1:]
 
 
-async def publish_transition(state, username: str, event: str, desc: str) -> dict:
+async def publish_transition(state, username: str, event: str, desc: str, *, observed_ns: int,
+                             sequence: int | None = None, reporter: str | None = None) -> dict:
     """Honour an OwnTracks region transition — the phone-side geofence enter/leave
     that significant-change monitoring fires when it crosses a DIDA zone we pushed
     as a waypoint. This is the event-driven presence edge the network ARP signal
@@ -45,32 +46,11 @@ async def publish_transition(state, username: str, event: str, desc: str) -> dic
     if ev == "enter" and desc:
         value: str = desc
     elif ev == "leave" and desc:
-        row = await state.pool.fetchrow(
-            "SELECT value FROM current_state WHERE entity_id = $1 AND capability = 'location'",
-            entity_id,
-        )
-        current = row["value"] if row else None
-        if isinstance(current, str):
-            try:  # raw jsonb text ('"Island House"') without the jsonb codec
-                decoded = json.loads(current)
-                if isinstance(decoded, str):
-                    current = decoded
-            except ValueError:
-                pass
-        if current != desc:
-            # They've already moved on (or we never had them here) — a leave for a
-            # zone we're not at is stale; ignore it rather than force "away".
-            return {"accepted": False, "reason": "stale_leave", "zone": current}
         value = AWAY
     else:
         return {"accepted": False, "reason": "unhandled_event"}
-    await state.bus.publish_state(
-        StateUpdate(
-            entity_id=entity_id, capability="location", value=value,
-            adapter="presence", ts_ns=time.time_ns(), name=name, diagnostic=False,
-        )
-    )
-    return {"accepted": True, "zone": value}
+    return await publish_ordered(state, username, entity_id, name, observed_ns, [("location", value)],
+                                 event=ev, desc=desc, sequence=sequence, reporter=reporter)
 
 
 async def publish_report(
@@ -80,10 +60,13 @@ async def publish_report(
     longitude: float,
     accuracy: float | None = None,
     battery: float | None = None,
+    *, observed_ns: int, sequence: int | None = None, reporter: str | None = None,
 ) -> dict:
     """Resolve the zone and publish location/lat/lon/battery for `username`.
     Returns `{accepted, zone}` (or `{accepted: False, reason}` for a fix too
     coarse to trust) so the reporting device can show what got registered."""
+    if accuracy is not None and (not math.isfinite(accuracy) or accuracy < 0):
+        return {"accepted": False, "reason": "invalid_accuracy"}
     if accuracy is not None and accuracy > MAX_ACCURACY_M:
         return {"accepted": False, "reason": "low_accuracy"}
     rows = await state.pool.fetch("SELECT name, latitude, longitude, radius_m FROM zones")
@@ -91,19 +74,8 @@ async def publish_report(
     location = resolve_zone(latitude, longitude, zones, acc_m=accuracy or 0.0)
 
     entity_id, name = _entity_for(username)
-    ts = time.time_ns()
-
-    async def pub(capability: str, value: Scalar) -> None:
-        await state.bus.publish_state(
-            StateUpdate(
-                entity_id=entity_id, capability=capability, value=value,
-                adapter="presence", ts_ns=ts, name=name, diagnostic=False,
-            )
-        )
-
-    await pub("location", location)
-    await pub("latitude", round(latitude, 6))
-    await pub("longitude", round(longitude, 6))
+    values = [("location", location), ("latitude", round(latitude, 6)), ("longitude", round(longitude, 6))]
     if battery is not None:
-        await pub("battery", float(battery))
-    return {"accepted": True, "zone": location}
+        values.append(("battery", float(battery)))
+    return await publish_ordered(state, username, entity_id, name, observed_ns, values,
+                                 sequence=sequence, reporter=reporter)

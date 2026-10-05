@@ -21,6 +21,7 @@ RUN=(docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/project" 
 # docker/apt-https.sh rule from there like every other image does. .dockerignore
 # keeps that context at ~8 MB, so it is no more expensive than android/ was.
 docker image inspect "$IMG" >/dev/null 2>&1 || docker build -t "$IMG" -f builder.Dockerfile ..
+bash ./test-urls.sh
 # Docker creates a named volume root-owned; the build runs as us, so the cache is ours.
 docker run --rm -v dida-gradle-cache:/gradle-cache "$IMG" \
   find /gradle-cache \( ! -user "$(id -u)" -o ! -group "$(id -g)" \) -exec chown -h "$(id -u):$(id -g)" {} +

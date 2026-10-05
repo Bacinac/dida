@@ -9,6 +9,8 @@ the live values with it. Runs in the api image; DIDA_SECRET_KEY comes from the g
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 
 import pytest
@@ -34,6 +36,11 @@ async def _cleanup(pool) -> None:
     await pool.execute("DELETE FROM areas WHERE name = 'zzb-room'")
     await pool.execute("DELETE FROM adapter_config WHERE adapter IN ('smartthings', 'samsungtv', 'tuya')")
     await pool.execute("DELETE FROM app_settings WHERE key IN ('opus_token', 'contacts_sync_requested')")
+    await pool.execute("DELETE FROM entities WHERE adapter = 'frigate' AND entity_id LIKE '%zzbfront%'")
+    await pool.execute("DELETE FROM devices WHERE adapter = 'frigate' AND device_key LIKE '%zzbfront%'")
+    await pool.execute("DELETE FROM adapter_config WHERE adapter = 'frigate'")
+    await pool.execute("DELETE FROM automations WHERE name = 'zzb-frigate-rule'")
+    await pool.execute("DELETE FROM users WHERE username = 'zzb-frigate-user'")
 
 
 async def _ask(ctx, adapter: str, op: str, **args):
@@ -51,6 +58,62 @@ async def test_an_adapters_secret_is_sealed_at_rest_and_plain_to_it(ctx):
     await _ask(ctx, "samsungtv", "store", key="_device", value='{"mac": "aa"}')
     raw = await ctx.pool.fetchval("SELECT value FROM adapter_config WHERE adapter = 'samsungtv' AND key = '_device'")
     assert raw == '{"mac": "aa"}', "what is not a secret stays readable in the database"
+
+
+async def test_token_refresh_cannot_restore_a_deleted_or_replaced_grant(ctx):
+    old, rolled, replacement = '{"refresh_token":"old"}', '{"refresh_token":"rolled"}', '{"refresh_token":"new-account"}'
+    await _ask(ctx, "smartthings", "store", key="_oauth", value=old)
+    assert await _ask(ctx, "smartthings", "store_if_current", key="_oauth", current=old, value=rolled) is True
+    await ctx.pool.execute("DELETE FROM adapter_config WHERE adapter = 'smartthings' AND key = '_oauth'")
+    assert await _ask(ctx, "smartthings", "store_if_current", key="_oauth", current=rolled, value=old) is False
+    assert await _ask(ctx, "smartthings", "stored", key="_oauth") is None
+    await _ask(ctx, "smartthings", "store", key="_oauth", value=replacement)
+    assert await _ask(ctx, "smartthings", "store_if_current", key="_oauth", current=rolled, value=old) is False
+    assert await _ask(ctx, "smartthings", "stored", key="_oauth") == replacement
+    assert "error" in await api.answer(ctx, "presence", {"op": "store_if_current", "args": {}})
+
+
+async def test_concurrent_refreshes_have_only_one_winner(ctx):
+    await _ask(ctx, "smartthings", "store", key="_oauth", value="old")
+    results = await asyncio.gather(*(_ask(ctx, "smartthings", "store_if_current", key="_oauth", current="old", value=value)
+                                    for value in ("rolled-a", "rolled-b")))
+    assert sorted(results) == [False, True]
+    assert await _ask(ctx, "smartthings", "stored", key="_oauth") in ("rolled-a", "rolled-b")
+
+
+async def test_frigate_site_migration_moves_live_state_references_and_permissions(ctx):
+    old, new = "frigate:zzbfront", "frigate:home:zzbfront"
+    await _ask(ctx, "frigate", "store", key="sites", value=json.dumps([
+        {"name": "Home", "url": "http://home.test"}, {"name": "Cabin", "url": "http://cabin.test"}]))
+    await ctx.pool.execute("INSERT INTO devices (device_key, adapter, site) VALUES ($1, 'frigate', 'Home')", old)
+    for entity, caps in ((old, ["camera"]), (old + ":detect", ["on_off"]), (old + ":zone:door", ["occupancy"])):
+        await ctx.pool.execute("INSERT INTO entities (entity_id, adapter, device_key, capabilities) VALUES ($1, 'frigate', $2, $3)",
+                               entity, old, caps)
+    await ctx.pool.execute("INSERT INTO current_state (entity_id, capability, value, ts_ns) VALUES ($1, 'on_off', 'true', 1)", old + ":detect")
+    await ctx.pool.execute("INSERT INTO automations (name, definition) VALUES ('zzb-frigate-rule', $1)",
+                           {"triggers": [{"entity_id": old + ":zone:door"}], "actions": [{"entity_id": old + ":detect"}]})
+    uid = await ctx.pool.fetchval("INSERT INTO users (username, password_hash) VALUES ('zzb-frigate-user', 'unused') RETURNING id")
+    await ctx.pool.execute("INSERT INTO user_access_rules (user_id, kind, scope, ref) VALUES ($1, 'view', 'entity', $2)", uid, old)
+    result = await _ask(ctx, "frigate", "frigate_migrate")
+    assert result["entities"] == 3 and result["references"] >= 2
+    assert await ctx.pool.fetchval("SELECT value FROM current_state WHERE entity_id = $1", new + ":detect") is True
+    definition = await ctx.pool.fetchval("SELECT definition FROM automations WHERE name = 'zzb-frigate-rule'")
+    assert definition["triggers"][0]["entity_id"] == new + ":zone:door"
+    assert definition["actions"][0]["entity_id"] == new + ":detect"
+    assert await ctx.pool.fetchval("SELECT ref FROM user_access_rules WHERE user_id = $1", uid) == new
+    assert await _ask(ctx, "frigate", "frigate_migrate") == {"entities": 0, "references": 0}
+    assert "error" in await api.answer(ctx, "presence", {"op": "frigate_migrate", "args": {}})
+
+
+@pytest.mark.parametrize("site", [None, "Removed site"])
+async def test_ambiguous_frigate_migration_leaves_existing_identity_untouched(ctx, site):
+    await _ask(ctx, "frigate", "store", key="sites", value=json.dumps([
+        {"name": "Home", "url": "http://home.test"}, {"name": "Cabin", "url": "http://cabin.test"}]))
+    await ctx.pool.execute("INSERT INTO devices (device_key, adapter, site) VALUES ('frigate:zzbfront', 'frigate', $1)", site)
+    await ctx.pool.execute("INSERT INTO entities (entity_id, adapter, device_key, capabilities) VALUES ('frigate:zzbfront', 'frigate', 'frigate:zzbfront', '[\"camera\"]')")
+    result = await api.answer(ctx, "frigate", {"op": "frigate_migrate", "args": {}})
+    assert "unambiguous site" in result["error"]
+    assert await ctx.pool.fetchval("SELECT entity_id FROM entities WHERE entity_id = 'frigate:zzbfront'")
 
 
 async def test_another_adapters_config_comes_without_its_secrets(ctx):

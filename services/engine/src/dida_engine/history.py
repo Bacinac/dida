@@ -17,6 +17,7 @@ import logging
 import time
 from collections import deque
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from dida_core import (
     apply_ch_migrations,
@@ -33,6 +34,7 @@ COLUMNS = ["ts", "entity_id", "capability", "adapter", "value_num", "value_str"]
 CMD_COLUMNS = ["ts", "entity_id", "capability", "command", "source", "args"]
 
 BUFFER_CAP = 50_000   # hard cap: a CH outage drops oldest rows, never OOMs
+BATCH_SIZE = 10_000
 
 # A schema failure becomes a FAULT only once it has failed this many times AND kept
 # failing for this long. Both, because `_ensure` is called from the flush loop about
@@ -69,7 +71,10 @@ class HistoryWriter:
         self._client = None
         # deque, not list: at cap during a CH outage every enqueue drops the
         # oldest row — list.pop(0) is O(n) on a 50k buffer, popleft() is O(1).
-        self._buf: deque[list] = deque()
+        self._buf: deque[tuple] = deque()
+        self._pending: tuple[tuple, ...] = ()
+        self._pending_token: str | None = None
+        self._flush_lock = asyncio.Lock()
         self._dropped = 0
         self._schema_ready = False
         self._schema_failures = 0
@@ -80,7 +85,8 @@ class HistoryWriter:
     def stats(self) -> dict:
         """Live buffer health for the observability surface (never blocks)."""
         return {
-            "buffered": len(self._buf),
+            "buffered": len(self._buf) + len(self._pending),
+            "in_flight": len(self._pending),
             "cap": BUFFER_CAP,
             "dropped": self._dropped,
             "connected": self._client is not None,
@@ -172,12 +178,14 @@ class HistoryWriter:
         else:
             value_str = str(value)
         ts = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
-        if len(self._buf) >= BUFFER_CAP:
-            self._buf.popleft()
+        if len(self._buf) + len(self._pending) >= BUFFER_CAP:
             self._dropped += 1
             if self._dropped % 1000 == 1:
                 log.error("history buffer full — dropped %d rows (clickhouse down?)", self._dropped)
-        self._buf.append([ts, entity_id, capability, adapter, value_num, value_str])
+            if not self._buf:
+                return
+            self._buf.popleft()
+        self._buf.append((ts, entity_id, capability, adapter, value_num, value_str))
 
     async def insert_command(
         self, entity_id: str, capability: str, command: str, source: str, args: dict, ts_ns: int
@@ -203,39 +211,41 @@ class HistoryWriter:
             await self._close_client()  # force a reconnect on the next attempt
             raise
 
-    async def flush(self) -> None:
-        if not self._buf:
-            return
-        if self._schema_ready and time.monotonic() >= self._next_day_tz_check:
-            self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
-            if (await house_timezone(self._pool)).key != self._day_tz:
-                self._schema_ready = False  # re-cut before the next rows go in
-        if not await self._ensure():
-            return  # still down — keep buffering
-        await self._flush_table("state_history", self._buf, COLUMNS)
+    async def flush(self) -> bool:
+        async with self._flush_lock:
+            if not self._buf and not self._pending:
+                return False
+            if not self._pending and self._schema_ready and time.monotonic() >= self._next_day_tz_check:
+                self._next_day_tz_check = time.monotonic() + DAY_TZ_CHECK_S
+                if (await house_timezone(self._pool)).key != self._day_tz:
+                    self._schema_ready = False
+            if not await self._ensure():
+                return False
+            if not self._pending:
+                self._pending = tuple(self._buf.popleft() for _ in range(min(len(self._buf), BATCH_SIZE)))
+                self._pending_token = uuid4().hex
+            return await self._flush_pending()
 
-    async def _flush_table(self, table: str, buf: deque[list], columns: list[str]) -> None:
-        if not buf or self._client is None:
-            return
-        rows = list(buf)
-        buf.clear()
+    async def _flush_pending(self) -> bool:
         try:
-            await self._client.insert(table, rows, column_names=columns)
+            await self._client.insert("state_history", self._pending, column_names=COLUMNS,
+                                      settings={"insert_deduplicate": 1,
+                                                "deduplicate_blocks_in_dependent_materialized_views": 1,
+                                                "insert_deduplication_token": self._pending_token})
         except asyncio.CancelledError:
-            # Shutdown cancelled us mid-insert: re-buffer so close()'s final flush
-            # still writes the batch (CancelledError is a BaseException and would
-            # otherwise bypass the handler below, losing the popped rows).
-            buf.extendleft(reversed(rows))
+            await self._close_client()
             raise
         except Exception:
-            # Re-buffer (order preserved, batch back at the front) and drop the
-            # client so the next flush reconnects. Bounded by BUFFER_CAP via enqueue.
-            buf.extendleft(reversed(rows))
             await self._close_client()
-            log.exception("clickhouse insert to %s failed; %d rows re-buffered", table, len(rows))
+            log.exception("clickhouse state_history insert failed; retaining %d rows for retry", len(self._pending))
+            return False
+        self._pending = ()
+        self._pending_token = None
+        return True
 
     async def close(self) -> None:
-        await self.flush()
+        while await self.flush():
+            pass
         if self._client is not None:
             await self._client.close()
             self._client = None

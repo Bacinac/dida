@@ -27,11 +27,14 @@ class _Client:
     sender on the socket (pongs are enqueued too), so there is never a concurrent
     send — which Starlette websockets don't allow."""
 
-    __slots__ = ("hidden", "queue", "task", "ws")
+    __slots__ = ("allowed", "hidden", "queue", "task", "token", "user_id", "ws")
 
-    def __init__(self, ws: WebSocket, hidden: set[str]) -> None:
+    def __init__(self, ws: WebSocket, hidden: set[str], allowed: set[str] | None, user_id: int, token: str) -> None:
         self.ws = ws
         self.hidden = hidden
+        self.allowed = allowed
+        self.user_id = user_id
+        self.token = token
         # Bounded: a client that can't keep up fills this and gets dropped (below),
         # rather than growing without limit. 256 events is generous for a UI.
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=256)
@@ -51,9 +54,10 @@ class Hub:
 
     def __init__(self) -> None:
         self._clients: dict[WebSocket, _Client] = {}
+        self.revision = 0
 
-    def add(self, ws: WebSocket, hidden: set[str]) -> None:
-        client = _Client(ws, hidden)
+    def add(self, ws: WebSocket, hidden: set[str], allowed: set[str] | None, user_id: int, token: str) -> None:
+        client = _Client(ws, hidden, allowed, user_id, token)
         client.task = asyncio.create_task(self._writer(client))
         self._clients[ws] = client
 
@@ -61,6 +65,38 @@ class Hub:
         client = self._clients.pop(ws, None)
         if client is not None and client.task is not None:
             client.task.cancel()
+
+    def connected(self, ws: WebSocket) -> bool:
+        return ws in self._clients
+
+    async def disconnect(self, ws: WebSocket, code: int) -> None:
+        client = self._clients.pop(ws, None)
+        if client is None:
+            return
+        await self._close(client, code)
+
+    async def _close(self, client: _Client, code: int) -> None:
+        if client.task is not None:
+            client.task.cancel()
+            await asyncio.gather(client.task, return_exceptions=True)
+        try:
+            await client.ws.close(code=code)
+        except (RuntimeError, OSError):
+            log.debug("ws already closed", exc_info=True)
+
+    async def disconnect_user(self, user_id: int, code: int) -> None:
+        self.revision += 1
+        clients = [c for c in self._clients.values() if c.user_id == user_id]
+        for client in clients:
+            self.remove(client.ws)
+        await asyncio.gather(*(self._close(c, code) for c in clients))
+
+    async def disconnect_token(self, token: str) -> None:
+        self.revision += 1
+        clients = [c for c in self._clients.values() if c.token == token]
+        for client in clients:
+            self.remove(client.ws)
+        await asyncio.gather(*(self._close(c, 4401) for c in clients))
 
     def enqueue(self, ws: WebSocket, payload: str) -> None:
         """Queue a raw payload (e.g. a pong) to one client via its writer, so the
@@ -97,7 +133,7 @@ class Hub:
             }
         )
         for ws, client in list(self._clients.items()):
-            if update.entity_id in client.hidden:
+            if update.entity_id in client.hidden or (client.allowed is not None and update.entity_id not in client.allowed):
                 continue  # this connection's user may not see this entity
             try:
                 client.queue.put_nowait(payload)  # never blocks the fan-out
@@ -128,9 +164,9 @@ class Hub:
         for ws, client in list(self._clients.items()):
             if event.entity_id and event.entity_id in client.hidden:
                 continue
+            if client.allowed is not None and event.entity_id not in client.allowed:
+                continue
             try:
                 client.queue.put_nowait(payload)
             except asyncio.QueueFull:
                 self.remove(ws)
-
-

@@ -19,7 +19,6 @@ from dida_core import (
     attach_log_bus,
     jsonb_init,
     pg_pool,
-    prepare_command,
     set_app_setting,
 )
 from fastapi import (
@@ -91,11 +90,11 @@ from dida_api.auth import (
 from dida_api.backup import backup_scheduler
 from dida_api.backup import router as backup_router
 from dida_api.broker import serve_broker
+from dida_api.commands import dispatch_command
 from dida_api.common import get_setting, resolve_assistant_client, stored_api_key
 from dida_api.contacts import router as contacts_router
 from dida_api.hub import Hub
 from dida_api.opus_media import router as opus_router
-from dida_api.permissions import require_control
 from dida_api.pipeline import router as pipeline_router
 from dida_api.rate_limit import LOGIN, enforce_assistant_limit
 from dida_api.retention import router as retention_router
@@ -103,7 +102,7 @@ from dida_api.seed import seed_from_env
 from dida_api.smartthings import router as smartthings_router
 from dida_api.system import router as system_router
 from dida_api.upkeep import router as upkeep_router
-from dida_api.visibility import hidden_for, is_hidden
+from dida_api.visibility import hidden_for, page_allowed_ids
 from dida_api.volume_presets import router as volume_presets_router
 
 log = logging.getLogger("dida.api")
@@ -179,6 +178,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="DIDA API", lifespan=lifespan)
+app.state.hub = Hub()
 app.include_router(system_router)  # observability: /system/stats + /metrics (Prometheus)
 app.include_router(alerts_router)  # system-health alerts: /system/alerts + /system/alert-rules
 app.include_router(orphans.router)  # dangling entity references: /system/orphans
@@ -321,6 +321,7 @@ async def logout(request: Request, response: Response) -> None:
     token = request_token(request)
     if token:
         await revoke_session(app.state.pool, token, app.state.secret_key)
+        await app.state.hub.disconnect_token(token)
     SESSION_COOKIE.clear(response)
 
 
@@ -477,6 +478,7 @@ async def change_password(
     )
     token = encode_session_token(user.id, app.state.secret_key, token_version=int(new_tv), ttl=TOKEN_TTL)
     SESSION_COOKIE.set(response, token, request)
+    await app.state.hub.disconnect_user(user.id, 1012)
 
 
 # --- presence (web-app geolocation report) -------------------------------
@@ -487,6 +489,7 @@ class PresenceReportIn(BaseModel):
     longitude: float = Field(..., ge=-180, le=180)
     accuracy: float | None = Field(default=None, ge=0)  # metres
     battery: float | None = Field(default=None, ge=0, le=100)
+    tst: float = Field(..., gt=0, allow_inf_nan=False)
 
 
 @app.post("/presence/report")
@@ -501,6 +504,7 @@ async def presence_report(body: PresenceReportIn, user: AuthUser = Depends(curre
     return await presence.publish_report(
         app.state, user.username, body.latitude, body.longitude,
         accuracy=body.accuracy, battery=body.battery,
+        observed_ns=presence.timestamp_ns(body.tst),
     )
 
 
@@ -602,31 +606,11 @@ async def command(body: CommandIn, user: AuthUser = Depends(current_user)) -> di
     the bus; the owning adapter translates it to native protocol. We never write
     state here — the resulting value comes back through the normal device →
     adapter → engine → events path, so the UI reflects what actually happened."""
-    # Per-user boundaries (Phase 2), rejected before the bus. Admins bypass.
-    # A hidden entity is uncontrollable (you can't act on what you can't see);
-    # otherwise the control rules decide. Both are 404/403 pre-publish.
-    if await is_hidden(app.state.pool, user, body.entity_id):
-        raise HTTPException(404, "entity not found")
-    await require_control(app.state.pool, user, body.entity_id, body.capability)
-    # radio:tuner is a RELAY: a command to it republishes play_media onto the
-    # configured player. It has no registry row of its own, so its is_hidden/
-    # require_control above are permissive — re-run the boundary on the RESOLVED
-    # target (as scenes.recall re-checks every target it drives) so a user denied
-    # control of the real player can't start it through the tuner. Control is the
-    # gate here (the tuner is a control surface); a hidden target still 404s.
-    if body.entity_id == radio_tuner.TUNER:
-        target = await radio_tuner.resolve_target(app.state.pool)
-        if target is None:
-            raise HTTPException(409, "no radio player is configured")
-        if await is_hidden(app.state.pool, user, target):
-            raise HTTPException(404, "entity not found")
-        await require_control(app.state.pool, user, target, "media_transport")
     try:
-        cmd = await prepare_command(app.state.pool, body.entity_id, body.capability,
-                                    body.command, dict(body.args), source=f"user:{user.username}")
+        await dispatch_command(app.state.pool, app.state.bus, user, body.entity_id,
+                               body.capability, body.command, body.args, source=f"user:{user.username}")
     except CapabilityError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await app.state.bus.publish_command(cmd)
     return {"ok": True}
 
 
@@ -734,23 +718,51 @@ async def ws(ws: WebSocket) -> None:
     user = await _authenticate_ws(ws)
     if user is None:
         return
-    # Scope the firehose to what this user may see (view rules + page scope), fixed
-    # at connect — a later rule change applies on the next reconnect.
-    hidden = await hidden_for(app.state.pool, user)
     await ws.accept()
-    app.state.hub.add(ws, hidden)
+    hub = app.state.hub
+    token = ws.cookies[SESSION_COOKIE.name]
+    while True:
+        revision = hub.revision
+        try:
+            user = await session_user(app.state.pool, token, app.state.secret_key)
+        except HTTPException:
+            await ws.close(code=4401)
+            return
+        hidden = await hidden_for(app.state.pool, user)
+        allowed = await page_allowed_ids(app.state.pool, user)
+        if revision == hub.revision:
+            break
+    hub.add(ws, hidden, allowed, user.id, token)
+    loop = asyncio.get_running_loop()
+    checked_at = loop.time()
     try:
-        while True:
+        while hub.connected(ws):
             # Events are pushed by the hub; inbound traffic is the client's
             # keepalive. Answering "ping" with a pong gives the client a
             # round-trip liveness signal — a socket a phone's sleep/NAT killed
             # looks OPEN locally, and only a missing pong exposes that.
-            msg = await ws.receive_text()
+            try:
+                msg = await asyncio.wait_for(ws.receive_text(), timeout=max(0.01, 15 - (loop.time() - checked_at)))
+            except TimeoutError:
+                msg = None
+            if not hub.connected(ws):
+                break
+            if msg == "ping" or loop.time() - checked_at >= 15:
+                try:
+                    fresh = await session_user(app.state.pool, token, app.state.secret_key)
+                except HTTPException:
+                    await hub.disconnect(ws, 4401)
+                    break
+                if (fresh != user or await hidden_for(app.state.pool, fresh) != hidden
+                        or await page_allowed_ids(app.state.pool, fresh) != allowed):
+                    await hub.disconnect(ws, 1012)
+                    break
+                checked_at = loop.time()
             if msg == "ping":
                 # Route the pong through the client's writer (the sole sender) so
                 # it never races the event fan-out on the same socket.
-                app.state.hub.enqueue(ws, '{"type":"pong"}')
+                hub.enqueue(ws, '{"type":"pong"}')
     except WebSocketDisconnect:
         pass
     finally:
-        app.state.hub.remove(ws)
+        hub.remove(ws)

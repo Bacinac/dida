@@ -25,6 +25,7 @@ def _client(hub, hidden: set[str]) -> list[str]:
 
     hub._clients[FakeWS()] = type("C", (), {
         "hidden": hidden,
+        "allowed": None,
         "queue": type("Q", (), {"put_nowait": staticmethod(sent.append)})(),
     })()
     return sent

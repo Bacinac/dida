@@ -10,8 +10,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from dida_api.auth import AuthUser, can_see_page, current_user, require_admin
+from dida_api.auth import AuthUser, current_user, require_admin
 from dida_api.common import DEVICE_TYPES
+from dida_api.visibility import hidden_for
 
 router = APIRouter(tags=["devices"])
 
@@ -24,16 +25,17 @@ class DevicePatch(BaseModel):
 
 @router.get("/devices")
 async def devices_list(request: Request, user: AuthUser = Depends(current_user)) -> list[dict]:
-    """One row per physical device: adapter, auto name, user label. The UI shows
-    label|name as the card header/prefix; entities keep their own names. Gated to
-    the pages that render the device list, so a narrow-scoped login (e.g. ulaz-only)
-    can't enumerate the household's hardware."""
-    if not can_see_page(user, "devices", "floorplan"):
-        raise HTTPException(403, "no access to devices")
-    rows = await request.app.state.pool.fetch(
+    """Physical-device metadata for the caller's visible entities."""
+    pool = request.app.state.pool
+    rows = await pool.fetch(
         "SELECT device_key, adapter, name, label, site FROM devices ORDER BY device_key"
     )
-    return [dict(r) for r in rows]
+    if user.role == "admin":
+        return [dict(r) for r in rows]
+    hidden = await hidden_for(pool, user)
+    keys = {r["device_key"] for r in await pool.fetch("SELECT entity_id, device_key FROM entities")
+            if r["entity_id"] not in hidden}
+    return [dict(r) for r in rows if r["device_key"] in keys]
 
 
 @router.patch("/devices/{key}")

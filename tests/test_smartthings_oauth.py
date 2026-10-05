@@ -2,7 +2,8 @@
 
 `/api/smartthings/callback` is the one route in this module with no auth
 dependency, and it cannot have one: it is a top-level browser redirect back from
-SmartThings, so there is no cookie to rely on and no session to check. What it
+SmartThings, so there is no callback cookie to rely on. Its state resolves the
+initiating administrator's session through the database. What it
 does on success is write a long-lived refresh token for the owner's SmartThings
 account into the database. The signed `state` is therefore not a nicety — it is
 the only thing standing between that write and anyone who can reach the tunnel.
@@ -24,10 +25,13 @@ import urllib.parse
 import jwt
 import pytest
 from dida_api import smartthings as mod
+from dida_api.auth import AuthUser
+from dida_api.oauth import _signing_key
 from fastapi import HTTPException
 
 SECRET = "test-app-secret-long-enough-for-hs256-x"
 KEY = "0123456789abcdef0123456789abcdef"
+ADMIN = AuthUser(id=1, username="oauthadmin", role="admin")
 
 
 class _Pool:
@@ -35,19 +39,28 @@ class _Pool:
         self.cfg = cfg if cfg is not None else {}
         self.writes: list[tuple] = []
         self.val = None
+        self.states = {}
 
     async def fetch(self, sql, *a):
         return [{"key": k, "value": v} for k, v in self.cfg.items()]
 
     async def fetchval(self, sql, *a):
+        if "DELETE FROM oauth_states" in sql:
+            state = self.states.pop(a[0], None)
+            return state[2] if state and (state[1], state[2], state[3]) == a[1:] else None
         return self.val
 
     async def execute(self, sql, *a):
+        if "INSERT INTO oauth_states" in sql:
+            self.states[a[0]] = a
+            return
         self.writes.append((sql, a))
 
 
 class _Request:
     def __init__(self, pool) -> None:
+        self.cookies = {"dida_session": "initiating-session"}
+        self.headers = {}
         self.app = type("A", (), {"state": type("S", (), {
             "pool": pool, "secret_key": SECRET})()})()
 
@@ -101,10 +114,9 @@ def _reason(r):
     return q.get("reason", [""])[0] or q.get("smartthings", [""])[0]
 
 
-def _state(**over):
-    claims = {"a": "smartthings", "n": "abc", "exp": int(time.time()) + 600}
-    claims.update(over)
-    return jwt.encode(claims, over.pop("_key", SECRET), algorithm="HS256")
+async def _state(pool):
+    out = await mod.login(_Request(pool), ADMIN)
+    return urllib.parse.parse_qs(urllib.parse.urlsplit(out["url"]).query)["state"][0]
 
 
 # --- refusing to run without a key to encrypt with ------------------------------
@@ -130,16 +142,18 @@ def test_a_whitespace_key_counts_as_no_key(monkeypatch):
 
 
 async def test_the_login_state_is_signed_and_expires(configured):
-    out = await mod.login(_Request(configured))
+    out = await mod.login(_Request(configured), ADMIN)
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(out["url"]).query)
-    claims = jwt.decode(q["state"][0], SECRET, algorithms=["HS256"])
+    claims = jwt.decode(q["state"][0], _signing_key(SECRET), algorithms=["HS256"], audience="dida.oauth")
     assert claims["a"] == "smartthings"
+    assert claims["sub"] == "1"
+    assert len(configured.states) == 1
     assert 0 < claims["exp"] - time.time() <= 600
 
 
 async def test_two_logins_do_not_reuse_the_state(configured):
-    a = await mod.login(_Request(configured))
-    b = await mod.login(_Request(configured))
+    a = await mod.login(_Request(configured), ADMIN)
+    b = await mod.login(_Request(configured), ADMIN)
     assert a["url"] != b["url"]
 
 
@@ -211,7 +225,7 @@ async def test_the_tokens_are_stored_encrypted(configured, monkeypatch):
     monkeypatch.setattr(mod, "encrypt_secret", lambda secret, blob: f"ENC({blob})")
     _token_post(monkeypatch, _Resp(200, {
         "access_token": "at", "refresh_token": "rt", "expires_in": 86400}))
-    r = await mod.callback(_Request(configured), code="c", state=_state())
+    r = await mod.callback(_Request(configured), code="c", state=await _state(configured))
     assert _reason(r) == "connected"
     assert len(configured.writes) == 1
     stored = configured.writes[0][1][0]
@@ -230,7 +244,7 @@ async def test_the_stored_blob_carries_a_refresh_margin(configured, monkeypatch)
     _token_post(monkeypatch, _Resp(200, {
         "access_token": "at", "refresh_token": "rt", "expires_in": 86400}))
     before = time.time()
-    await mod.callback(_Request(configured), code="c", state=_state())
+    await mod.callback(_Request(configured), code="c", state=await _state(configured))
     assert captured["refresh_token"] == "rt"
     # Anchored to a timestamp taken BEFORE the call, and to a real margin: asserting
     # `< time.time() + 86400` after the fact is true with no margin at all, because
@@ -244,14 +258,14 @@ async def test_the_client_secret_travels_as_basic_auth_not_in_the_body(configure
     monkeypatch.setattr(mod, "encrypt_secret", lambda s, b: "enc")
     seen = _token_post(monkeypatch, _Resp(200, {
         "access_token": "at", "refresh_token": "rt"}))
-    await mod.callback(_Request(configured), code="c", state=_state())
+    await mod.callback(_Request(configured), code="c", state=await _state(configured))
     assert seen["auth"] == ("cid", "client-secret")
     assert "client_secret" not in seen["data"]
 
 
 async def test_a_failed_exchange_stores_nothing(configured, monkeypatch):
     _token_post(monkeypatch, _Resp(401, {}, text="bad client"))
-    r = await mod.callback(_Request(configured), code="c", state=_state())
+    r = await mod.callback(_Request(configured), code="c", state=await _state(configured))
     assert _reason(r) == "token"
     assert configured.writes == []
 
@@ -262,7 +276,7 @@ async def test_a_token_response_missing_the_refresh_token_does_not_half_connect(
     silently — the same end state as never connecting, reached a day later."""
     monkeypatch.setattr(mod, "encrypt_secret", lambda s, b: "enc")
     _token_post(monkeypatch, _Resp(200, {"access_token": "at"}))
-    r = await mod.callback(_Request(configured), code="c", state=_state())
+    r = await mod.callback(_Request(configured), code="c", state=await _state(configured))
     assert _reason(r) == "token"
     assert configured.writes == []
 

@@ -88,6 +88,29 @@ async def test_the_same_device_under_a_new_name_moves_instead_of_forking():
         await pool.close()
 
 
+async def test_a_literal_prefix_cannot_rename_a_similarly_named_device():
+    pool = await _fresh_pool()
+    engine = Engine(StubBus(), pool, StubHistory())
+    try:
+        await _announce(engine, "old_name", "0xAABB", field="on_off")
+        await _announce(engine, "oldXname", "0xCCDD", field="temperature")
+        await pool.execute("INSERT INTO current_state (entity_id, capability, value, ts_ns) VALUES ($1, 'temperature', '23.5', 1)",
+                           "ren:oldXname:temperature")
+        await pool.execute("INSERT INTO app_settings (key, value) VALUES ('entry_controls', $1)",
+                           json.dumps({"state_car": "ren:oldXname:temperature"}))
+        await _announce(engine, "new_name", "0xAABB", field="on_off")
+        assert await pool.fetchval("SELECT device_key FROM entities WHERE entity_id = 'ren:oldXname:temperature'") == "oldXname"
+        assert await pool.fetchval("SELECT value FROM current_state WHERE entity_id = 'ren:oldXname:temperature'") == "23.5"
+        assert json.loads(await pool.fetchval("SELECT value FROM app_settings WHERE key = 'entry_controls'")) == {
+            "state_car": "ren:oldXname:temperature"}
+        assert await pool.fetchval("SELECT entity_id FROM entities WHERE entity_id = 'ren:new_name:on_off'")
+        assert not await pool.fetchval("SELECT entity_id FROM entities WHERE entity_id = 'ren:new_name:temperature'")
+    finally:
+        await pool.execute("DELETE FROM entities WHERE entity_id = 'ren:oldXname:temperature'")
+        await pool.execute("DELETE FROM devices WHERE device_key = 'oldXname'")
+        await pool.close()
+
+
 async def test_the_rules_that_named_it_are_rewritten():
     """The half that matters: moving the entity while leaving the rules behind
     would turn a stale duplicate into a reference that points at nothing."""

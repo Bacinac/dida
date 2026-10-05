@@ -8,28 +8,26 @@ Run inside the calendar adapter image (dida_adapter_calendar installed):
 
 The three engine functions are deterministic — they take the day as an argument
 (no now()), so every case here pins a fixed date and asserts the real output:
-  * _in_yearly_window  — the year-agnostic [start, end] month-day window, including
+  * in_yearly_window  — the year-agnostic [start, end] month-day window, including
     the end < start wrap across New Year.
-  * _beat_active       — start_date gate + end_date window + day_offset shift, then
+  * schedule_active   — start_date gate + end_date window + day_offset shift, then
     the recurrence match. Reads params exactly as the `schedules` table stores them.
-  * _recurrence_matches — daily / weekly / monthly(day) / monthly(Nth weekday,
+  * recurrence_matches — daily / weekly / monthly(day) / monthly(Nth weekday,
     via math.ceil(day/7)) / yearly / once.
 """
 from datetime import date
 
-from dida_adapter_calendar.adapter import CalendarAdapter, _in_yearly_window
-
-# _beat_active / _recurrence_matches touch no I/O (no bus, no pool) — they're pure
-# methods, so a bare instance is enough to drive them.
-_ADAPTER = CalendarAdapter()
+import pytest
+from dida_core.schedules import in_yearly_window as _in_yearly_window
+from dida_core.schedules import next_occurrence, recurrence_matches, schedule_active
 
 
 def _beat(today: date, **params) -> bool:
-    return _ADAPTER._beat_active(today, params)
+    return schedule_active(today, params)
 
 
 def _matches(d: date, sd: date, **params) -> bool:
-    return _ADAPTER._recurrence_matches(d, params, sd)
+    return recurrence_matches(d, params, sd)
 
 
 # --- _in_yearly_window -------------------------------------------------------
@@ -162,7 +160,7 @@ def test_unknown_recurrence_type_is_inactive():
 
 
 def _next(today: date, **params) -> str | None:
-    return _ADAPTER._next_occurrence(today, params)
+    return next_occurrence(today, params)
 
 
 def test_next_occurrence_includes_today_when_active_today():
@@ -216,3 +214,33 @@ def test_next_occurrence_matches_the_live_active_value():
         nxt = _next(probe, **params)
         assert nxt is not None
         assert _beat(date.fromisoformat(nxt), **params) is True
+
+
+@pytest.mark.parametrize("params, skipped, expected", [
+    ({"recurrence_type": "daily", "start_date": "2026-10-05", "interval": 2}, "2026-10-06", "2026-10-07"),
+    ({"recurrence_type": "weekly", "start_date": "2026-10-05", "weekdays": [0], "interval": 2}, "2026-10-12", "2026-10-19"),
+    ({"recurrence_type": "monthly", "start_date": "2026-11-01", "monthly_day": 31, "interval": 2}, "2026-12-31", "2027-01-31"),
+    ({"recurrence_type": "yearly", "start_date": "2025-01-01", "interval": 2}, "2026-01-01", "2027-01-01"),
+])
+def test_interval_skips_ineligible_cycles_and_next_occurrence_uses_the_same_cadence(params, skipped, expected):
+    assert not schedule_active(date.fromisoformat(skipped), params)
+    assert next_occurrence(date.fromisoformat(skipped), params) == expected
+    assert schedule_active(date.fromisoformat(expected), params)
+
+
+def test_leap_day_recurrence_searches_past_nonleap_centuries():
+    params = {"recurrence_type": "yearly", "start_date": "2000-02-29", "interval": 100}
+    assert next_occurrence(date(2001, 1, 1), params) == "2400-02-29"
+
+
+def test_unreachable_month_day_does_not_scan_every_day_until_year_9999():
+    params = {"recurrence_type": "monthly", "start_date": "2026-02-01", "monthly_day": 31,
+              "interval": 12}
+    assert next_occurrence(date(2026, 2, 1), params) is None
+
+
+@pytest.mark.parametrize("interval", [0, -1, True, 1.5, "2"])
+def test_invalid_interval_is_rejected(interval):
+    with pytest.raises(ValueError, match="interval"):
+        schedule_active(date(2026, 10, 5), {"recurrence_type": "daily", "interval": interval,
+                                           "start_date": "2026-10-05"})

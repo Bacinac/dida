@@ -30,6 +30,9 @@ jobs:
         with:
           submodules: true
 
+      - name: Check gate image catalog
+        run: sh tests/image-catalog.sh --check
+
       # dida/base bakes core (dida_core) + the migrations + every workspace
       # dependency, pinned by the committed uv.lock — the same image every service
       # and adapter image is FROM, so it MUST be built first (locally, so the FROM
@@ -48,7 +51,7 @@ jobs:
       - name: Build service + adapter images (derived from the gate's REQUIRED set)
         run: |
           set -eu
-          required=$(sed -n '/^REQUIRED="/,/"$/p' tests/run.sh | tr -d '\\"' | sed 's/^REQUIRED=//')
+          required=$(sh tests/image-catalog.sh --list)
           for name in $required; do
             case "$name" in
               base) continue ;;                                   # built above

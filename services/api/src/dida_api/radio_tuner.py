@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 
-from dida_core import Command, app_setting, prepare_command, set_app_setting
+from dida_core import CapabilityError, Command, app_setting, prepare_command, set_app_setting
 from dida_core.media import STATIONS_SUBJECT
 
 from dida_api import opus
@@ -28,12 +28,6 @@ TUNER = "radio:tuner"
 
 
 async def resolve_target(pool) -> str | None:
-    """The player `radio:tuner` will drive — the configured `radio_player`, or None
-    when there is none. Exposed so the /command boundary can control-check the REAL target
-    before a relay: radio:tuner is synthetic (no registry row), so its own
-    is_hidden/require_control are permissive and would otherwise let a user who is
-    control-denied on the actual player start it through the tuner (privilege
-    escalation). Mirrors scenes.recall re-running the per-target boundary."""
     return (await app_setting(pool, "radio_player")) or None
 
 
@@ -66,6 +60,27 @@ def _pick_index(stations, command: str, cur_id, station_sel) -> int | None:
     return None
 
 
+async def relay_command(pool, bus, cmd: Command, target: str) -> None:
+    stations = await opus.stations(pool)
+    if not stations:
+        raise CapabilityError("OPUS lists no radio stations")
+    cur = await app_setting(pool, "radio_current_id")
+    try:
+        cur_id = int(cur) if cur is not None else None
+    except ValueError:
+        cur_id = None
+    idx = _pick_index(stations, cmd.command, cur_id, cmd.args.get("station"))
+    if idx is None:
+        return
+    st = stations[idx]
+    await bus.publish_command(await prepare_command(
+        pool, target, "media_transport", "play_media",
+        {"uri": st["url"], "title": st["name"], "art": st.get("logo") or ""},
+        source=cmd.source))
+    await _set_current(pool, st["id"])
+    log.info("radio_tuner: %s → %r on %s", cmd.command, st["name"], target)
+
+
 async def start(app) -> None:
     """Subscribe to the bus: handle `radio:tuner` media_transport commands, and
     answer the station list to whoever asks."""
@@ -75,37 +90,15 @@ async def start(app) -> None:
     async def on_command(cmd: Command) -> None:
         if cmd.entity_id != TUNER:
             return
-        try:
-            stations = await opus.stations(pool)
-        except opus.OpusUnavailable as exc:
-            log.error("radio_tuner: %s but no stations — %s", cmd.command, exc)
-            return
-        if not stations:
-            log.warning("radio_tuner: %s but OPUS lists no stations", cmd.command)
-            return
-        cur = await app_setting(pool, "radio_current_id")
-        try:
-            cur_id = int(cur) if cur is not None else None
-        except ValueError:
-            cur_id = None
-        idx = _pick_index(stations, cmd.command, cur_id, cmd.args.get("station"))
-        if idx is None:
-            return  # pause/stop/… — nothing to play
-
-        st = stations[idx]
         target = await resolve_target(pool)
         if target is None:
             log.error("radio_tuner: %s from %s refused — no radio_player is configured",
                       cmd.command, cmd.source)
             return
-        # A relay PROPAGATES the source it received (the initiator — a user, an
-        # automation, the IKEA remote's rule) so the audit trail keeps who started it.
-        await bus.publish_command(await prepare_command(
-            pool, target, "media_transport", "play_media",
-            {"uri": st["url"], "title": st["name"], "art": st.get("logo") or ""},
-            source=cmd.source))
-        await _set_current(pool, st["id"])
-        log.info("radio_tuner: %s → %r on %s", cmd.command, st["name"], target)
+        try:
+            await relay_command(pool, bus, cmd, target)
+        except (opus.OpusUnavailable, CapabilityError) as exc:
+            log.error("radio_tuner: %s from %s refused — %s", cmd.command, cmd.source, exc)
 
     async def on_stations(msg) -> None:
         try:

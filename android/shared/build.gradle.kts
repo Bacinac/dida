@@ -26,7 +26,7 @@ kotlin {
 }
 
 dependencies {
-    api("androidx.core:core-ktx:1.19.0")
+    api("androidx.core:core-ktx:1.19.1")
     api("androidx.activity:activity-ktx:1.13.0")
     api("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     api("com.squareup.okhttp3:okhttp:5.5.0")

@@ -156,6 +156,8 @@ class CloudflareAdapter:
         self._zone = ""
         self._token = ""
         self._dns_task: asyncio.Task | None = None
+        self._dns_pending: list[dict] | None = None
+        self._dns_error: str | None = None
 
     async def start(self, bus: Bus) -> None:
         self._bus = bus
@@ -250,29 +252,47 @@ class CloudflareAdapter:
             os.fsync(fh.fileno())
         os.replace(tmp, self._config)
         log.info("cloudflare: config.yml rewritten (%d routes)", len(rows))
-        if self._token and (self._dns_task is None or self._dns_task.done()):
-            self._dns_task = spawn(self._ensure_dns(list(rows)), log=log, name="cloudflare dns ensure")
+        self._schedule_dns(rows)
+
+    def _schedule_dns(self, rows: list[dict]) -> None:
+        if not self._token:
+            return
+        self._dns_pending = [dict(row) for row in rows]
+        if self._dns_task is None or self._dns_task.done():
+            self._dns_task = spawn(self._reconcile_dns(), log=log, name="cloudflare dns ensure")
+
+    async def _reconcile_dns(self) -> None:
+        while self._dns_pending is not None:
+            rows = self._dns_pending
+            self._dns_pending = None
+            try:
+                await self._ensure_dns(rows)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("cloudflare: dns ensure failed; retrying: %s", exc, exc_info=True)
+                self._dns_error = str(exc) or "DNS request failed"
+                self.status.error(f"DNS: {self._dns_error}")
+                if self._dns_pending is None:
+                    self._dns_pending = rows
+                await asyncio.sleep(5)
+            else:
+                self._dns_error = None
 
     async def _ensure_dns(self, rows: list[dict]) -> None:
         """Every tunnel route needs its proxied CNAME or it resolves nowhere. With
         the owner's token we own that step too; failures are LOUD on the badge —
         a route that saved but does not resolve must not look done."""
-        from dida_adapter_cloudflare.provision import CfApi, CfError
+        from dida_adapter_cloudflare.provision import CfApi
 
         tunnel_id = str(self._tunnel_meta.get("tunnel") or "")
         if not tunnel_id:
-            return
+            raise RuntimeError("tunnel configuration has no tunnel ID")
         api = CfApi(self._token)
         try:
             zone_id = await api.zone_id(self._zone)
             for row in rows:
                 await api.ensure_dns(zone_id, f"{row['host']}.{self._zone}", tunnel_id)
-        except CfError as exc:
-            log.warning("cloudflare: dns ensure failed: %s", exc)
-            self.status.error(f"DNS: {exc}")
-        except Exception as exc:
-            log.warning("cloudflare: dns ensure failed: %s", exc, exc_info=True)
-            self.status.error(f"DNS: {exc}")
         finally:
             await api.aclose()
 
@@ -317,7 +337,9 @@ class CloudflareAdapter:
         for r in rows:
             await self._pub(r["host"], r["origin"])
         st = self._apply_status()
-        if st and not st.get("ok"):
+        if self._dns_error:
+            self.status.error(f"DNS: {self._dns_error}")
+        elif st and not st.get("ok"):
             self.status.error(f"apply failed: {st.get('error') or 'unknown'}")
         else:
             self.status.ok(f"{len(rows)} route(s) · {mode}")
@@ -499,14 +521,25 @@ class CloudflareAdapter:
             log.warning("cloudflare: ingress write failed", exc_info=True)
             return {"ok": False, "error": str(exc) or "write failed"}
         res = await self._await_apply()
-        if not res.get("applied") and prev is not None:
-            # The apply was rejected (invalid render, caddy validate, a connector
-            # that never registered). Put the previous file back so the UI and the
-            # live config never disagree, and report it instead of leaving it
-            # half-done. In tunnel mode the connectors still run the old ingress,
-            # so restoring the file is what makes the two agree again.
-            await asyncio.to_thread(_write_file, live, prev)
-            log.warning("cloudflare: apply failed for %s — source reverted", host)
+        if not res.get("applied"):
+            try:
+                if prev is None:
+                    raise RuntimeError("previous ingress is unavailable")
+                await asyncio.to_thread(_write_file, live, prev)
+                if self._token and self._mode() == "tunnel":
+                    self._schedule_dns(self._read())
+                rollback = await self._await_apply()
+            except Exception as exc:
+                log.exception("cloudflare: rollback failed for %s", host)
+                rollback = {"applied": False, "error": str(exc) or "rollback failed"}
+            res["rollback"] = rollback
+            res["partial_apply"] = not bool(rollback.get("applied"))
+            if res["partial_apply"]:
+                res["error"] = f"{res.get('error') or 'apply failed'}; rollback failed: {rollback.get('error')}"
+                self._tunnel_apply.update(ok=False, error=res["error"], partial_apply=True, rollback=rollback)
+                log.error("cloudflare: partial apply for %s: %s", host, res["error"])
+            else:
+                log.warning("cloudflare: apply failed for %s — previous ingress restored", host)
         return {"ok": bool(res.get("applied")), "hostname": host, **res}
 
     async def _await_apply(self) -> dict:
@@ -535,4 +568,7 @@ class CloudflareAdapter:
         return  # management adapter — CRUD is via the ctl subject
 
     async def stop(self) -> None:
+        if self._dns_task is not None:
+            self._dns_task.cancel()
+            await asyncio.gather(self._dns_task, return_exceptions=True)
         self._bus = None

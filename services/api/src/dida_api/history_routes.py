@@ -21,7 +21,7 @@ from dida_core import house_timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from dida_api.auth import AuthUser, current_user, require_admin
+from dida_api.auth import AuthUser, can_see_page, current_user, require_admin
 from dida_api.energy import (
     ROLES,
     list_meters,
@@ -247,6 +247,7 @@ async def app_log_services(request: Request, _admin: AuthUser = Depends(require_
 async def history_energy(request: Request, days: int = 30, _user: AuthUser = Depends(current_user)) -> dict:
     """Cumulative house-energy balance (consumption / production / self-sufficiency /
     grid import-export) per day over the last `days` days — the History dashboard."""
+    await _require_energy_access(request.app.state.pool, _user, aggregate=True)
     ch = request.app.state.ch
     if ch is None:
         raise HTTPException(503, "history store unavailable")
@@ -258,6 +259,7 @@ async def history_energy(request: Request, days: int = 30, _user: AuthUser = Dep
 async def history_energy_hourly(request: Request, frm: int, to: int, _user: AuthUser = Depends(current_user)) -> dict:
     """Per-hour energy balance for one day (unix-second [frm, to) window, client-side
     local-day bounds) — consumption up / production down on an hourly axis."""
+    await _require_energy_access(request.app.state.pool, _user, aggregate=True)
     ch = request.app.state.ch
     if ch is None:
         raise HTTPException(503, "history store unavailable")
@@ -270,11 +272,25 @@ async def history_energy_hourly(request: Request, frm: int, to: int, _user: Auth
 @router.get("/history/energy/config")
 async def energy_config_get(request: Request, _user: AuthUser = Depends(current_user)) -> dict:
     """Every energy-metering entity + its assigned/suggested role, for the config UI."""
+    hidden = await _require_energy_access(request.app.state.pool, _user)
     ch = request.app.state.ch
     if ch is None:
         raise HTTPException(503, "history store unavailable")
     pool = request.app.state.pool
-    return {"meters": await list_meters(ch, pool, await load_roles(pool)), "roles": list(ROLES)}
+    meters = await list_meters(ch, pool, await load_roles(pool))
+    return {"meters": [m for m in meters if m["entity_id"] not in hidden], "roles": list(ROLES)}
+
+
+async def _require_energy_access(pool, user: AuthUser, *, aggregate: bool = False) -> set[str]:
+    if not can_see_page(user, "history"):
+        raise HTTPException(403, "history access required")
+    hidden = await hidden_for(pool, user)
+    if aggregate and hidden and await pool.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM entities WHERE entity_id = ANY($1::text[]) "
+        "AND (capabilities ? 'energy' OR capabilities ? 'power'))", list(hidden)
+    ):
+        raise HTTPException(403, "house energy balance requires access to all meters")
+    return hidden
 
 
 class EnergyConfigIn(BaseModel):
@@ -288,4 +304,3 @@ async def energy_config_set(request: Request, body: EnergyConfigIn, _admin: Auth
 
 
 # --- command (act on a device — validated, published to owning adapter) --
-

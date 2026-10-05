@@ -36,8 +36,7 @@ class ManualOverrides:
         self._presence: dict[int, list[tuple[str, str]]] = {}
         self._held: dict[str, datetime] = {}
         self._commanded: dict[str, float] = {}
-        self._occupied_at: dict[int, float] = {}
-        self._booted = time.monotonic()
+        self._empty_since: dict[int, float] = {}
 
     @property
     def held(self) -> dict[str, datetime]:
@@ -61,11 +60,18 @@ class ManualOverrides:
                     presence.setdefault(r["area_id"], []).append((r["entity_id"], cap))
             if r["device_type"] == "light" and "on_off" in caps:
                 lights[r["entity_id"]] = r["area_id"]
+        self._empty_since = {area: since for area, since in self._empty_since.items()
+                             if presence.get(area) == self._presence.get(area)}
         self._presence = presence
         self._light_area = {e: a for e, a in lights.items() if a in presence}
 
-    def _occupied(self, area: int, snapshot: dict) -> bool:
-        return any(snapshot.get(key) is True for key in self._presence.get(area, ()))
+    def _occupied(self, area: int, snapshot: dict) -> bool | None:
+        values = [snapshot.get(key) for key in self._presence.get(area, ())]
+        if any(value is True for value in values):
+            return True
+        if values and all(value is False for value in values):
+            return False
+        return None
 
     def note_command(self, cmd: Command) -> None:
         if cmd.entity_id in self._light_area:
@@ -84,7 +90,7 @@ class ManualOverrides:
         if capability in PRESENCE_CAPS and value is True:
             for area, keys in self._presence.items():
                 if (entity_id, capability) in keys:
-                    self._occupied_at[area] = now
+                    self._empty_since.pop(area, None)
         if capability != "on_off" or entity_id not in self._light_area:
             return
         if value is False and entity_id in self._held:
@@ -103,10 +109,11 @@ class ManualOverrides:
             if snapshot.get((entity_id, "on_off")) is False:
                 await self._release(entity_id, "turned off")
                 continue
-            if self._occupied(area, snapshot):
-                self._occupied_at[area] = now
+            if self._occupied(area, snapshot) is not False:
+                self._empty_since.pop(area, None)
                 continue
-            if now - self._occupied_at.get(area, self._booted) >= RELEASE_AFTER_S:
+            since = self._empty_since.setdefault(area, now)
+            if now - since >= RELEASE_AFTER_S:
                 await self._release(entity_id, "room empty")
 
     async def _hold(self, entity_id: str) -> None:
@@ -115,7 +122,7 @@ class ManualOverrides:
             "INSERT INTO manual_overrides (entity_id, since) VALUES ($1, $2) "
             "ON CONFLICT (entity_id) DO NOTHING", entity_id, since)
         self._held[entity_id] = since
-        self._occupied_at[self._light_area[entity_id]] = time.monotonic()
+        self._empty_since.pop(self._light_area[entity_id], None)
         log.info("manual: %s switched on by hand — rules may not turn it off while its room is occupied",
                  entity_id)
         await emit_journal(self._bus, "manual_override", entity_id=entity_id, source="automation",

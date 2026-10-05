@@ -141,6 +141,31 @@ def test_commands_refuse_to_go_out_unbound():
         cloud.action(2, 1)
 
 
+@pytest.mark.parametrize("result", [None, {}, [], {"code": -704040001}, {"code": False}])
+def test_action_requires_a_successful_operation_result(monkeypatch, result):
+    cloud = DreameCloud("a@b.c", "x", "eu")
+    monkeypatch.setattr(cloud, "_send", lambda *args: result)
+    with pytest.raises(DreameCloudError):
+        cloud.action(2, 1)
+
+
+@pytest.mark.parametrize("result", [None, [], [{}], [{"code": -704030013}],
+                                    [{"code": 0}, {"code": -1}]])
+def test_set_property_requires_exactly_one_successful_result(monkeypatch, result):
+    cloud = DreameCloud("a@b.c", "x", "eu")
+    monkeypatch.setattr(cloud, "_send", lambda *args: result)
+    with pytest.raises(DreameCloudError):
+        cloud.set_property(2, 3, 42)
+
+
+def test_successful_operations_are_accepted(monkeypatch):
+    cloud = DreameCloud("a@b.c", "x", "eu")
+    monkeypatch.setattr(cloud, "_send", lambda *args: {"code": 0})
+    cloud.action(2, 1)
+    monkeypatch.setattr(cloud, "_send", lambda *args: [{"code": 0}])
+    cloud.set_property(2, 3, 42)
+
+
 # --- the extras: consumables, station, job ------------------------------------
 
 def test_every_extra_is_polled_and_uniquely_named():

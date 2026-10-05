@@ -13,12 +13,13 @@
   //    was consumed by THIS browser session), PWA + OwnTracks as fallbacks;
   //  * iPhone: PWA + OwnTracks one-tap import (no companion app on iOS).
   import { onMount } from "svelte";
-  import { Button } from "$lib/kit";
+  import { Button, formatNumber } from "$lib/kit";
   import { goto } from "$app/navigation";
   import { auth } from "$lib/auth.svelte";
   import { api } from "$lib/api";
   import { t } from "$lib/i18n";
   import Brand from "$lib/Brand.svelte";
+  import { nativeMatches } from "$lib/native";
 
   let ready = $state(false);
   let importUrl = $state<string | null>(null); // owntracks:///config?inline=…
@@ -45,12 +46,16 @@
   type NativeStatus = {
     version: string;
     provisioned: boolean;
+    userId: string | null;
+    origin: string | null;
     fineLocation: boolean;
     backgroundLocation: boolean;
     batteryExempt: boolean;
     zones: number;
   };
   let native = $state<NativeStatus | null>(null);
+  const nativeActive = $derived(nativeMatches(native, auth.user?.id,
+    typeof window === "undefined" ? "" : window.location.origin));
 
   function readNative() {
     if (!bridge) return;
@@ -145,7 +150,7 @@
         <!-- Inside the companion app: the native location walkthrough. -->
         <section class="rounded-xl border border-dida-border bg-dida-panel p-4">
           <p class="mb-1 font-medium">{t("onboard.nativeTitle")}</p>
-          {#if native?.provisioned && native.backgroundLocation}
+          {#if nativeActive && native?.backgroundLocation}
             <p class="mb-2 text-m text-dida-ok">{t("onboard.nativeActive")}</p>
           {:else}
             <p class="mb-3 text-m text-dida-text-muted">{t("onboard.nativeHint")}</p>
@@ -154,12 +159,12 @@
             <ul class="mb-3 space-y-1 text-m text-dida-text-muted">
               <li>{native.backgroundLocation ? "✓" : "○"} {t("onboard.stepBackground")}</li>
               <li>{native.batteryExempt ? "✓" : "○"} {t("onboard.stepBattery")}</li>
-              {#if native.provisioned}
-                <li>✓ {t("onboard.stepZones", { n: String(native.zones) })}</li>
+              {#if nativeActive}
+                <li>✓ {t("onboard.stepZones", { n: formatNumber(native.zones) })}</li>
               {/if}
             </ul>
           {/if}
-          {#if !(native?.provisioned && native.backgroundLocation)}
+          {#if !(nativeActive && native?.backgroundLocation)}
             <div class="grid"><Button tone="primary" onclick={() => bridge.startLocationSetup()}>{t("onboard.nativeStart")}</Button></div>
           {/if}
           <!-- Which build is actually installed — kills the "is this the old

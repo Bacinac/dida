@@ -84,6 +84,7 @@ class SmartThingsAdapter:
         self._client_id = ""
         self._client_secret = ""
         self._tokens: dict = {}                         # {access_token, refresh_token, expires_at}
+        self._oauth_raw: str | None = None
         self._token_lock = asyncio.Lock()               # serialise refresh (rolling token!)
         self._labels: dict[str, str] = {}               # device_id -> label
         self._state: dict[str, dict] = {}               # entity_id -> {cap: value} (change detection)
@@ -100,39 +101,49 @@ class SmartThingsAdapter:
     # ── OAuth token lifecycle ────────────────────────────────────────────────
 
     async def _load_oauth(self) -> None:
-        """Load the persisted OAuth blob WITHOUT clobbering a fresher in-memory token.
-
-        This runs every tick. SmartThings rolls the refresh token on every use, so
-        if `_ensure_token` refreshes + persists between this fetch and the assignment,
-        blindly adopting the pre-roll DB blob would replay a used (single-use) refresh
-        token → invalid_grant. So: hold `_token_lock` (serialising against the refresh),
-        and adopt the DB blob ONLY when it carries a DIFFERENT refresh token AND we
-        don't already hold a valid access token (adopt-only-if-newer). That still picks
-        up a brand-new grant written out-of-band by the Connect flow, once our cached
-        token lapses."""
         async with self._token_lock:
-            try:
-                raw = await self.broker.call("stored", key="_oauth")
-                blob = json.loads(raw) if raw else None
-            except (BrokerError, json.JSONDecodeError) as exc:
-                # A rotated key makes the blob undecryptable — surface it, run empty.
-                log.error("smartthings: _oauth blob unreadable (%s)", exc)
-                blob = None
-            if blob is None:
-                if not self._tokens:
-                    self._tokens = {}
-                return
-            if not isinstance(blob, dict):
-                return
-            if blob.get("refresh_token") == self._tokens.get("refresh_token"):
-                return  # same grant already in memory — nothing newer to adopt
-            have_valid = bool(self._tokens.get("access_token")) and time.time() < self._tokens.get("expires_at", 0)
-            if have_valid:
-                return  # our in-memory token is still valid — don't revert to the DB blob
-            self._tokens = blob
+            await self._adopt_oauth()
+
+    async def _reset_oauth(self) -> None:
+        self._tokens = {}
+        self._oauth_raw = None
+        self._st = None
+        self._locations_synced = False
+        for cache in (self._labels, self._state, self._routes, self._announced, self._pending):
+            cache.clear()
+        for key, reachable in list(self._reach.items()):
+            self._reach[key] = False
+            if reachable and self._bus is not None:
+                await set_reachable(self._bus, key, NAMESPACE, False, detail="SmartThings grant changed or disconnected")
+
+    async def _adopt_oauth(self) -> None:
+        try:
+            raw = await self.broker.call("stored", key="_oauth")
+            blob = json.loads(raw) if raw else None
+        except (BrokerError, json.JSONDecodeError) as exc:
+            await self._reset_oauth()
+            raise ReauthNeeded("OAuth grant could not be read") from exc
+        if raw is None:
+            await self._reset_oauth()
+            return
+        if raw == self._oauth_raw:
+            return
+        await self._reset_oauth()
+        if blob is None:
+            return
+        if not isinstance(blob, dict) or not blob.get("refresh_token") or not blob.get("access_token"):
+            raise ReauthNeeded("stored OAuth grant is invalid")
+        self._oauth_raw = raw
+        self._tokens = blob
 
     async def _save_oauth(self) -> None:
-        await self.broker.call("store", key="_oauth", value=json.dumps(self._tokens))
+        value = json.dumps(self._tokens)
+        if self._oauth_raw is None or not await self.broker.call(
+            "store_if_current", key="_oauth", current=self._oauth_raw, value=value
+        ):
+            await self._reset_oauth()
+            raise ReauthNeeded("OAuth grant changed during refresh")
+        self._oauth_raw = value
 
     async def _oauth_refresh(self) -> str:
         """Exchange the refresh token for a fresh access token; persist the ROLLED
@@ -142,10 +153,10 @@ class SmartThingsAdapter:
         if not (refresh and self._client_id and self._client_secret):
             raise ReauthNeeded("no refresh token / client credentials")
         assert self._session is not None
-        auth = aiohttp.BasicAuth(self._client_id, self._client_secret)
+        authorization = aiohttp.encode_basic_auth(self._client_id, self._client_secret)
         data = {"grant_type": "refresh_token", "refresh_token": refresh, "client_id": self._client_id}
         async with self._session.post(
-            TOKEN_URL, data=data, auth=auth, timeout=aiohttp.ClientTimeout(total=20)
+            TOKEN_URL, data=data, headers={"Authorization": authorization}, timeout=aiohttp.ClientTimeout(total=20)
         ) as r:
             body = await r.text()
             if r.status != 200:
@@ -165,16 +176,11 @@ class SmartThingsAdapter:
         return self._tokens["access_token"]
 
     async def _ensure_token(self) -> str:
-        """A valid access token — refreshing only when the 24h token is near expiry.
-
-        This is ALSO pysmartthings' `refresh_token_function`, which the library may
-        invoke on every request, so the fast path MUST be cheap: return the cached
-        token without touching the network. The lock serialises the rare real
-        refresh so concurrent in-flight requests can't roll the (single-use,
-        rolling) refresh token twice and invalidate the grant."""
-        if self._tokens.get("access_token") and time.time() < self._tokens.get("expires_at", 0):
-            return self._tokens["access_token"]
         async with self._token_lock:
+            client = self._st
+            await self._adopt_oauth()
+            if client is not None and self._st is None:
+                raise ReauthNeeded("OAuth grant changed")
             if self._tokens.get("access_token") and time.time() < self._tokens.get("expires_at", 0):
                 return self._tokens["access_token"]
             return await self._oauth_refresh()
@@ -410,6 +416,7 @@ class SmartThingsAdapter:
         return None
 
     async def handle_command(self, command: Command) -> None:
+        await self._load_oauth()
         ent = self._routes.get(command.entity_id)
         if ent is None or self._st is None:
             raise CommandRejected("not ready")

@@ -7,7 +7,6 @@ import os
 import signal
 
 from dida_core import Bus, attach_log_bus, pg_pool, run_service, setup_logging
-from home_core.health import HealthMarker
 from home_core.tasks import spawn
 
 from dida_netmgr.manager import NetManager
@@ -16,32 +15,49 @@ setup_logging()
 log = logging.getLogger("dida.netmgr")
 
 
+async def journal_connection(manager: NetManager, stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        bus = Bus(os.environ["DIDA_NATS_URL"], name="dida-netmgr", user="netmgr")
+        handler = None
+        try:
+            await bus.connect()
+            handler = attach_log_bus(bus, "netmgr")
+            manager.set_journal_bus(bus)
+            while not stop.is_set() and not bus.nc.is_closed:
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), timeout=2)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("journal connection failed (%s); retrying without blocking network management", exc, exc_info=True)
+        finally:
+            manager.set_journal_bus(None)
+            if handler is not None:
+                logging.getLogger().removeHandler(handler)
+                handler.close()
+            with contextlib.suppress(Exception):
+                await bus.close()
+        if not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=2)
+
+
 async def main() -> None:
     pool = await pg_pool()
 
-    spawn(HealthMarker("dida", "netmgr").run_loop(), log=log, name="health loop")
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):  # graceful stop like the other services
         loop.add_signal_handler(sig, stop.set)
-    # The bus is for the JOURNAL only, so it is best-effort by construction:
-    # netmgr owns this installation's foot on the IoT VLAN and must come up on a
-    # box whose NATS is down, not wait for it. No bus → no events, everything else
-    # unchanged.
-    bus = Bus(os.environ["DIDA_NATS_URL"], name="dida-netmgr", user="netmgr")
+    manager = NetManager(pool)
+    journal = spawn(journal_connection(manager, stop), log=log, name="journal connection")
     try:
-        await bus.connect()
-    except Exception as exc:
-        log.warning("netmgr: no bus (%s) — VLAN events will not be journalled", exc, exc_info=True)
-        bus = None
-    else:
-        attach_log_bus(bus, "netmgr")
-    try:
-        await NetManager(pool, bus).run(stop)
+        await manager.run(stop)
     finally:
-        if bus is not None:
-            with contextlib.suppress(Exception):
-                await bus.close()
+        stop.set()
+        journal.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await journal
         await pool.close()
 
 

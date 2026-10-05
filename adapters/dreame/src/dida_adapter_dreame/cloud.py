@@ -202,10 +202,21 @@ class DreameCloud:
         return out
 
     def action(self, siid: int, aiid: int, params: list[dict] | None = None) -> None:
-        self._send("action", {"did": self._did, "siid": siid, "aiid": aiid, "in": params or []})
+        result = self._send("action", {"did": self._did, "siid": siid, "aiid": aiid, "in": params or []})
+        self._check_operation(result, "action")
 
     def set_property(self, siid: int, piid: int, value: object) -> None:
-        self._send("set_properties", [{"did": self._did, "siid": siid, "piid": piid, "value": value}])
+        result = self._send("set_properties", [{"did": self._did, "siid": siid, "piid": piid, "value": value}])
+        if not isinstance(result, list) or len(result) != 1:
+            raise DreameCloudError("set_properties returned an invalid operation count")
+        self._check_operation(result[0], "set_properties")
+
+    @staticmethod
+    def _check_operation(result: object, method: str) -> None:
+        if not isinstance(result, dict) or type(result.get("code")) is not int:
+            raise DreameCloudError(f"{method} returned no operation status")
+        if result["code"] != 0:
+            raise DreameCloudError(f"{method} refused with code {result['code']}")
 
     # ── the map file ──────────────────────────────────────────────────────────
     #

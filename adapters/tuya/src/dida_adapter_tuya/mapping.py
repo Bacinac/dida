@@ -16,6 +16,7 @@ import colorsys
 from dida_core import CAPABILITIES, CapabilityKind
 
 Value = bool | int | float | str
+NUMERIC_CAPS = {"temperature", "humidity", "illuminance", "power", "energy", "voltage", "current", "battery"}
 
 # Tuya light scales: bright/temp DPS run 0..1000.
 _TUYA_MAX = 1000
@@ -59,7 +60,7 @@ def _num(v: object) -> float | None:
     return None
 
 
-def decode(capability: str, raw: object) -> Value | None:
+def decode(capability: str, raw: object, *, scale: int = 0, unit: str | None = None) -> Value | None:
     """Tuya DPS value -> canonical capability value (None if unmappable)."""
     if capability == CapabilityKind.ON_OFF.value:
         if isinstance(raw, bool):
@@ -78,18 +79,27 @@ def decode(capability: str, raw: object) -> Value | None:
     if capability == CapabilityKind.OPEN_CLOSE.value:
         v = _num(raw)
         return None if v is None else max(0, min(100, round(v)))
-    # Plain numeric sensors (scale handled per-device if needed; default 1:1).
-    if capability in (
-        CapabilityKind.TEMPERATURE.value,
-        CapabilityKind.HUMIDITY.value,
-        CapabilityKind.ILLUMINANCE.value,
-        CapabilityKind.POWER.value,
-        CapabilityKind.ENERGY.value,
-        CapabilityKind.VOLTAGE.value,
-        CapabilityKind.CURRENT.value,
-        CapabilityKind.BATTERY.value,
-    ):
-        return _num(raw)
+    if capability in NUMERIC_CAPS:
+        value = _num(raw)
+        if value is None:
+            return None
+        if type(scale) is not int or not 0 <= scale <= 12:
+            raise ValueError("numeric DP scale must be an integer between 0 and 12")
+        value /= 10 ** scale
+        normalized = (unit or "").strip().lower().replace("℃", "°c").replace("℉", "°f")
+        if capability == "temperature" and normalized in ("f", "°f"):
+            return (value - 32) * 5 / 9
+        aliases = {"c": "°c", "percent": "%"}
+        normalized = aliases.get(normalized, normalized)
+        if normalized and normalized != (unit_for(capability) or "").lower():
+            factors = {("power", "kw"): 1000, ("energy", "wh"): 0.001,
+                       ("voltage", "mv"): 0.001, ("current", "ma"): 0.001,
+                       ("illuminance", "klx"): 1000}
+            factor = factors.get((capability, normalized))
+            if factor is None:
+                raise ValueError(f"unsupported unit {unit!r} for {capability}")
+            value *= factor
+        return value
     return None
 
 

@@ -18,10 +18,47 @@ a socket — which is the whole reason this file exists rather than a mock of ti
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from dida_adapter_tuya.adapter import TuyaAdapter
 from dida_core.health import StatusReporter
+
+
+@pytest.mark.parametrize("scale, raw, expected", [(0, 23, 23), (1, 230, 23), (2, -1250, -12.5)])
+@pytest.mark.parametrize("as_json", [False, True])
+def test_auto_mapping_preserves_numeric_scale_and_unit_through_canonical_validation(scale, raw, expected, as_json):
+    from dida_adapter_tuya.adapter import _readings
+    from dida_adapter_tuya.cloud import auto_dps
+    from dida_core import validate_state
+
+    values = {"scale": scale, "unit": "°C"}
+    mapping = {"1": {"code": "temp_current", "type": "Integer", "values": json.dumps(values) if as_json else values}}
+    dps, unmapped = auto_dps(mapping)
+    assert not unmapped
+    assert dps["1"] == {"cap": "temperature", "scale": scale, "unit": "°C"}
+    readings = _readings({"dps": dps}, {"1": raw})
+    assert readings == [("temperature", expected)]
+    assert validate_state("temperature", readings[0][1]) == expected
+
+
+def test_manual_numeric_mapping_stays_in_canonical_units():
+    from dida_adapter_tuya.adapter import _readings
+    assert _readings({"dps": {"1": "temperature"}}, {"1": 23}) == [("temperature", 23)]
+
+
+def test_explicit_scaled_units_convert_to_canonical_units():
+    from dida_adapter_tuya.mapping import decode
+    assert decode("temperature", 770, scale=1, unit="°F") == 25
+    assert decode("current", 1000, unit="mA") == 1
+    assert decode("energy", 500, unit="Wh") == 0.5
+
+
+@pytest.mark.parametrize("scale", [-1, 13, True, "1"])
+def test_invalid_scale_fails_loudly(scale):
+    from dida_adapter_tuya.mapping import decode
+    with pytest.raises(ValueError, match="scale"):
+        decode("temperature", 230, scale=scale)
 
 
 class _Bus:

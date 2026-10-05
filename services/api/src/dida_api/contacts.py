@@ -30,13 +30,10 @@ import datetime
 import json
 import logging
 import os
-import secrets as pysecrets
-import time
 import urllib.parse
 from urllib.parse import urlsplit
 
 import httpx
-import jwt
 from dida_core import host_setting
 from dida_core.adapter_config import decrypt_secret, encrypt_secret, house_timezone
 from dida_core.people import age_turning, birthday_offset, plain, read_export, store_book
@@ -45,6 +42,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from dida_api.auth import AuthUser, current_user, require_admin
+from dida_api.oauth import consume_state, issue_state
 
 log = logging.getLogger("dida.api.contacts")
 
@@ -138,10 +136,7 @@ async def login(request: Request, _admin: AuthUser = Depends(require_admin)) -> 
     cfg = await _cfg(request)
     if not (cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]):
         raise HTTPException(503, "Unesi Client ID i Client Secret pa spremi.")
-    state = jwt.encode(
-        {"a": "contacts", "n": pysecrets.token_hex(8), "exp": int(time.time()) + 600},
-        request.app.state.secret_key, algorithm="HS256",
-    )
+    state = await issue_state(request, _admin, "contacts")
     params = {
         "client_id": cfg["client_id"], "response_type": "code",
         "redirect_uri": cfg["redirect_uri"], "scope": _SCOPE, "state": state,
@@ -166,9 +161,7 @@ async def callback(
         return back("error", error)
     if not (cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]) or not code or not state:
         return back("error", "config")
-    try:
-        jwt.decode(state, request.app.state.secret_key, algorithms=["HS256"])  # CSRF + expiry
-    except jwt.PyJWTError:
+    if not await consume_state(request, "contacts", state):
         return back("error", "state")
 
     async with httpx.AsyncClient(timeout=20) as cx:

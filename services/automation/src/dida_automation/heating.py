@@ -191,8 +191,6 @@ class HeatingController:
 
         `now` exists so a test can put the house at half five in the morning; the
         service never passes it."""
-        if not self._rooms:
-            return
         state = await self._read_state()
         now = time.time() if now is None else now
         local = datetime.fromtimestamp(now, self._tz)
@@ -473,7 +471,7 @@ class HeatingController:
             return
         self._boiler_unknown_logged = False
         is_on = reported is True
-        if not settings.enabled:
+        if not settings.enabled or not self._rooms:
             # Master off is "hands off" for the setpoints, but the boiler is the one
             # thing that must be actively driven off: returning early here leaves a
             # firing burner closed indefinitely while the UI shows every room off.
@@ -483,7 +481,7 @@ class HeatingController:
             if is_on:
                 if not self._master_off_logged:
                     self._master_off_logged = True
-                    log.warning("heating: master switch off while boiler running — turning it off")
+                    log.warning("heating: boiler running without enabled rooms — turning it off")
                 await self._command(settings.boiler, "on_off", "turn_off", {}, None)
             else:
                 self._master_off_logged = False

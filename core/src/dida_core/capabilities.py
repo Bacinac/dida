@@ -181,8 +181,8 @@ class CapabilityKind(StrEnum):
     NEXT_OCCURRENCE = "next_occurrence"  # ISO date (YYYY-MM-DD) of the next day a
     # recurring schedule fires, today included. `schedule_active` answers "is it
     # today"; this answers "when", which is the question actually asked about a bin
-    # collection. The recurrence maths stays in the calendar adapter that owns it —
-    # this is only the carrier, so nothing else has to re-derive a date.
+    # collection. An empty string clears a schedule with no next day; recurrence
+    # maths stays in the shared scheduler, and this capability carries its result.
     SUN_STATE = "sun_state"  # the solar PHASE as a discrete event: night/dawn/day/dusk.
     # sun_elevation is a continuous float, which makes it a fine CONDITION and a
     # trap as a TRIGGER: a rule like "at dawn" written as `to: 0` only fires when a
@@ -623,7 +623,7 @@ CAPABILITIES: dict[CapabilityKind, CapabilitySpec] = {
     ),
     CapabilityKind.NEXT_OCCURRENCE: CapabilitySpec(
         CapabilityKind.NEXT_OCCURRENCE, ValueType.STRING, Access.READ,
-        pattern=r"\d{4}-\d{2}-\d{2}",
+        pattern=r"(?:\d{4}-\d{2}-\d{2})?",
     ),
     CapabilityKind.TIME_OF_DAY: CapabilitySpec(
         CapabilityKind.TIME_OF_DAY, ValueType.INT, Access.READ, unit="min",

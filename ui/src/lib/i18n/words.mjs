@@ -107,12 +107,12 @@ const families = {
 	'schedule.wdGen': { where: 'the weekdays of Date.getDay()', members: () => range(7) },
 	'schedule.wdFull': { where: 'the weekdays of Date.getDay()', members: () => range(7) },
 	'schedule.recur': {
-		where: '_RECUR in services/api/src/dida_api/schedules.py',
-		members: () => quotedIn(ROOT, 'services/api/src/dida_api/schedules.py', /_RECUR = \{([^}]*)\}/)
+		where: 'RECURRENCES in core/src/dida_core/schedules.py',
+		members: () => quotedIn(ROOT, 'core/src/dida_core/schedules.py', /RECURRENCES = \{([^}]*)\}/)
 	},
 	'schedule.unit': {
-		where: '_RECUR in services/api/src/dida_api/schedules.py',
-		members: () => quotedIn(ROOT, 'services/api/src/dida_api/schedules.py', /_RECUR = \{([^}]*)\}/)
+		where: 'RECURRENCES in core/src/dida_core/schedules.py',
+		members: () => quotedIn(ROOT, 'core/src/dida_core/schedules.py', /RECURRENCES = \{([^}]*)\}/)
 	},
 	'room.kind': {
 		where: 'KINDS in ui/src/routes/settings/areas/+page.svelte',

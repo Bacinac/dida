@@ -92,13 +92,13 @@ dependencies {
     // Only for CrashReporter — the car-pairing UI the module also carries is
     // unreferenced here and R8 strips it.
     implementation(project(":shared"))
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.activity:activity-ktx:1.13.0")
     // Not used directly (no fragments) — pins the transitive androidx.fragment
     // above 1.3.0; older ones break the Activity Result API (lint: fatal).
-    implementation("androidx.fragment:fragment-ktx:1.9.0")
+    implementation("androidx.fragment:fragment-ktx:1.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
-    implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("com.google.android.gms:play-services-location:21.4.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")

@@ -135,6 +135,7 @@ async def test_the_hold_lets_go_only_after_the_room_stays_empty(monkeypatch):
     assert LIGHT in mo.held, "an occupied room keeps the hold however long it lasts"
 
     snap[(FP2, "occupancy")] = False
+    await mo.sweep(snap)
     clock[0] += manual.RELEASE_AFTER_S - 1
     await mo.sweep(snap)
     assert LIGHT in mo.held, "a short gap in presence is not an empty room"
@@ -142,6 +143,42 @@ async def test_the_hold_lets_go_only_after_the_room_stays_empty(monkeypatch):
     clock[0] += 2
     await mo.sweep(snap)
     assert LIGHT not in mo.held and LIGHT not in pool.held
+
+
+async def test_unknown_presence_keeps_the_hold_and_restarts_the_full_empty_interval(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(manual.time, "monotonic", lambda: clock[0])
+    mo, pool = await overrides()
+    await mo.on_state(LIGHT, "on_off", False, True, True)
+    snap = {(LIGHT, "on_off"): True, (FP2, "occupancy"): False}
+    await mo.sweep(snap)
+    clock[0] += 30
+    del snap[(FP2, "occupancy")]
+    await mo.sweep(snap)
+    clock[0] += 600
+    await mo.sweep(snap)
+    assert LIGHT in mo.held and LIGHT in pool.held
+    snap[(FP2, "occupancy")] = False
+    await mo.sweep(snap)
+    clock[0] += manual.RELEASE_AFTER_S - 1
+    await mo.sweep(snap)
+    assert LIGHT in mo.held
+    clock[0] += 1
+    await mo.sweep(snap)
+    assert LIGHT not in mo.held
+
+
+async def test_one_false_sensor_and_one_unknown_sensor_do_not_prove_an_empty_room(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(manual.time, "monotonic", lambda: clock[0])
+    mo, _ = await overrides()
+    mo._presence[1].append(("mqtt:motion", "motion"))
+    await mo.on_state(LIGHT, "on_off", False, True, True)
+    snap = {(LIGHT, "on_off"): True, (FP2, "occupancy"): False}
+    await mo.sweep(snap)
+    clock[0] += 600
+    await mo.sweep(snap)
+    assert LIGHT in mo.held
 
 
 async def test_a_hold_survives_a_restart():

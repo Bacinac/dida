@@ -27,6 +27,7 @@ import hashlib
 import json
 import socket
 import struct
+import threading
 import time
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -60,6 +61,7 @@ class MiioClient:
         self._stamp = 0
         self._session_at = 0.0     # monotonic of the last successful handshake
         self._id = 0               # JSON-RPC id, wraps like python-miio's
+        self._lock = threading.RLock()
 
     # --- wire helpers ------------------------------------------------------
 
@@ -115,14 +117,19 @@ class MiioClient:
     # --- public API (blocking; run via asyncio.to_thread) ------------------
 
     def request(self, method: str, params: object) -> object:
-        """One JSON-RPC round-trip, with a re-handshake retry on timeout."""
+        with self._lock:
+            return self._request(method, params)
+
+    def _request(self, method: str, params: object) -> object:
         last: Exception | None = None
-        for _attempt in (1, 2):
+        retryable = method in ("get_properties", "set_properties")
+        for _attempt in range(2 if retryable else 1):
             try:
                 if time.monotonic() - self._session_at > _SESSION_TTL:
                     self._handshake()
                 self._id = self._id % 9999 + 1
-                body = json.dumps({"id": self._id, "method": method, "params": params}).encode()
+                request_id = self._id
+                body = json.dumps({"id": request_id, "method": method, "params": params}).encode()
                 sock = self._socket()
                 sock.sendto(self._build(self._encrypt(body)), self._addr)
                 # The device occasionally re-acks an older id; read until ours.
@@ -132,14 +139,16 @@ class MiioClient:
                         raise TimeoutError("no matching reply")
                     data, _ = sock.recvfrom(65507)
                     reply = self._parse(data)
-                    if reply.get("id") == self._id:
+                    if reply.get("id") == request_id:
                         break
                 if "error" in reply:
                     raise MiioError(f"device error: {reply['error']}")
                 return reply.get("result")
             except (TimeoutError, OSError) as exc:
                 last = exc
-                self._session_at = 0.0  # force a fresh handshake on retry
+                self.close()
+        if not retryable:
+            raise MiioError(f"{method} outcome unknown; request not retried ({last})")
         raise MiioError(f"no reply from {self._addr[0]} ({last})")
 
     def get_properties(self, props: list[dict]) -> list[dict]:
@@ -149,13 +158,25 @@ class MiioClient:
         return result
 
     def set_property(self, siid: int, piid: int, value: object) -> None:
-        self.request("set_properties", [{"did": f"set-{siid}-{piid}", "siid": siid, "piid": piid, "value": value}])
+        result = self.request("set_properties", [{"did": f"set-{siid}-{piid}", "siid": siid, "piid": piid, "value": value}])
+        if not isinstance(result, list) or len(result) != 1:
+            raise MiioError("set_properties returned an invalid operation count")
+        self._check_operation(result[0], "set_properties")
 
     def action(self, siid: int, aiid: int, params: list | None = None) -> None:
-        self.request("action", {"did": f"call-{siid}-{aiid}", "siid": siid, "aiid": aiid, "in": params or []})
+        result = self.request("action", {"did": f"call-{siid}-{aiid}", "siid": siid, "aiid": aiid, "in": params or []})
+        self._check_operation(result, "action")
+
+    @staticmethod
+    def _check_operation(result: object, method: str) -> None:
+        if not isinstance(result, dict) or type(result.get("code")) is not int:
+            raise MiioError(f"{method} returned no operation status")
+        if result["code"] != 0:
+            raise MiioError(f"{method} refused with code {result['code']}")
 
     def close(self) -> None:
-        if self._sock is not None:
-            self._sock.close()
-            self._sock = None
-        self._session_at = 0.0
+        with self._lock:
+            if self._sock is not None:
+                self._sock.close()
+                self._sock = None
+            self._session_at = 0.0

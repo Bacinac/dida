@@ -9,6 +9,16 @@ from __future__ import annotations
 import json
 from urllib.parse import urlsplit
 
+from dida_core.ids import slug
+
+
+def site_key(name: str) -> str:
+    return slug(name, default="site")
+
+
+def camera_key(site: str, camera: str) -> str:
+    return f"{site_key(site)}:{slug(camera)}"
+
 
 def parse_sites(raw: str | None) -> list[dict]:
     """The configured locations. Stored as one JSON array (encrypted, since each
@@ -43,4 +53,7 @@ def parse_sites(raw: str | None) -> list[dict]:
             "tls": bool(d.get("tls")),
             "tls_insecure": bool(d.get("tls_insecure")),
         })
+    keys = [site_key(site["name"]) for site in out]
+    if len(set(keys)) != len(keys):
+        raise ValueError("Frigate site names must have distinct identity keys")
     return out

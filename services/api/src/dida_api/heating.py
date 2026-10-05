@@ -31,8 +31,8 @@ from dida_core.heating import (
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from dida_api.auth import AuthUser, current_user, require_admin
-from dida_api.permissions import can_control_entity
+from dida_api.auth import AuthUser, can_see_page, current_user, require_admin
+from dida_api.commands import require_visible_control
 from dida_api.visibility import hidden_for
 
 router = APIRouter(prefix="/heating", tags=["heating"])
@@ -75,6 +75,8 @@ async def get_heating(request: Request, user: AuthUser = Depends(current_user)) 
     `orphan_valves` are heads that belong to no room: they cannot be heated, and
     naming them beats leaving the user to notice a room that never appeared.
     """
+    if not can_see_page(user, "heating"):
+        raise HTTPException(403, "heating access required")
     pool = request.app.state.pool
     contains, orphans = await derive_rooms(pool)
     rows = await pool.fetch("SELECT id, name, kind, heating_config FROM areas ORDER BY id")
@@ -87,13 +89,23 @@ async def get_heating(request: Request, user: AuthUser = Depends(current_user)) 
         here = contains.get(r["id"], RoomEntities([], [], []))
         if not here.valves and r["heating_config"] is None:
             continue
+        config = dict(r["heating_config"] or _room_dict(RoomHeating()))
+        if user.role != "admin" and not _keep(config.get("valves") or here.valves):
+            continue
+        config["valves"] = _keep(config.get("valves") or [])
+        if config.get("sensor") in hidden:
+            config["sensor"] = ""
         rooms.append({
             "area_id": r["id"], "name": r["name"], "kind": r["kind"],
             "sensors": _keep(here.sensors), "valves": _keep(here.valves),
-            "config": r["heating_config"] or _room_dict(RoomHeating()),
+            "config": config,
         })
+    settings = await _settings(pool)
+    for key in ("boiler", "outdoor", "away_helper"):
+        if settings.get(key) in hidden:
+            settings[key] = ""
     return {
-        "settings": await _settings(pool),
+        "settings": settings,
         "profiles": list(PROFILES),
         "rooms": rooms,
         "orphan_valves": _keep(orphans),
@@ -212,13 +224,12 @@ def _room_dict(room) -> dict:
 
 
 async def _require_room_control(pool, user: AuthUser, valves: list[str]) -> None:
-    """A room with no valves yet can only be boosted by an admin — there is nothing
-    to resolve a permission against, and defaulting to "allowed" is the wrong way
-    for that to fail."""
+    if user.role == "admin":
+        return
+    if not valves:
+        raise HTTPException(403, "you do not have permission to control this room's heating")
     for valve in valves:
-        if await can_control_entity(pool, user, valve, "target_temperature"):
-            return
-    raise HTTPException(403, "you do not have permission to control this room's heating")
+        await require_visible_control(pool, user, valve, "target_temperature")
 
 
 async def _require_capability(pool, entity_id: str, capability: str) -> None:

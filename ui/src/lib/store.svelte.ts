@@ -510,8 +510,10 @@ class DeviceStore {
   /** Refetch entity + device metadata (not state) — fills name/capabilities/room
    *  for entities that only arrived over the WS. Debounced by #scheduleMetaRefresh. */
   async #refreshMeta(): Promise<void> {
+    const revision = auth.revision;
     try {
       const [entities, devs] = await Promise.all([api.listEntities(), api.listDevices()]);
+      if (auth.revision !== revision) return;
       this.deviceMeta = Object.fromEntries(devs.map((d) => [d.device_key, { name: d.name, label: d.label, site: d.site }]));
       for (const e of entities) this.#applyEntityMeta(e);
     } catch { /* transient — the next unknown event reschedules */ }
@@ -527,27 +529,41 @@ class DeviceStore {
    *  HERE — a page-local copy leaves every other surface on yesterday's list until
    *  the tab is reloaded. */
   async refreshAreas(): Promise<void> {
-    this.areas = await api.listAreas();
+    const revision = auth.revision;
+    const areas = await api.listAreas();
+    if (auth.revision === revision) this.areas = areas;
   }
 
   #loading: Promise<void> | null = null;
+  #loadingRevision: number | null = null;
+  #loadingProjection: number | null = null;
+  #projection = 0;
 
   /** Seed/refresh from the snapshot. Single-flight: the layout effects and the WS
    *  onopen all call this at login (and again on a language switch), which fired
    *  three overlapping snapshot loads — 12 parallel requests racing each other's
    *  deletion reconcile. Concurrent callers now share the one in-flight load. */
   async load(): Promise<void> {
-    if (this.#loading) return this.#loading;
-    this.#loading = this.#load().finally(() => { this.#loading = null; });
-    return this.#loading;
+    if (this.replaying) return;
+    const revision = auth.revision;
+    const projection = this.#projection;
+    if (this.#loading && this.#loadingRevision === revision && this.#loadingProjection === projection) return this.#loading;
+    const loading = this.#load(revision, projection).finally(() => {
+      if (this.#loading === loading) this.#loading = null;
+    });
+    this.#loadingRevision = revision;
+    this.#loadingProjection = projection;
+    this.#loading = loading;
+    return loading;
   }
 
-  async #load(): Promise<void> {
+  async #load(revision: number, projection: number): Promise<void> {
     const loadStart = Date.now();  // WS deltas after this are live newcomers, not deletions
     try {
       const [entities, state, areas, devs] = await Promise.all([
         api.listEntities(), api.listState(), api.listAreas(), api.listDevices(),
       ]);
+      if (auth.revision !== revision || this.#projection !== projection) return;
       this.areas = areas;
       this.deviceMeta = Object.fromEntries(devs.map((d) => [d.device_key, { name: d.name, label: d.label, site: d.site }]));
       for (const e of entities) this.#applyEntityMeta(e);
@@ -577,6 +593,7 @@ class DeviceStore {
       }
       this.error = null;
     } catch (e) {
+      if (auth.revision !== revision || this.#projection !== projection) return;
       if (e instanceof Unauthorized) {
         auth.user = null; // session expired → layout guard redirects to /login
         return;
@@ -592,21 +609,26 @@ class DeviceStore {
   replaying = $state(false);
   replayAt = $state<number | null>(null);
   #replayUnits: Record<string, Record<string, string | null>> | null = null;
+  #replayEntities = new Set<string>();
 
   /** Enter replay for `requested`. A capability the window has no history for is
    *  cleared rather than left at its live value — a plan that mixes "now" into
    *  the past is worse than one that admits it doesn't know. */
   enterReplay(requested: string[], covered: Record<string, string[]>): void {
+    this.#projection++;
     // Units come from the registry, not from history, and the live ones are gone
     // after the first frame — capture them once.
-    const units: Record<string, Record<string, string | null>> = {};
-    for (const [id, d] of Object.entries(this.byId)) {
-      const per: Record<string, string | null> = {};
-      for (const [c, cs] of Object.entries(d.caps)) per[c] = cs.unit;
-      units[id] = per;
+    if (!this.#replayUnits) {
+      const units: Record<string, Record<string, string | null>> = {};
+      for (const [id, d] of Object.entries(this.byId)) {
+        const per: Record<string, string | null> = {};
+        for (const [c, cs] of Object.entries(d.caps)) per[c] = cs.unit;
+        units[id] = per;
+      }
+      this.#replayUnits = units;
     }
-    this.#replayUnits = units;
     for (const id of requested) {
+      this.#replayEntities.add(id);
       const d = this.byId[id];
       if (!d) continue;
       const keep = new Set(covered[id] ?? []);
@@ -622,6 +644,7 @@ class DeviceStore {
   applyReplay(at: number, values: Record<string, Record<string, Scalar | null>>): void {
     this.replayAt = at;
     for (const [id, caps] of Object.entries(values)) {
+      this.#replayEntities.add(id);
       const d = this.byId[id];
       if (!d) continue;
       for (const [c, v] of Object.entries(caps)) {
@@ -632,6 +655,13 @@ class DeviceStore {
   }
 
   async exitReplay(): Promise<void> {
+    if (!this.replaying) return;
+    this.#projection++;
+    for (const id of this.#replayEntities) {
+      const d = this.byId[id];
+      if (d) d.caps = {};
+    }
+    this.#replayEntities.clear();
     this.replaying = false;
     this.replayAt = null;
     this.#replayUnits = null;
@@ -691,8 +721,24 @@ class DeviceStore {
     // and issues an authenticated fetch on a dead session.
     if (this.#metaTimer) { clearTimeout(this.#metaTimer); this.#metaTimer = null; }
     this.#stopHeartbeat();
-    this.#ws?.close();
+    const ws = this.#ws;
     this.#ws = null;
+    ws?.close();
+    this.#clear();
+  }
+
+  #clear(): void {
+    this.#projection++;
+    this.byId = {};
+    this.areas = [];
+    this.deviceMeta = {};
+    this.liveEvents = [];
+    this.error = null;
+    this.replaying = false;
+    this.replayAt = null;
+    this.#replayUnits = null;
+    this.#replayEntities.clear();
+    this.#metaKnown.clear();
   }
 
   #onWake = (): void => {
@@ -745,6 +791,7 @@ class DeviceStore {
     }
     this.#ws = ws;
     ws.onopen = () => {
+      if (this.#ws !== ws) return;
       this.conn = "live";
       this.#reconnectDelay = 1000; // healthy connection — reset the backoff
       this.#lastMsg = Date.now();
@@ -755,6 +802,7 @@ class DeviceStore {
       this.load();
     };
     ws.onmessage = (m) => {
+      if (this.#ws !== ws) return;
       this.#lastMsg = Date.now();
       try {
         const data = JSON.parse(m.data);
@@ -764,11 +812,17 @@ class DeviceStore {
       } catch { /* ignore malformed */ }
     };
     ws.onclose = (ev) => {
+      if (this.#ws !== ws) return;
       this.conn = "offline";
       this.#stopHeartbeat();
       if (ev.code === 4401) {
         // Auth rejected at WS upgrade — don't hammer reconnect; bounce to login.
         auth.user = null;
+        return;
+      }
+      if (ev.code === 1012) {
+        this.#clear();
+        void auth.load().then(() => { if (auth.user && this.#ws === ws) this.#scheduleReconnect(); });
         return;
       }
       this.#scheduleReconnect();

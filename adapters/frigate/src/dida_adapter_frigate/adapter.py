@@ -25,7 +25,7 @@ Two planes, same split as the `baba` adapter:
 
 Sites are configured in Settings → Adapters as a LIST (name, Frigate URL,
 credentials, optional go2rtc/broker). Every camera lives in the single `frigate`
-namespace (`frigate:<cam>`) and carries a `site` label the UI shows as a chip on
+namespace (`frigate:<site>:<cam>`) and carries a `site` label the UI shows as a chip on
 each tile, so one cumulative wall holds every location's cameras.
 
 Everything is validated at the DIDA boundary, so Frigate's open label set is
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import ssl
@@ -55,7 +56,7 @@ from dida_core import (
     slug,
     validate_command,
 )
-from dida_core.frigate_sites import parse_sites
+from dida_core.frigate_sites import camera_key, parse_sites, site_key
 from home_core.tasks import spawn
 
 log = logging.getLogger("dida.adapter.frigate")
@@ -142,10 +143,6 @@ def _text(payload: object) -> str:
     return str(payload).strip()
 
 
-def site_key(name: str) -> str:
-    return slug(name, default="site")
-
-
 class FrigateAdapter:
     """Bridges one or more Frigate NVRs onto the DIDA bus. Implements `dida_core.Adapter`."""
 
@@ -170,8 +167,8 @@ class FrigateAdapter:
         self._cam_name: dict[str, str] = {}   # slug -> authoritative Frigate camera name
         self._cam_site: dict[str, str] = {}    # slug -> owning site name (command routing)
         self._camera_zones: dict[str, set[str]] = {}  # camera -> configured zones
-        self._events: dict[str, tuple[str, set[str]]] = {}  # event_id -> (camera, current_zones)
-        self._event_ts: dict[str, int] = {}   # event_id -> ns of last update (staleness sweep)
+        self._events: dict[tuple[str, str], tuple[str, set[str]]] = {}
+        self._event_ts: dict[tuple[str, str], int] = {}
         self._last: dict[tuple[str, str], object] = {}  # (entity, cap) -> last published (dedup)
 
     # ---- config -------------------------------------------------------------
@@ -190,6 +187,8 @@ class FrigateAdapter:
     async def start(self, bus: Bus) -> None:
         self._bus = bus
         self._cfg = AdapterConfig(NAMESPACE, self.broker)
+        await self._cfg.load()
+        await self.broker.call("frigate_migrate")
         spawn(self._config_refresh_loop(), log=log, name="frigate config refresh")
         spawn(self._sweep_loop(), log=log, name="frigate stale sweeper")
         await self._mqtt_supervise()
@@ -205,6 +204,7 @@ class FrigateAdapter:
             while True:
                 try:
                     await self._cfg.load()
+                    await self.broker.call("frigate_migrate")
                     want = {s["name"]: self._conn_key(s) for s in self._sites() if s.get("mqtt_url")}
                     # Drop tasks for sites gone or reconfigured.
                     for name in list(tasks):
@@ -342,60 +342,62 @@ class FrigateAdapter:
         if not eid or not cam:
             return
         self._register_camera(site_name, cam)
-        device = f"{NAMESPACE}:{slug(cam)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
+        event_key = (site_name, str(eid))
+        ckey = camera_key(site_name, cam)
 
         if etype in ("new", "update"):
-            self._events[eid] = (cam, set(after.get("current_zones") or []))
-            self._event_ts[eid] = time.time_ns()
+            self._events[event_key] = (ckey, set(after.get("current_zones") or []))
+            self._event_ts[event_key] = time.time_ns()
             self._pub(device, "object_class", _object_class(after.get("label")),
-                      name=self._camera_name(cam), device=device)
+                      name=self._camera_name(site_name, cam), device=device)
             self._sync_zones(site_name, cam)
         elif etype == "end":
-            self._events.pop(eid, None)
-            self._event_ts.pop(eid, None)
+            self._events.pop(event_key, None)
+            self._event_ts.pop(event_key, None)
             self._sync_zones(site_name, cam)
-            if not any(c == cam for c, _z in self._events.values()):
+            if not any(c == ckey for c, _z in self._events.values()):
                 self._pub(device, "object_class", "none",
-                          name=self._camera_name(cam), device=device)
+                          name=self._camera_name(site_name, cam), device=device)
 
     def _on_motion(self, site_name: str, cam: str, text: str) -> None:
         self._register_camera(site_name, cam)
-        device = f"{NAMESPACE}:{slug(cam)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
         self._pub(device, "motion", text.upper() == "ON",
-                  name=self._camera_name(cam), device=device)
+                  name=self._camera_name(site_name, cam), device=device)
 
     def _on_count(self, site_name: str, cam: str, obj: str, n: float) -> None:
         """Live per-object count. `person` is the camera hero's `person_count`;
         every other object (car, dog, …, or `all`) is a read-only `measurement`
         entity grouped under the camera (diagnostic → hidden by default, curatable)."""
         self._register_camera(site_name, cam)
-        device = f"{NAMESPACE}:{slug(cam)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
         if obj == "person":
             self._pub(device, "person_count", max(0, int(n)),
-                      name=self._camera_name(cam), device=device)
+                      name=self._camera_name(site_name, cam), device=device)
             return
         entity = f"{device}:count:{slug(obj)}"
-        self._register_measurement(cam, entity, f"{self._camera_name(cam)} {obj}")
-        self._pub(entity, "measurement", n, name=f"{self._camera_name(cam)} {obj}", device=device)
+        self._register_measurement(site_name, cam, entity, f"{self._camera_name(site_name, cam)} {obj}")
+        self._pub(entity, "measurement", n, name=f"{self._camera_name(site_name, cam)} {obj}", device=device)
 
     def _on_feature(self, site_name: str, cam: str, feature: str, text: str) -> None:
         """A Frigate feature mirrored read/write: ON/OFF → an `on_off` switch, a
         numeric value → a settable `number` (a threshold). Discovered, so a new
         Frigate toggle needs no code here; commands route to `<cam>/<feature>/set`."""
         self._register_camera(site_name, cam)
-        device = f"{NAMESPACE}:{slug(cam)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
         entity = f"{device}:{slug(feature)}"
         up = text.strip().upper()
         if up in _ONOFF:
-            self._register_feature(cam, feature, "on_off")
+            self._register_feature(site_name, cam, feature, "on_off")
             self._pub(entity, "on_off", up == "ON",
-                      name=f"{self._camera_name(cam)} {feature}", device=device)
+                      name=f"{self._camera_name(site_name, cam)} {feature}", device=device)
             return
         n = _as_num(text)
         if n is not None:
-            self._register_feature(cam, feature, "number")
+            self._register_feature(site_name, cam, feature, "number")
             self._pub(entity, "number", n,
-                      name=f"{self._camera_name(cam)} {feature}", device=device)
+                      name=f"{self._camera_name(site_name, cam)} {feature}", device=device)
 
     def _on_stats(self, site_name: str, payload: object) -> None:
         """Per-camera processing rates from `frigate/stats` → `measurement` entities
@@ -408,26 +410,28 @@ class FrigateAdapter:
         if not isinstance(cams, dict):
             return
         for cam, metrics in cams.items():
-            if not isinstance(metrics, dict) or slug(cam) not in self._known_cameras:
+            if not isinstance(metrics, dict) or camera_key(site_name, cam) not in self._known_cameras:
                 continue
-            device = f"{NAMESPACE}:{slug(cam)}"
+            device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
             for key in ("camera_fps", "detection_fps", "process_fps", "skipped_fps"):
                 val = metrics.get(key)
                 if not isinstance(val, (int, float)):
                     continue
                 entity = f"{device}:fps:{key.replace('_fps', '')}"
-                self._register_measurement(cam, entity, f"{self._camera_name(cam)} {key}")
+                self._register_measurement(site_name, cam, entity, f"{self._camera_name(site_name, cam)} {key}")
                 self._pub(entity, "measurement", float(val),
-                          name=f"{self._camera_name(cam)} {key}", device=device)
+                          name=f"{self._camera_name(site_name, cam)} {key}", device=device)
 
     def _sync_zones(self, site_name: str, cam: str) -> None:
         """A zone is occupied iff any still-active event lists it in current_zones."""
         occupied: set[str] = set()
+        ckey = camera_key(site_name, cam)
         for c, zones in self._events.values():
-            if c == cam:
+            if c == ckey:
                 occupied |= zones
-        device = f"{NAMESPACE}:{slug(cam)}"
-        for zone in self._camera_zones.get(cam, set()) | occupied:
+        device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
+        self._camera_zones.setdefault(ckey, set()).update(occupied)
+        for zone in self._camera_zones.get(ckey, set()) | occupied:
             self._register_zone(site_name, cam, zone)
             zid = f"{device}:zone:{slug(zone)}"
             self._pub(zid, "occupancy", zone in occupied, name=zone, device=device)
@@ -447,6 +451,7 @@ class FrigateAdapter:
             await asyncio.sleep(self._refresh_s())
 
     async def _refresh_all(self) -> None:
+        await self.broker.call("frigate_migrate")
         sites = self._sites()
         if not sites:
             self.status.idle("add a Frigate location in Settings → Adapters")
@@ -479,22 +484,26 @@ class FrigateAdapter:
             with contextlib.suppress(Exception):
                 await sess.close()
         self._authed.pop(name, None)
-        # The camera-tracking dicts are keyed by camera slug; drop every camera that
-        # belonged to this site so it can be re-announced cleanly if the site returns.
         gone = {cslug for cslug, s in self._cam_site.items() if s == name}
         for cslug in gone:
             self._cam_site.pop(cslug, None)
             self._cam_name.pop(cslug, None)
             self._known_cameras.discard(cslug)
+            self._camera_zones.pop(cslug, None)
             self._known_zones = {z for z in self._known_zones if not z.startswith(f"{cslug}:")}
             self._known_features = {f for f in self._known_features if not f.startswith(f"{cslug}:")}
             self._feature_cap = {k: v for k, v in self._feature_cap.items() if not k.startswith(f"{cslug}:")}
             self._known_measures = {m for m in self._known_measures
                                     if not m.startswith(f"{NAMESPACE}:{cslug}:")}
+        for event_key, (camera, _zones) in list(self._events.items()):
+            if camera in gone:
+                self._events.pop(event_key, None)
+                self._event_ts.pop(event_key, None)
         log.info("frigate[%s]: site removed — released session + %d camera(s)", name, len(gone))
 
     async def _refresh_site(self, site: dict) -> None:
         name, base = site["name"], site["url"]
+        site_name = name
         try:
             cfg = await self._fetch_config(site)
             cameras = (cfg or {}).get("cameras")
@@ -508,12 +517,12 @@ class FrigateAdapter:
                     continue
                 published += 1
                 self._register_camera(name, cam, cam_name=cam)
-                device = f"{NAMESPACE}:{slug(cam)}"
+                device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
                 self._pub(device, "camera", _descriptor(base, go2rtc, cam, name, authed=authed),
-                          name=self._camera_name(cam), device=device)
+                          name=self._camera_name(site_name, cam), device=device)
                 zones = cam_cfg.get("zones")
                 if isinstance(zones, dict):
-                    self._camera_zones[cam] = set(zones.keys())
+                    self._camera_zones[camera_key(site_name, cam)] = set(zones.keys())
                     for zone in zones:
                         self._register_zone(name, cam, zone)
             self._site_status[name] = (True, f"{published} cam")
@@ -590,21 +599,22 @@ class FrigateAdapter:
             self._event_ts.pop(eid, None)
             if entry:
                 cams.add(entry[0])
-        for cam in cams:
-            site_name = self._cam_site.get(slug(cam), "")
+        for ckey in cams:
+            site_name = self._cam_site[ckey]
+            cam = self._cam_name[ckey]
             self._sync_zones(site_name, cam)
-            if not any(c == cam for c, _z in self._events.values()):
-                device = f"{NAMESPACE}:{slug(cam)}"
+            if not any(c == ckey for c, _z in self._events.values()):
+                device = f"{NAMESPACE}:{camera_key(site_name, cam)}"
                 self._pub(device, "object_class", "none",
-                          name=self._camera_name(cam), device=device)
+                          name=self._camera_name(site_name, cam), device=device)
 
     # ---- commands (feature switches) ----------------------------------------
 
     async def handle_command(self, command: Command) -> None:
         parts = command.entity_id.split(":")
-        if len(parts) != 3:  # only feature entities `frigate:<cam>:<feature>` are writable
+        if len(parts) != 4:
             raise CommandRejected(f"{command.entity_id} is read-only")
-        cam_slug, feature = parts[1], parts[2]
+        cam_slug, feature = f"{parts[1]}:{parts[2]}", parts[3]
         cap = self._feature_cap.get(f"{cam_slug}:{feature}")
         if cap is None or command.capability != cap:
             raise CommandRejected(f"{command.entity_id} has no writable {command.capability}")
@@ -645,14 +655,13 @@ class FrigateAdapter:
 
     # ---- entity registration + emit -----------------------------------------
 
-    def _camera_name(self, cam: str) -> str:
-        return _prettify(self._cam_name.get(slug(cam)) or self._cam_name.get(cam) or cam)
+    def _camera_name(self, site_name: str, cam: str) -> str:
+        return _prettify(self._cam_name.get(camera_key(site_name, cam)) or cam)
 
     def _register_camera(self, site_name: str, camera: str, cam_name: str | None = None) -> None:
-        cslug = slug(camera)
+        cslug = camera_key(site_name, camera)
         learned = bool(cam_name) and self._cam_name.get(cslug) != cam_name
-        if cam_name:
-            self._cam_name[cslug] = cam_name
+        self._cam_name[cslug] = cam_name or self._cam_name.get(cslug) or camera
         self._cam_site[cslug] = site_name
         if cslug in self._known_cameras and not learned:
             return
@@ -660,50 +669,53 @@ class FrigateAdapter:
         if self._bus is None:
             return
         device = f"{NAMESPACE}:{cslug}"
+        site = next((s for s in self._sites() if s["name"] == site_name), None)
+        native = hashlib.sha256(f"{site['url'].rstrip('/')}\0{camera}".encode()).hexdigest() if site else None
         spawn(self._bus.publish_entity(EntityInfo(
             entity_id=device, adapter=NAMESPACE,
             capabilities=["camera", "motion", "person_count", "object_class"],
-            name=self._camera_name(camera), device=device,
+            name=self._camera_name(site_name, camera), device=device,
             device_name=self._cam_name.get(cslug), site=site_name,
+            native_key=native,
         )), log=log, name=f"announce {device}")
 
     def _register_zone(self, site_name: str, camera: str, zone: str) -> None:
-        key = f"{slug(camera)}:{slug(zone)}"
+        key = f"{camera_key(site_name, camera)}:{slug(zone)}"
         if key in self._known_zones or self._bus is None:
             return
         self._known_zones.add(key)
-        device = f"{NAMESPACE}:{slug(camera)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, camera)}"
         zid = f"{device}:zone:{slug(zone)}"
         spawn(self._bus.publish_entity(EntityInfo(
             entity_id=zid, adapter=NAMESPACE, capabilities=["occupancy"],
-            name=zone, device=device, device_name=self._cam_name.get(slug(camera)),
+            name=zone, device=device, device_name=self._cam_name.get(camera_key(site_name, camera)),
             site=site_name,
         )), log=log, name=f"announce {zid}")
 
-    def _register_feature(self, camera: str, feature: str, cap: str) -> None:
-        key = f"{slug(camera)}:{slug(feature)}"
+    def _register_feature(self, site_name: str, camera: str, feature: str, cap: str) -> None:
+        key = f"{camera_key(site_name, camera)}:{slug(feature)}"
         self._feature_cap[key] = cap  # remember cap for command routing (idempotent)
         if key in self._known_features or self._bus is None:
             return
         self._known_features.add(key)
-        device = f"{NAMESPACE}:{slug(camera)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, camera)}"
         entity = f"{device}:{slug(feature)}"
         spawn(self._bus.publish_entity(EntityInfo(
             entity_id=entity, adapter=NAMESPACE, capabilities=[cap],
-            name=f"{self._camera_name(camera)} {feature}", device=device,
-            device_name=self._cam_name.get(slug(camera)), category="config",
-            site=self._cam_site.get(slug(camera)),
+            name=f"{self._camera_name(site_name, camera)} {feature}", device=device,
+            device_name=self._cam_name.get(camera_key(site_name, camera)), category="config",
+            site=site_name,
         )), log=log, name=f"announce {entity}")
 
-    def _register_measurement(self, camera: str, entity: str, name: str) -> None:
+    def _register_measurement(self, site_name: str, camera: str, entity: str, name: str) -> None:
         if entity in self._known_measures or self._bus is None:
             return
         self._known_measures.add(entity)
-        device = f"{NAMESPACE}:{slug(camera)}"
+        device = f"{NAMESPACE}:{camera_key(site_name, camera)}"
         spawn(self._bus.publish_entity(EntityInfo(
             entity_id=entity, adapter=NAMESPACE, capabilities=["measurement"],
-            name=name, device=device, device_name=self._cam_name.get(slug(camera)),
-            diagnostic=True, category="diagnostic", site=self._cam_site.get(slug(camera)),
+            name=name, device=device, device_name=self._cam_name.get(camera_key(site_name, camera)),
+            diagnostic=True, category="diagnostic", site=site_name,
         )), log=log, name=f"announce {entity}")
 
     def _pub(self, entity_id: str, capability: str, value, *,

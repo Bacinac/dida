@@ -18,7 +18,7 @@ from fastapi.responses import Response
 from PIL import Image
 
 from dida_api import opus
-from dida_api.auth import AuthUser, current_user
+from dida_api.auth import WALLPANEL_USERNAME, AuthUser, current_user
 
 log = logging.getLogger("dida.api.photos")
 
@@ -35,6 +35,12 @@ _CHECKSUM_RE = re.compile(r"^[0-9a-f]{40}$")
 _MAX_EDGE = 1920
 
 
+async def photo_user(user: AuthUser = Depends(current_user)) -> AuthUser:
+    if user.role != "admin" and user.username != WALLPANEL_USERNAME:
+        raise HTTPException(403, "household photographs require wall panel or administrator access")
+    return user
+
+
 def _for_panel(data: bytes) -> bytes:
     img = Image.open(io.BytesIO(data)).convert("RGB")
     img.thumbnail((_MAX_EDGE, _MAX_EDGE), Image.LANCZOS)
@@ -45,12 +51,14 @@ def _for_panel(data: bytes) -> bytes:
 
 @router.get("/photos/random")
 async def photos_random(
-    request: Request, count: int = Query(30, ge=1, le=100), user: AuthUser = Depends(current_user)
+    request: Request, response: Response, count: int = Query(30, ge=1, le=100),
+    user: AuthUser = Depends(photo_user),
 ) -> dict:
     """A batch of random household photographs (id, when, place and country
     code). The panel fetches this list, then pixels via /photos/{id}/preview —
     two steps so it can preload the next photo."""
     pool = request.app.state.pool
+    response.headers["cache-control"] = "private, no-store"
     if not await opus.configured(pool):
         raise HTTPException(404, "photos_not_configured")
     try:
@@ -68,7 +76,7 @@ async def photos_random(
 
 @router.get("/photos/{checksum}/preview")
 async def photo_preview(
-    checksum: str, request: Request, user: AuthUser = Depends(current_user)
+    checksum: str, request: Request, user: AuthUser = Depends(photo_user)
 ) -> Response:
     """One photograph as a panel-sized JPEG, streamed through DIDA's origin."""
     if not _CHECKSUM_RE.match(checksum):
@@ -86,5 +94,5 @@ async def photo_preview(
     return Response(
         content=jpeg,
         media_type="image/jpeg",
-        headers={"cache-control": "private, max-age=3600"},
+        headers={"cache-control": "private, no-store"},
     )

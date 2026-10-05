@@ -11,11 +11,8 @@ import time
 
 import asyncpg
 from dida_core import (
-    AREA_REFERENCES,
     CORE,
     ENGINE_EVENTS_SUBJECT,
-    SETTING_REFERENCES,
-    WALKED_COLUMNS,
     Bus,
     CapabilityError,
     Command,
@@ -26,18 +23,13 @@ from dida_core import (
     attach_log_bus,
     classify_device_type,
     emit_journal,
-    entity_references,
-    path_references,
     pg_pool,
     resolve_device_type,
-    rewrite_paths,
-    rewrite_references,
-    rewrite_setting,
     run_service,
-    setting_references,
     setup_logging,
     validate_state,
 )
+from dida_core.entity_identity import rewrite_entity_references
 from dida_core.events import HEARTBEAT_S
 from dida_core.journal import JournalKind
 from home_core.health import HealthMarker
@@ -79,8 +71,6 @@ def _owns(adapter: str, entity_id: str) -> bool:
     return adapter == ns or adapter in _SHARED_NAMESPACES.get(ns, ())
 
 
-def _json(body):
-    return json.loads(body) if isinstance(body, str) else body
 
 # State path: create the entity on first sight and accumulate the capability seen
 # into its `capabilities` set (union). `exposed` defaults lean — a diagnostic (or
@@ -612,16 +602,14 @@ class Engine:
         references not — is strictly worse than the duplicate it replaces, because
         the rules would then point at an id that no longer exists at all.
 
-        This writes to automation-owned tables, which the engine otherwise never
-        touches. That is deliberate: the rename and the references it invalidates
-        have to commit together, and the engine is the only place that holds both."""
-        old_prefix = f"{adapter}:{old_key}"
-        new_prefix = f"{adapter}:{new_key}"
+        The catalog and every reference commit together."""
+        old_prefix = old_key if old_key.startswith(f"{adapter}:") else f"{adapter}:{old_key}"
+        new_prefix = new_key if new_key.startswith(f"{adapter}:") else f"{adapter}:{new_key}"
 
         async with self._pool.acquire() as conn, conn.transaction():
             rows = await conn.fetch(
-                "SELECT entity_id FROM entities WHERE entity_id = $1 OR entity_id LIKE $2",
-                old_prefix, old_prefix + ":%")
+                "SELECT entity_id FROM entities WHERE entity_id = $1 OR starts_with(entity_id, $2)",
+                old_prefix, old_prefix + ":")
             mapping = {r["entity_id"]: new_prefix + r["entity_id"][len(old_prefix):]
                        for r in rows}
             if not mapping:
@@ -649,35 +637,7 @@ class Engine:
             # A rename has to move every reference or it has moved nothing: a rule
             # left pointing at the old id keeps loading, keeps evaluating, and
             # never fires again.
-            moved = 0
-            for table, column in WALKED_COLUMNS:
-                for row in await conn.fetch(
-                        f"SELECT id, {column} AS body FROM {table} WHERE {column} IS NOT NULL"):  # noqa: S608
-                    body = _json(row["body"])
-                    if not (entity_references(body) & mapping.keys()):
-                        continue
-                    await conn.execute(
-                        f"UPDATE {table} SET {column} = $2 WHERE id = $1",  # noqa: S608
-                        row["id"], json.dumps(rewrite_references(body, mapping)))
-                    moved += 1
-            for row in await conn.fetch(f"SELECT id, {', '.join(AREA_REFERENCES)} FROM areas"):  # noqa: S608
-                for column, paths in AREA_REFERENCES.items():
-                    body = _json(row[column])
-                    if not (path_references(body, paths) & mapping.keys()):
-                        continue
-                    await conn.execute(
-                        f"UPDATE areas SET {column} = $2 WHERE id = $1",  # noqa: S608
-                        row["id"], json.dumps(rewrite_paths(body, paths, mapping)))
-                    moved += 1
-            for row in await conn.fetch(
-                    "SELECT key, value FROM app_settings WHERE key = ANY($1::text[])",
-                    [key for key, paths in SETTING_REFERENCES.items() if paths]):
-                if not (setting_references(row["key"], row["value"]) & mapping.keys()):
-                    continue
-                await conn.execute(
-                    "UPDATE app_settings SET value = $2, updated_at = now() WHERE key = $1",
-                    row["key"], rewrite_setting(row["key"], row["value"], mapping))
-                moved += 1
+            moved = await rewrite_entity_references(conn, mapping)
 
         log.warning("device renamed: %s -> %s (%d entities, %d references rewritten)",
                     old_prefix, new_prefix, len(mapping), moved)

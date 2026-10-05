@@ -12,10 +12,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from dida_api.auth import AuthUser, current_user, require_admin
+from dida_api.auth import AuthUser, can_see_page, current_user, require_admin
 from dida_api.common import DEVICE_TYPES
 from dida_api.stats import entity_stats
-from dida_api.visibility import hidden_for, is_hidden
+from dida_api.visibility import can_view_entity, hidden_for, page_allowed_ids
 
 log = logging.getLogger("dida.api.entities")
 
@@ -92,7 +92,7 @@ async def entity_detail(entity_id: str, request: Request,
     Same view gate as everywhere else: an entity hidden from this user is a 404,
     not an empty shell that confirms it exists."""
     pool = request.app.state.pool
-    if await is_hidden(pool, user, entity_id):
+    if not await can_view_entity(pool, user, entity_id):
         raise HTTPException(404, "entity not found")
     row = await pool.fetchrow(
         "SELECT entity_id, name, label, adapter, device_type, area_id, diagnostic, category, "
@@ -219,7 +219,7 @@ async def entity_stats_route(entity_id: str, request: Request, days: int = 30,
     Same visibility rule as the rest of the panel: an entity this user may not see
     is a 404, not an empty answer."""
     pool = request.app.state.pool
-    if await is_hidden(pool, user, entity_id):
+    if not await can_view_entity(pool, user, entity_id):
         raise HTTPException(404, "entity not found")
     row = await pool.fetchrow("SELECT capabilities FROM entities WHERE entity_id = $1", entity_id)
     if row is None:
@@ -258,11 +258,45 @@ async def patch_entity(entity_id: str, body: EntityPatch, request: Request,
 
 @router.get("/areas")
 async def list_areas(request: Request, _user: AuthUser = Depends(current_user)) -> list[dict]:
-    rows = await request.app.state.pool.fetch(
+    pool = request.app.state.pool
+    rows = await pool.fetch(
         "SELECT id, name, kind, fp_floor, fp_x, fp_y, fp_poly, sensor_config, media_config "
         "FROM areas ORDER BY name NULLS LAST, id"
     )
-    return [dict(r) for r in rows]
+    if _user.role == "admin":
+        return [dict(r) for r in rows]
+    hidden = await hidden_for(pool, _user)
+    registry = await pool.fetch("SELECT entity_id, area_id FROM entities")
+    visible = {r["entity_id"]: r["area_id"] for r in registry if r["entity_id"] not in hidden}
+    area_ids = set(visible.values())
+    occupied = {r["area_id"] for r in registry}
+    scoped = await page_allowed_ids(pool, _user) is not None
+    hidden_areas = {r["ref"] for r in await pool.fetch(
+        "SELECT ref FROM user_access_rules WHERE user_id = $1 AND kind = 'view' AND scope = 'area'", _user.id)}
+    result = []
+    for row in rows:
+        if str(row["id"]) in hidden_areas or (row["id"] not in area_ids and (scoped or row["id"] in occupied)):
+            continue
+        area = dict(row)
+        if not can_see_page(_user, "floorplan"):
+            for key in ("fp_floor", "fp_x", "fp_y", "fp_poly", "sensor_config"):
+                area[key] = None
+        elif isinstance(area["sensor_config"], dict):
+            cfg = {key: value for key, value in area["sensor_config"].items()
+                   if key in {"hidden", "excluded", "included", "order", "off"}}
+            for key in ("excluded", "included"):
+                if isinstance(cfg.get(key), list):
+                    cfg[key] = [ref for ref in cfg[key] if isinstance(ref, str) and ref.rsplit(":", 1)[0] in visible]
+            area["sensor_config"] = cfg
+        if not can_see_page(_user, "floorplan", "media"):
+            area["media_config"] = None
+        elif isinstance(area["media_config"], dict):
+            sources = area["media_config"].get("sources", [])
+            area["media_config"] = {"sources": [s for s in sources if isinstance(s, dict) and all(
+                not s.get(key) or s[key] in visible
+                for key in ("remote", "avr", "nowplaying", "player", "zone"))]}
+        result.append(area)
+    return result
 
 
 @router.patch("/areas/{area_id}")

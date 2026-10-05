@@ -7,6 +7,7 @@
   import { t, type MessageKey } from "$lib/i18n";
   import { auth } from "$lib/auth.svelte";
   import { devices } from "$lib/store.svelte";
+  import { replay } from "$lib/replay.svelte";
   import { translations } from "$lib/translations.svelte";
   import { geo } from "$lib/geolocation.svelte";
   import { push } from "$lib/push.svelte";
@@ -65,6 +66,10 @@
     })();
   });
 
+  $effect(() => {
+    if (auth.user) (window as any).DidaApp?.syncIdentity?.(String(auth.user.id), window.location.origin);
+  });
+
   // Run the live store only while authenticated; tear it down on logout.
   $effect(() => {
     if (auth.user) {
@@ -74,6 +79,7 @@
       void push.init(); // register the SW + reflect an existing push opt-in
       return () => {
         devices.stop();
+        void replay.close();
         geo.stop();
       };
     }
@@ -86,7 +92,7 @@
   // the panel has mounted.
   $effect(() => {
     const q = ui.pendingQuestion;
-    if (q && assistantPanel) {
+    if (q && assistantPanel && auth.user && auth.canSee("assistant")) {
       ui.pendingQuestion = null;
       assistantPanel.ask(q);
     }

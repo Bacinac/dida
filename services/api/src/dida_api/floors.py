@@ -72,6 +72,8 @@ class FloorPatch(BaseModel):
 
 @router.get("/floors")
 async def list_floors(request: Request, _user: AuthUser = Depends(current_user)) -> list[dict]:
+    if not can_see_page(_user, "floorplan"):
+        return []
     rows = await request.app.state.pool.fetch(
         f"SELECT {_COLS} FROM floors ORDER BY sort_order, id"  # noqa: S608
     )

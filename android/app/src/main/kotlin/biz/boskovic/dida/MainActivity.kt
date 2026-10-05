@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
@@ -49,6 +50,8 @@ class MainActivity : ComponentActivity() {
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var setupInProgress = false
     private var nudgedSetup = false
+    private var activeUserId: String? = null
+    private var provisionRevision = 0L
 
     // --- Setup walkthrough steps, chained via Activity Result callbacks. Order
     // is OS-mandated: fine location first, only then background ("all the time"),
@@ -127,7 +130,13 @@ class MainActivity : ComponentActivity() {
         val text = result.contents ?: return@registerForActivityResult
         val uri = text.toUri()
         if (uri.scheme == "https" && uri.host != null && uri.path == "/api/auth/link") {
-            Prefs.setBaseUrl(this, "https://${uri.host}")
+            val origin = LocationIdentity.origin(text) ?: return@registerForActivityResult
+            if (LocationIdentity.origin(Prefs.baseUrl(this)) != origin) {
+                LocationEngine.stop(this)
+                activeUserId = null
+                provisionRevision++
+            }
+            Prefs.setBaseUrl(this, origin)
             webView.loadUrl(text)
         }
     }
@@ -352,7 +361,7 @@ class MainActivity : ComponentActivity() {
         // install signed in outside it stays dark forever. Retry on the session
         // cookie like FcmRegistrar; a missing grant then falls to the nudge below.
         if (Prefs.isProvisioned(this)) LocationEngine.start(this)
-        else if (!setupInProgress) provision(announce = false)
+        if (!setupInProgress) provision(announce = false, expectedUserId = null)
         UpdateManager.maybeCheck(this)
         FcmRegistrar.ensure(this)  // (re)register the push token once signed in
         // A provisioned install without the background grant (reinstall that
@@ -460,59 +469,83 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun syncIdentity(userId: String, origin: String) {
+        val normalized = LocationIdentity.origin(origin) ?: return
+        if (normalized != LocationIdentity.origin(Prefs.baseUrl(this))) return
+        activeUserId = userId
+        if (Prefs.identity(this) != LocationIdentity(userId, normalized)) {
+            LocationEngine.stop(this)
+            Prefs.clearCredentials(this)
+            notifyNativeStatus()
+        }
+        if (!setupInProgress) provision(announce = false, expectedUserId = userId)
+    }
+
     /** Exchange the WebView's session cookie for the endpoint-scoped location
      * credentials (`/api/me/mobile-config`), then arm geofences + FLP and post
      * the first fix. */
-    private fun provision(announce: Boolean = true) {
+    private fun provision(announce: Boolean = true, expectedUserId: String? = activeUserId) {
         val base = Prefs.baseUrl(this)
         val cookie = CookieManager.getInstance().getCookie(base)
-        if (!announce && cookie == null) return  // not signed in yet
+        if (!announce && cookie == null) return
+        val revision = ++provisionRevision
         lifecycleScope.launch {
-            val ok = withContext(Dispatchers.IO) {
+            val cfg = withContext(Dispatchers.IO) {
                 try {
                     OwnTracksClient.http.newCall(
-                        Request.Builder()
-                            .url("$base/api/me/mobile-config")
-                            .header("Cookie", cookie ?: "")
-                            .build()
-                    ).execute().use { resp ->
-                        if (!resp.isSuccessful) return@use false
-                        val cfg = JSONObject(resp.body.string())
-                        Prefs.setCredentials(
-                            applicationContext,
-                            cfg.getString("username"),
-                            cfg.getString("token"),
-                            cfg.getString("url"),
-                        )
-                        cfg.optJSONArray("waypoints")?.let {
-                            GeofenceManager.sync(applicationContext, it)
+                        Request.Builder().url("$base/api/me/mobile-config")
+                            .header("Cookie", cookie ?: "").build()
+                    ).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            if (response.code != 401) Log.w("DidaProvision", "Mobile provisioning HTTP ${response.code}")
+                            return@use null
                         }
-                        true
+                        JSONObject(response.body.string())
                     }
-                } catch (_: Exception) {
-                    false
+                } catch (e: Exception) {
+                    Log.w("DidaProvision", "Mobile provisioning failed", e)
+                    null
                 }
             }
+            if (revision != provisionRevision || base != Prefs.baseUrl(this@MainActivity) ||
+                cookie != CookieManager.getInstance().getCookie(base)) return@launch
+            val ok = if (cfg != null && (expectedUserId == null || cfg.optString("user_id") == expectedUserId)) {
+                try {
+                    val userId = cfg.get("user_id").toString()
+                    val username = cfg.getString("username")
+                    val token = cfg.getString("token")
+                    val postUrl = cfg.getString("url")
+                    if (!Prefs.matchesCredentials(this@MainActivity, userId, username, token, postUrl)) {
+                        LocationEngine.stop(this@MainActivity)
+                    }
+                    Prefs.setCredentials(applicationContext, userId, username, token, postUrl)
+                    val locationRevision = requireNotNull(Prefs.revision(applicationContext))
+                    cfg.optJSONArray("waypoints")?.let { GeofenceManager.sync(applicationContext, it, locationRevision) }
+                    activeUserId = userId
+                    true
+                } catch (e: Exception) {
+                    Log.w("DidaProvision", "Mobile configuration rejected", e)
+                    false
+                }
+            } else false
             if (ok) {
                 LocationEngine.start(applicationContext)
                 LocationEngine.requestOneFix(applicationContext)
             }
-            // Fail loud: a swallowed provisioning failure is indistinguishable
-            // from "nothing happened" — proven on the first family rollout. The
-            // silent retry says nothing because nobody asked it to run.
             if (announce) {
-                Toast.makeText(
-                    this@MainActivity,
-                    if (ok) R.string.setup_ok else R.string.setup_failed,
-                    Toast.LENGTH_LONG,
-                ).show()
+                Toast.makeText(this@MainActivity, if (ok) R.string.setup_ok else R.string.setup_failed,
+                    Toast.LENGTH_LONG).show()
                 finishSetup()
-            }
+            } else notifyNativeStatus()
         }
     }
 
     private fun finishSetup() {
         setupInProgress = false
+        notifyNativeStatus()
+    }
+
+    private fun notifyNativeStatus() {
         // The page listens for this and re-reads DidaApp.status().
         webView.evaluateJavascript("window.dispatchEvent(new Event('dida-native-status'))", null)
     }

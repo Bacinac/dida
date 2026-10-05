@@ -9,6 +9,7 @@ milliseconds. Times are supplied, never slept through.
 import json
 import time
 
+import pytest
 from dida_automation import heating as H
 from dida_automation.heating import HeatingController
 
@@ -153,6 +154,26 @@ async def test_a_room_without_a_valve_is_not_a_heated_room():
     ctrl, bus = await run(pool)
     assert ctrl._rooms == []
     assert bus.commands == []
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_removing_the_last_valve_stops_a_running_boiler(enabled):
+    pool = house(boiler_on=True)
+    ctrl, bus = await run(pool)
+    ctrl._boiler_since = time.time()
+    pool.entities = [(SENSOR, 7, ["temperature"]), (BOILER, 17, ["on_off"])]
+    pool.settings["enabled"] = enabled
+    await ctrl.reload()
+    assert not ctrl._rooms
+    await ctrl.tick()
+    assert commands(bus, BOILER)[-1].command == "turn_off"
+    assert published(bus, "heating:system", "number") == 0.0
+
+
+async def test_invalid_last_room_still_stops_a_running_boiler():
+    ctrl, bus = await run(house(boiler_on=True, room_over={"offset": "bad"}))
+    assert not ctrl._rooms
+    assert commands(bus, BOILER)[-1].command == "turn_off"
 
 
 async def test_a_config_may_still_override_what_the_room_contains():

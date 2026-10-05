@@ -8,18 +8,15 @@ on delete it clears that entity's live state/registry rows.
 
 from __future__ import annotations
 
-import re
 from datetime import date
 
+from dida_core.schedules import schedule_active, validate_pattern
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from dida_api.auth import AuthUser, current_user, require_admin
 
 router = APIRouter(tags=["schedules"])
-
-_YMD = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}$")
-_RECUR = {"once", "daily", "weekly", "monthly", "yearly"}
 
 
 class ScheduleIn(BaseModel):
@@ -35,32 +32,17 @@ class SchedulePatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class SchedulePreviewIn(BaseModel):
+    days: list[date] = Field(min_length=1, max_length=84)
+
+
 def _validate(kind: str, params: dict) -> None:
     if kind != "calendar":
         raise HTTPException(400, "kind must be 'calendar'")
-    rt = params.get("recurrence_type")
-    if rt not in _RECUR:
-        raise HTTPException(400, f"recurrence_type must be one of {sorted(_RECUR)}")
-    for key in ("start_date", "end_date"):
-        v = str(params.get(key, "")).strip()
-        if not v:
-            continue
-        # The shape alone is not enough: the calendar adapter parses these with
-        # date(y, m, d) and returns None when it can't, which silently turns an
-        # unparseable start_date into "today" and an unparseable end_date into
-        # "never expires". A typo'd month has to fail here, not change the rule.
-        if not _YMD.match(v):
-            raise HTTPException(400, f"{key} must be YYYY-MM-DD")
-        try:
-            y, m, d = (int(x) for x in v.split("-"))
-            date(y, m, d)
-        except ValueError:
-            raise HTTPException(400, f"{key} is not a real date") from None
-    if not isinstance(params.get("day_offset", 0), int):
-        raise HTTPException(400, "day_offset must be an integer (days)")
-    wd = params.get("weekdays") or []
-    if not isinstance(wd, list) or any(not (isinstance(x, int) and 0 <= x <= 6) for x in wd):
-        raise HTTPException(400, "weekdays must be a list of 0..6 (Mon..Sun)")
+    try:
+        validate_pattern(params)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/schedules")
@@ -83,6 +65,20 @@ async def create_schedule(body: ScheduleIn, request: Request,
         body.name.strip(), body.kind, body.params, body.enabled,
     )
     return dict(row)
+
+
+@router.post("/schedules/preview")
+async def preview_schedules(body: SchedulePreviewIn, request: Request,
+                            _user: AuthUser = Depends(current_user)) -> list[dict]:
+    rows = await request.app.state.pool.fetch("SELECT id, kind, params, enabled FROM schedules ORDER BY id")
+    result = []
+    for row in rows:
+        if not row["enabled"]:
+            continue
+        _validate(row["kind"], row["params"])
+        result.append({"id": row["id"], "days": [day.isoformat() for day in body.days
+                                                if schedule_active(day, row["params"])]})
+    return result
 
 
 @router.patch("/schedules/{sid}")

@@ -27,6 +27,7 @@ import json
 
 import pytest
 from dida_api import assistant as mod
+from dida_api import commands, permissions
 from dida_api.auth import AuthUser
 
 ADMIN = AuthUser(id=1, username="marko", role="admin")
@@ -41,7 +42,7 @@ GUEST = AuthUser(id=2, username="gost", role="user")
 TOOL_BOUNDARY = {
     "list_entities": "filter",
     "get_state": "filter",
-    "command_log": "filter",
+    "command_log": "admin",
     "send_command": "entity",
     "query_history": "entity",
     "recall_scene": "entity",
@@ -57,6 +58,7 @@ TOOL_BOUNDARY = {
 }
 
 ADMIN_ONLY_CALLS = {
+    "command_log": {},
     "create_automation": {"name": "x", "description": "y"},
     "list_automations": {},
     "set_automation_enabled": {"automation_id": 1, "enabled": False},
@@ -116,6 +118,9 @@ def boundary(monkeypatch):
     async def _hidden_ids(pool, user):
         return {"secret:vault"}
 
+    async def _can_view(pool, user, eid):
+        return not await _is_hidden(pool, user, eid)
+
     async def _can_control(pool, user, eid, cap):
         # A hidden entity is normally uncontrollable too, and it has to be modelled
         # that way here or the ORDER of the two checks stops mattering: with a
@@ -124,7 +129,8 @@ def boundary(monkeypatch):
         return not eid.startswith(("look:", "secret:"))
     monkeypatch.setattr(mod, "is_hidden", _is_hidden)
     monkeypatch.setattr(mod, "hidden_entity_ids", _hidden_ids)
-    monkeypatch.setattr(mod, "can_control_entity", _can_control)
+    monkeypatch.setattr(commands, "can_view_entity", _can_view)
+    monkeypatch.setattr(permissions, "can_control_entity", _can_control)
 
     async def _opts(pool):
         return {}
@@ -286,7 +292,7 @@ async def test_hidden_state_is_not_returned():
     assert [e["entity_id"] for e in out] == ["light:kitchen"]
 
 
-async def test_the_command_log_is_filtered_for_the_caller_too():
+async def test_the_command_log_is_administrator_only():
     """It spans the whole house by default, and it names devices explicitly — the
     one read where forgetting the filter is a full inventory disclosure."""
     from datetime import UTC, datetime
@@ -294,7 +300,10 @@ async def test_the_command_log_is_filtered_for_the_caller_too():
     ch = _CH([(ts, "secret:vault", "on_off", "turn_on", "user:marko"),
               (ts, "light:kitchen", "on_off", "turn_off", "automation:noc")])
     out = json.loads(await mod._execute_tool(_ctx(GUEST, ch=ch), "command_log", {}))
-    assert [r["entity_id"] for r in out] == ["light:kitchen"]
+    assert "administrator" in out["error"]
+    assert ch.queries == []
+    out = json.loads(await mod._execute_tool(_ctx(ADMIN, ch=ch), "command_log", {}))
+    assert [r["entity_id"] for r in out] == ["secret:vault", "light:kitchen"]
 
 
 async def test_the_history_of_a_hidden_entity_is_unknown_not_empty():

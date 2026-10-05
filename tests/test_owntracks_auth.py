@@ -21,6 +21,7 @@ on the username alone would hand every subsequent attempt a free pass.
 from __future__ import annotations
 
 import base64
+import time
 
 import pytest
 from dida_api import owntracks as mod
@@ -214,11 +215,11 @@ async def test_the_cache_is_bounded():
 def published(monkeypatch):
     seen: list[tuple] = []
 
-    async def _report(state, username, lat, lon, accuracy=None, battery=None):
+    async def _report(state, username, lat, lon, accuracy=None, battery=None, **timing):
         seen.append(("report", username, lat, lon, accuracy, battery))
         return {"accepted": True, "zone": "Home"}
 
-    async def _transition(state, username, event, desc):
+    async def _transition(state, username, event, desc, **timing):
         seen.append(("transition", username, event, desc))
         return {"accepted": True, "zone": desc}
 
@@ -236,7 +237,7 @@ def _authed(body, **kw):
 
 async def test_a_location_frame_is_published(published):
     await mod.owntracks_report(_authed(
-        {"_type": "location", "lat": 43.5, "lon": 16.4, "acc": 12, "batt": 80}))
+        {"_type": "location", "tst": time.time(), "lat": 43.5, "lon": 16.4, "acc": 12, "batt": 80}))
     assert published == [("report", "Marko", 43.5, 16.4, 12.0, 80.0)]
 
 
@@ -245,15 +246,15 @@ async def test_coordinates_outside_the_globe_are_refused(published):
     maths happily returns an answer for lat=999 and the house acts on it."""
     for lat, lon in ((91.0, 0.0), (-91.0, 0.0), (0.0, 181.0), (0.0, -181.0)):
         with pytest.raises(HTTPException) as e:
-            await mod.owntracks_report(_authed({"_type": "location", "lat": lat, "lon": lon}))
+            await mod.owntracks_report(_authed({"_type": "location", "tst": time.time(), "lat": lat, "lon": lon}))
         assert e.value.status_code == 400
     assert published == []
 
 
 async def test_a_frame_without_coordinates_is_refused(published):
     for body in ({"_type": "location"},
-                 {"_type": "location", "lat": "here", "lon": "there"},
-                 {"_type": "location", "lat": None, "lon": None}):
+                 {"_type": "location", "tst": time.time(), "lat": "here", "lon": "there"},
+                 {"_type": "location", "tst": time.time(), "lat": None, "lon": None}):
         with pytest.raises(HTTPException) as e:
             await mod.owntracks_report(_authed(body))
         assert e.value.status_code == 400
@@ -262,7 +263,7 @@ async def test_a_frame_without_coordinates_is_refused(published):
 
 async def test_an_impossible_battery_reading_is_dropped_not_published(published):
     await mod.owntracks_report(_authed(
-        {"_type": "location", "lat": 43.5, "lon": 16.4, "batt": 8000, "acc": "n/a"}))
+        {"_type": "location", "tst": time.time(), "lat": 43.5, "lon": 16.4, "batt": 8000, "acc": "n/a"}))
     assert published[0][4] is None and published[0][5] is None
 
 
@@ -289,13 +290,13 @@ async def test_the_ios_mode_suffix_is_stripped_from_the_zone_name(published):
     into the waypoint ("Home|1|2"). Published raw, it names a zone that does not
     exist and the arrival is silently lost."""
     await mod.owntracks_report(_authed(
-        {"_type": "transition", "event": "enter", "desc": "Home|1|2"}))
+        {"_type": "transition", "tst": time.time(), "event": "enter", "desc": "Home|1|2"}))
     assert published == [("transition", "Marko", "enter", "Home")]
 
 
 async def test_a_plain_zone_name_survives_the_strip(published):
     await mod.owntracks_report(_authed(
-        {"_type": "transition", "event": "leave", "desc": "Island House"}))
+        {"_type": "transition", "tst": time.time(), "event": "leave", "desc": "Island House"}))
     assert published == [("transition", "Marko", "leave", "Island House")]
 
 
@@ -313,5 +314,5 @@ async def test_an_encrypted_frame_with_no_key_is_dropped_rather_than_erroring(
 async def test_an_unauthenticated_frame_never_reaches_the_publisher(published):
     with pytest.raises(HTTPException):
         await mod.owntracks_report(_Request(
-            body={"_type": "location", "lat": 43.5, "lon": 16.4}))
+            body={"_type": "location", "tst": time.time(), "lat": 43.5, "lon": 16.4}))
     assert published == []

@@ -501,10 +501,7 @@ async def test_rule_tools_are_admin_only_and_scenes_keep_their_boundary():
     await pool.close()
 
 
-async def test_command_log_keeps_the_view_boundary():
-    """"Why did the light come on" reads the audit trail, so it reads other people's
-    devices too — it must filter exactly like every other read, and refuse a hidden
-    entity by name without admitting it exists."""
+async def test_command_log_requires_admin_before_reading_history():
     pool = await pg_pool(min_size=1, max_size=4, init=jsonb_init)
     await apply_migrations(pool, "db/migrations")
     await _seed(pool)
@@ -516,11 +513,13 @@ async def test_command_log_keeps_the_view_boundary():
         "VALUES ($1, 'view', 'entity', 'mqtt:zzsecret')", user_id)
 
     class StubCH:
-        """Returns rows for both entities; the boundary is ours, not the store's."""
+        def __init__(self):
+            self.queries = 0
 
         async def query(self, sql, parameters=None):
             from datetime import UTC, datetime
 
+            self.queries += 1
             now = datetime.now(UTC)
             return SimpleNamespace(result_rows=[
                 (now, "mqtt:zzsecret", "on_off", "turn_on", "user:someone"),
@@ -528,18 +527,21 @@ async def test_command_log_keeps_the_view_boundary():
             ])
 
     restricted = AuthUser(id=user_id, username="zzasstuser", role="user")
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=StubCH(),
+    ch = StubCH()
+    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=ch,
                        user=restricted)
 
-    rows = json.loads(await _execute_tool(ctx, "command_log", {}))
-    ids = {r["entity_id"] for r in rows}
-    assert "mqtt:zzsecret" not in ids, "a hidden entity's commands must not leak"
-    assert "denon:zzavr" in ids
-    assert rows[0]["source"] or True  # the point of the log: WHO asked
+    for args in ({}, {"entity_id": "mqtt:zzsecret"}, {"entity_id": "denon:zzavr"}):
+        out = json.loads(await _execute_tool(ctx, "command_log", args))
+        assert "administrator" in out["error"]
+        assert ch.queries == 0
 
-    # Asked for by name it is 'unknown device', not 'forbidden' — same as elsewhere.
-    out = json.loads(await _execute_tool(ctx, "command_log", {"entity_id": "mqtt:zzsecret"}))
-    assert "unknown device" in out["error"]
+    await pool.execute("UPDATE users SET role = 'admin' WHERE id = $1", user_id)
+    ctx.user = AuthUser(id=user_id, username="zzasstuser", role="admin")
+    rows = json.loads(await _execute_tool(ctx, "command_log", {}))
+    assert {r["entity_id"] for r in rows} == {"mqtt:zzsecret", "denon:zzavr"}
+    assert rows[0]["source"] == "user:someone"
+    assert ch.queries == 1
 
     await pool.execute("DELETE FROM user_access_rules WHERE user_id = $1", user_id)
     await _cleanup(pool)

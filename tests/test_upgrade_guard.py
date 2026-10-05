@@ -18,6 +18,8 @@ import pathlib
 import re
 import subprocess
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 UPGRADE = ROOT / "deploy" / "upgrade.sh"
 PROD = ROOT / "deploy" / "prod.sh"
@@ -234,7 +236,7 @@ def test_ci_derives_the_build_list_instead_of_repeating_it():
     """A second copy of the list is the thing that drifted. If one reappears, this
     fails — the point is that there is nothing left to keep in sync."""
     ci = CI_YML.read_text()
-    assert 'sed -n \'/^REQUIRED="/,/"$/p\' tests/run.sh' in ci, \
+    assert 'required=$(sh tests/image-catalog.sh --list)' in ci, \
         "CI no longer derives the image list from the gate's REQUIRED set"
     for name in _required_images():
         if name == "base":
@@ -256,3 +258,42 @@ def test_ci_fails_loudly_when_a_dockerfile_is_absent():
     ci = CI_YML.read_text()
     assert 'no Dockerfile for dida/$name' in ci
     assert "exit 1" in ci
+
+
+@pytest.mark.parametrize("missing", ["adapter-unifi", "adapter-mqtt"])
+def test_missing_used_image_fails_before_the_gate_runs_any_container(tmp_path, missing):
+    gate = (ROOT / "tests/run.sh").read_text()
+    match = re.search(r'^REQUIRED="(.*?)"$', gate, re.S | re.M)
+    assert match is not None
+    declaration = match.group(0).replace(missing, "")
+    gate = gate[:match.start()] + declaration + gate[match.end():]
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "run.sh").write_text(gate)
+    (tests / "image-catalog.sh").write_text((ROOT / "tests/image-catalog.sh").read_text())
+    result = subprocess.run(["sh", str(tests / "run.sh")], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert f"entries: {missing}" in result.stderr
+    assert "supply chain" not in result.stdout
+    assert "docker" not in result.stderr
+
+
+@pytest.mark.parametrize("invocation", ["$RUN dida/adapter-future:latest -c 'true'", "adapter_test future"])
+def test_the_catalog_detects_new_direct_and_generated_suite_images(tmp_path, invocation):
+    gate = tmp_path / "run.sh"
+    gate.write_text((ROOT / "tests/run.sh").read_text() + "\n" + invocation + "\n")
+    result = subprocess.run(["sh", str(ROOT / "tests/image-catalog.sh"), "--check", str(gate)],
+                            capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "entries: adapter-future" in result.stderr
+
+
+def test_ci_checks_the_catalog_before_building_and_test_images_cannot_be_pulled():
+    ci = CI_YML.read_text()
+    assert ci.index("run: sh tests/image-catalog.sh --check") < ci.index("docker build -f docker/base.Dockerfile")
+    gate = (ROOT / "tests/run.sh").read_text()
+    assert 'RUN="docker run --rm --pull=never ' in gate
+    catalog = subprocess.run(["sh", str(ROOT / "tests/image-catalog.sh"), "--list"],
+                             capture_output=True, text=True, check=True).stdout.split()
+    assert set(catalog) == set(_required_images())
+    assert "adapter-unifi" in catalog

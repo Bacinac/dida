@@ -34,6 +34,10 @@ ZONE = "zztest_owntrack_more_zone"
 class StubBus:
     def __init__(self):
         self.calls = []
+        self.nc = self
+
+    async def flush(self):
+        pass
 
     async def publish_state(self, update):
         self.calls.append(update)
@@ -89,7 +93,7 @@ async def test_owntracks_auth_edges_and_frames():
         async with AsyncClient(transport=ASGITransport(app=appmod.app), base_url="http://itest") as c:
             # --- undecodable Basic credentials (bad base64) -> 401, no limiter/DB hit
             r = await c.post(
-                "/owntracks", json={"_type": "location", "lat": lat, "lon": lon},
+                "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon},
                 headers={"Authorization": "Basic zzzzz"},  # 5 chars -> b64decode raises
             )
             assert r.status_code == 401, "undecodable Basic creds are rejected"
@@ -97,7 +101,7 @@ async def test_owntracks_auth_edges_and_frames():
             # --- well-formed base64 but no ':' (empty token) -> 401
             nocolon = base64.b64encode(b"onlyusername").decode()
             r = await c.post(
-                "/owntracks", json={"_type": "location", "lat": lat, "lon": lon},
+                "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon},
                 headers={"Authorization": f"Basic {nocolon}"},
             )
             assert r.status_code == 401, "creds without a token are rejected"
@@ -109,7 +113,7 @@ async def test_owntracks_auth_edges_and_frames():
             ot._LIMITER = TokenBucketLimiter(capacity=0, refill_per_s=0.0)
             try:
                 r = await c.post(
-                    "/owntracks", json={"_type": "location", "lat": lat, "lon": lon},
+                    "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon},
                     headers=_basic(USER, TOKEN),
                 )
                 assert r.status_code == 429, "a drained limiter returns 429"
@@ -126,7 +130,7 @@ async def test_owntracks_auth_edges_and_frames():
                 bus.calls.clear()
                 r = await c.post(
                     "/owntracks",
-                    json={"_type": "location", "lat": lat, "lon": lon, "tst": 1735689600, "acc": 12, "batt": 55},
+                    json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon, "acc": 12, "batt": 55},
                     headers=_basic(USER, TOKEN),
                 )
                 assert r.status_code == 200
@@ -152,14 +156,14 @@ async def test_owntracks_auth_edges_and_frames():
 
             # --- lat/lon out of range -> 400
             r = await c.post(
-                "/owntracks", json={"_type": "location", "lat": 200.0, "lon": 0.0},
+                "/owntracks", json={"_type": "location", "tst": time.time(), "lat": 200.0, "lon": 0.0},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 400, "an out-of-range latitude is 400"
 
             # --- lat present but non-numeric -> 400
             r = await c.post(
-                "/owntracks", json={"_type": "location", "lat": "abc", "lon": 5.0},
+                "/owntracks", json={"_type": "location", "tst": time.time(), "lat": "abc", "lon": 5.0},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 400, "a non-numeric lat is 400"
@@ -167,7 +171,7 @@ async def test_owntracks_auth_edges_and_frames():
             # --- a too-coarse fix is acknowledged (200) but not published (fail-loud skip)
             bus.calls.clear()
             r = await c.post(
-                "/owntracks", json={"_type": "location", "lat": lat, "lon": lon, "acc": 99999},
+                "/owntracks", json={"_type": "location", "tst": time.time(), "lat": lat, "lon": lon, "acc": 99999},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 200, "a too-coarse fix is acknowledged"
@@ -176,7 +180,7 @@ async def test_owntracks_auth_edges_and_frames():
             # --- region transitions: an enter latches present, a stale leave is ignored
             bus.calls.clear()
             r = await c.post(
-                "/owntracks", json={"_type": "transition", "event": "enter", "desc": ZONE},
+                "/owntracks", json={"_type": "transition", "tst": time.time(), "event": "enter", "desc": ZONE},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 200
@@ -187,7 +191,7 @@ async def test_owntracks_auth_edges_and_frames():
             #     before publishing, so the latched zone is the clean DB name
             bus.calls.clear()
             r = await c.post(
-                "/owntracks", json={"_type": "transition", "event": "enter", "desc": f"{ZONE}|1|2"},
+                "/owntracks", json={"_type": "transition", "tst": time.time(), "event": "enter", "desc": f"{ZONE}|1|2"},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 200
@@ -195,7 +199,7 @@ async def test_owntracks_auth_edges_and_frames():
 
             bus.calls.clear()
             r = await c.post(
-                "/owntracks", json={"_type": "transition", "event": "leave", "desc": "Nowhere We Are"},
+                "/owntracks", json={"_type": "transition", "tst": time.time(), "event": "leave", "desc": "Nowhere We Are"},
                 headers=_basic(USER, TOKEN),
             )
             assert r.status_code == 200
@@ -243,7 +247,7 @@ async def test_owntracks_auth_edges_and_frames():
             assert bus.calls == [], "a frame that fails to open is dropped"
 
             box = SecretBox(passphrase.encode()[:32].ljust(32, b"\0"))
-            inner = json.dumps({"_type": "location", "lat": lat, "lon": lon, "acc": 8, "batt": 42}).encode()
+            inner = json.dumps({"_type": "location", "tst": time.time(), "lat": lat, "lon": lon, "acc": 8, "batt": 42}).encode()
             data = base64.b64encode(bytes(box.encrypt(inner))).decode()
             bus.calls.clear()
             r = await c.post(

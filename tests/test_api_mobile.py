@@ -85,6 +85,7 @@ async def test_mobile_config_provisions_location_credentials():
             assert r.status_code == 200
             cfg = r.json()
             assert cfg["username"] == "zzmobuser"
+            assert cfg["user_id"] == (await c.get("/auth/me")).json()["id"]
             assert cfg["url"] == "https://dida.example.test/api/owntracks"
             stored = await pool.fetchval(
                 "SELECT owntracks_token FROM users WHERE username = 'zzmobuser'"

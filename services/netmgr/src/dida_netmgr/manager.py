@@ -25,6 +25,7 @@ import os
 import re
 
 from dida_core import emit_journal, set_app_setting
+from home_core.health import HealthMarker
 from home_core.tasks import spawn
 
 log = logging.getLogger("dida.netmgr")
@@ -106,6 +107,9 @@ class NetManager:
         self._pool = pool
         self._bus = bus  # journal only; netmgr's real job must not depend on the bus
         self._last_status: dict | None = None  # write-on-change guard for vlan_status
+
+    def set_journal_bus(self, bus) -> None:
+        self._bus = bus
 
     # --- Docker API over the unix socket ----------------------------------
 
@@ -416,15 +420,23 @@ class NetManager:
     async def run(self, stop: asyncio.Event) -> None:
         log.info("netmgr up — parent=%s, container=%s (macvlan; host untouched)",
                  await parent_nic(self._pool), CONTAINER)
-        for lp, th, tp in FORWARDS:  # VLAN ingress relays (e.g. Ecowitt push → ecowitt)
-            spawn(self._forward(lp, th, tp), log=log, name=f"vlan forward :{lp}")
-        while not stop.is_set():
-            try:
-                await self.reconcile()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                log.exception("netmgr reconcile error")
-            with contextlib.suppress(TimeoutError):  # wake early on SIGTERM instead of sleeping through it
-                await asyncio.wait_for(stop.wait(), timeout=POLL_SECONDS)
+        health = HealthMarker("dida", "netmgr")
+        forwards = [spawn(self._forward(lp, th, tp), log=log, name=f"vlan forward :{lp}")
+                    for lp, th, tp in FORWARDS]
+        try:
+            while not stop.is_set():
+                try:
+                    await self.reconcile()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("netmgr reconcile error")
+                else:
+                    health.touch()
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), timeout=POLL_SECONDS)
+        finally:
+            for task in forwards:
+                task.cancel()
+            await asyncio.gather(*forwards, return_exceptions=True)
         log.info("netmgr shutting down")

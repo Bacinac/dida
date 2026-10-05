@@ -62,6 +62,7 @@ class RoidmiAdapter:
         self._announced = False
         self._fault: str | None = None      # last reported device fault (log on transitions)
         self._reach: bool | None = None     # last reachability we published (edge-trigger)
+        self._io = asyncio.Lock()
 
     def _conn_key(self) -> tuple | None:
         host = (self._cfg.get("host") if self._cfg else "").strip()
@@ -86,17 +87,21 @@ class RoidmiAdapter:
             await asyncio.sleep(self._cfg.int("poll_seconds", 30) if self._cfg else 30)
 
     async def _poll(self) -> None:
+        async with self._io:
+            await self._poll_device()
+
+    async def _poll_device(self) -> None:
         key = self._conn_key()
         if key is None:
             if self._client is not None:
-                self._client.close()
+                await asyncio.to_thread(self._client.close)
                 self._client = None
                 self._key = None
             self.status.idle("no host/token (Settings → Adapters)")
             return
         if key != self._key:
             if self._client is not None:
-                self._client.close()
+                await asyncio.to_thread(self._client.close)
             self._client = MiioClient(*key)
             self._key = key
             self._announced = False
@@ -175,6 +180,13 @@ class RoidmiAdapter:
         ))
 
     async def handle_command(self, command: Command) -> None:
+        async with self._io:
+            await self._command(command)
+        await asyncio.sleep(1)
+        with contextlib.suppress(Exception):
+            await self._poll()
+
+    async def _command(self, command: Command) -> None:
         if command.entity_id != self._entity_id:
             raise CommandRejected("unknown vacuum")
         if self._client is None:
@@ -198,12 +210,8 @@ class RoidmiAdapter:
         except MiioError as exc:
             self.status.error(f"{command.command} failed: {exc}")
             raise CommandRejected(f"device refused: {exc}") from exc
-        # Re-poll right away so the UI reflects the new state, not the 30 s tick.
-        await asyncio.sleep(1)
-        with contextlib.suppress(Exception):
-            await self._poll()
-
     async def stop(self) -> None:
-        if self._client is not None:
-            self._client.close()
-            self._client = None
+        async with self._io:
+            if self._client is not None:
+                await asyncio.to_thread(self._client.close)
+                self._client = None

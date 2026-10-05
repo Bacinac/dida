@@ -6,6 +6,7 @@
 
 import { api, type ReplayBundle, type Scalar } from "$lib/api";
 import { devices } from "$lib/store.svelte";
+import { auth } from "$lib/auth.svelte";
 import { errMsg } from "$lib/errors";
 import { t } from "$lib/i18n";
 
@@ -48,6 +49,9 @@ class Replay {
   #raf: number | null = null;
   #lastTick = 0;
   #lastFrame = 0;
+  #revision = 0;
+  #abort: AbortController | null = null;
+  #authRevision: number | null = null;
 
   get hold(): number {
     return Math.max(1000, (this.to - this.frm) / HOLD_STEPS);
@@ -56,19 +60,29 @@ class Replay {
   /** Open a window ending now over the entities the caller renders. */
   async open(entities: string[], hours = DEFAULT_HOURS): Promise<void> {
     this.pause();
+    this.#abort?.abort();
+    const revision = ++this.#revision;
+    const authRevision = auth.revision;
+    this.#authRevision = authRevision;
+    const abort = new AbortController();
+    this.#abort = abort;
     this.loading = true;
     this.error = null;
     this.#entities = entities;
     const to = Date.now();
     const frm = to - hours * 3600 * 1000;
     try {
-      const bundle = await api.replayBundle(frm, to, entities);
+      const bundle = await api.replayBundle(frm, to, entities, abort.signal);
+      if (revision !== this.#revision || authRevision !== auth.revision || abort.signal.aborted) return;
       // Nothing recorded for this plan (a fresh install, or the public demo, which
       // carries one instant and no window). Say so and stay live rather than
       // entering a replay of nothing — #ingest would blank the store first.
       if (bundle.tracks.length === 0) {
         this.error = t("replay.noHistory");
         this.active = false;
+        this.#tracks = [];
+        this.#applied.clear();
+        await devices.exitReplay();
         return;
       }
       this.#ingest(bundle, entities);
@@ -77,11 +91,15 @@ class Replay {
       this.cursor = this.frm;
       this.#push(true);
     } catch (e) {
+      if (revision !== this.#revision || authRevision !== auth.revision || abort.signal.aborted) return;
       this.error = errMsg(e);
       this.active = false;
       if (devices.replaying) await devices.exitReplay(); // only if the store was already blanked
     } finally {
-      this.loading = false;
+      if (revision === this.#revision) {
+        this.loading = false;
+        this.#abort = null;
+      }
     }
   }
 
@@ -130,6 +148,7 @@ class Replay {
   }
 
   #push(force = false): void {
+    if (this.#authRevision !== auth.revision) { void this.close(); return; }
     const at = this.cursor;
     const changed: Record<string, Record<string, Scalar | null>> = {};
     for (const t of this.#tracks) {
@@ -143,6 +162,7 @@ class Replay {
   }
 
   seek(at: number): void {
+    if (!this.active) return;
     this.cursor = Math.max(this.frm, Math.min(this.to, at));
     this.#push();
   }
@@ -177,10 +197,16 @@ class Replay {
 
   /** Leave replay and hand the surfaces back to the live stream. */
   async close(): Promise<void> {
+    this.#revision++;
+    this.#abort?.abort();
+    this.#abort = null;
     this.pause();
     this.active = false;
+    this.loading = false;
+    this.#authRevision = null;
     this.#tracks = [];
     this.#applied.clear();
+    this.#entities = [];
     this.error = null;
     await devices.exitReplay();
   }

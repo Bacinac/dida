@@ -241,7 +241,7 @@
   });
 
   async function toggleReplay(): Promise<void> {
-    if (replay.active || replay.error) { await replay.close(); return; }
+    if (replay.active || replay.loading || replay.error) { await replay.close(); return; }
     edit = false;
     selected = null; configItem = null; hist = null; camSnap = null; roomOpen = null; roomSel = null;
     await replay.open(replayEntities);
@@ -249,7 +249,7 @@
 
   // Leaving the page must hand the store back to the live stream — otherwise the
   // whole app stays frozen at whatever instant the cursor was left on.
-  onMount(() => () => { if (replay.active) void replay.close(); });
+  onMount(() => () => { void replay.close(); });
 
   const clamp = (v: number): number => Math.max(0, Math.min(100, v));
   const snap = (v: number): number => clamp(Math.round(v / GRID) * GRID);
@@ -1195,7 +1195,7 @@
 
 {#if replay.active || replay.loading || replay.error}
   <div class="mb-3">
-    <FloorReplay onclose={toggleReplay} />
+    <FloorReplay onclose={() => { void replay.close(); }} />
   </div>
 {/if}
 

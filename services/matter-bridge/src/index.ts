@@ -10,6 +10,7 @@ import { WindowCovering } from "@matter/main/clusters";
 import { connect } from "@nats-io/transport-node";
 
 import { Broker, ownKey } from "./broker.js";
+import { fromController, MatterState, StateMirror, type StateUpdate } from "./state-sync.js";
 
 // ---- health marker (compose healthcheck) -----------------------------------
 // The periodic touch is gated on NATS connectivity (installed after connect,
@@ -17,7 +18,6 @@ import { Broker, ownKey } from "./broker.js";
 // while the state mirror is silently down.
 const HEALTH = "/tmp/dida_healthy_matter-bridge";
 const touch = () => { try { writeFileSync(HEALTH, "ok"); } catch { /* ignore */ } };
-touch();
 
 // Set once SIGTERM/SIGINT arrives so the various "connection closed → exit(1)"
 // guards below don't fight the clean shutdown path (which exits 0).
@@ -74,7 +74,7 @@ const coverEntityByEndpoint = new Map<string, string>();
 // What the api's `voice` op answers: per kind, the entities and their starting values.
 type Kind = {
     entities: Array<{ entity_id: string; name: string | null; device_type: string | null }>;
-    states: Array<{ entity_id: string; capability: string; value: unknown }>;
+    states: StateUpdate[];
 };
 type Voice = { controllables: Kind; climates: Kind; covers: Kind; activities: Kind };
 
@@ -173,6 +173,34 @@ const nc = await connect({
     waitOnFirstConnect: true,
 });
 const broker = new Broker(nc, "matter-bridge", key);
+const matterState = new MatterState();
+const { endpoints, climateIds, coverIds, activityEndpoints, activityCurrent } = matterState;
+const mirror = new StateMirror((update) => matterState.apply(update), (error) => {
+    console.warn("[matter] failed to apply live state:", (error as Error).message);
+    requestSync();
+});
+let bridgeReady = false;
+let syncRequested = false;
+let syncTask: Promise<void> | undefined;
+const bootGeneration = mirror.begin();
+nc.subscribe("dida.events", {
+    callback: (error, message) => {
+        if (error) {
+            mirror.invalidate();
+            console.warn("[matter] live subscription failed:", error.message);
+            requestSync();
+            return;
+        }
+        try {
+            const update = decode(message.data) as Partial<StateUpdate>;
+            if (typeof update.entity_id === "string" && typeof update.capability === "string") {
+                mirror.receive(update as StateUpdate);
+            }
+        } catch (error) {
+            console.warn("[matter] failed to decode dida.events frame:", (error as Error).message);
+        }
+    },
+});
 nc.closed().then((err) => {
     if (shuttingDown) return;  // clean shutdown drains nc on purpose — not a fault
     console.error("[matter] NATS connection closed — exiting for restart", err ?? "");
@@ -187,15 +215,17 @@ let busUp = true;
     for await (const s of nc.status()) {
         if (s.type === "disconnect" || s.type === "reconnecting" || s.type === "staleConnection") {
             busUp = false;
+            mirror.invalidate();
         } else if (s.type === "reconnect") {
             busUp = true;
+            requestSync();
         }
     }
 })();
 // Health reflects NATS connectivity: while the bus is down the touch stops → the
 // healthcheck marker goes stale → compose fails it (instead of reporting healthy
 // while the state mirror is silently disconnected).
-setInterval(() => { if (busUp && !nc.isClosed()) touch(); }, 5000);
+setInterval(() => { if (bridgeReady && busUp && mirror.synchronized && !nc.isClosed()) touch(); }, 5000);
 
 function publishCommand(entityId: string, capability: string, command: string, args: Record<string, unknown> = {}) {
     // source: the audit-trail identity. Matter can't attribute further (Google/
@@ -250,6 +280,7 @@ if (existsSync(lock)) {
     rmSync(lock, { force: true });
 }
 
+await nc.flush();
 const voice = await loadVoice();
 const bootSig = signatureOf(voice);
 // A controller's subscription names the attributes of the endpoints it knew, and
@@ -274,10 +305,6 @@ const server = await ServerNode.create({
 
 const aggregator = new Endpoint(AggregatorEndpoint, { id: "aggregator" });
 await server.add(aggregator);
-
-const endpoints = new Map<string, Endpoint>();
-const climateIds = new Set<string>(); // entity_ids exposed as Thermostat endpoints
-const coverIds = new Set<string>(); // entity_ids exposed as WindowCovering (gates)
 
 const controllables = controllablesOf(voice);
 for (const [entityId, info] of controllables) {
@@ -307,11 +334,11 @@ for (const [entityId, info] of controllables) {
     // action; our own attribute writes (from DIDA state) run offline, so this
     // guard avoids an echo loop.
     endpoint.events.onOff.onOff$Changed.on((value, _old, context) => {
-        if (!(context as { fabric?: unknown })?.fabric) return;
+        if (!fromController(context)) return;
         publishCommand(entityId, "on_off", value ? "turn_on" : "turn_off");
     });
     dimmer?.events.levelControl.currentLevel$Changed.on((level, _old, context) => {
-        if (!(context as { fabric?: unknown })?.fabric) return;
+        if (!fromController(context)) return;
         publishCommand(entityId, "brightness", "set_brightness", { value: levelToPct(Number(level)) });
     });
 }
@@ -373,13 +400,13 @@ for (const [entityId, info] of climatesOf(voice)) {
     // reflective writes). The AC has a single setpoint: mirror whichever side
     // the controller moved onto the other, and publish one set_temperature.
     endpoint.events.thermostat.systemMode$Changed.on((mode, _old, context) => {
-        if (!(context as { fabric?: unknown })?.fabric) return;
+        if (!fromController(context)) return;
         const hvac = SYSTEMMODE_TO_HVAC[Number(mode)];
         if (hvac) publishCommand(entityId, "hvac_mode", "set_hvac_mode", { value: hvac });
     });
     const onSetpoint = (other: "occupiedHeatingSetpoint" | "occupiedCoolingSetpoint") =>
         (value: number, _old: unknown, context: unknown) => {
-            if (!(context as { fabric?: unknown })?.fabric) return;
+            if (!fromController(context)) return;
             void endpoint.set({ thermostat: { [other]: value } }).catch(
                 (e) => console.warn(`[matter] setpoint mirror ${entityId}:`, (e as Error).message),
             );
@@ -393,8 +420,6 @@ for (const [entityId, info] of climatesOf(voice)) {
 // activityEndpoints: entity -> (option -> endpoint); activityCurrent mirrors the
 // entity's live `source` so the OFF handler knows whether it's tearing down the
 // ACTIVE activity (-> power-off option) or a stale/no-op toggle.
-const activityEndpoints = new Map<string, Map<string, Endpoint>>();
-const activityCurrent = new Map<string, string>();
 const activityPowerOff = new Map<string, string | null>();
 
 for (const [entityId, info] of activitiesOf(voice)) {
@@ -413,7 +438,7 @@ for (const [entityId, info] of activitiesOf(voice)) {
         perOption.set(option, endpoint);
 
         endpoint.events.onOff.onOff$Changed.on((value, _old, context) => {
-            if (!(context as { fabric?: unknown })?.fabric) return;
+            if (!fromController(context)) return;
             if (value) {
                 publishCommand(entityId, "source", "set_source", { value: option });
                 return;
@@ -435,7 +460,10 @@ for (const [entityId, info] of activitiesOf(voice)) {
     }
 }
 
+await mirror.restore(Object.values(voice).flatMap((kind) => kind.states), bootGeneration);
 await server.start();
+bridgeReady = true;
+if (!mirror.synchronized || syncRequested) requestSync();
 
 const pc = server.state.commissioning.pairingCodes;
 console.log("=".repeat(64));
@@ -464,70 +492,39 @@ function signatureOf(v: Voice): string {
     return parts.sort().join("|");
 }
 writeFileSync(SIGNATURE, bootSig);
-setInterval(() => {
-    void loadVoice().then(signatureOf).then((sig) => {
-        if (sig !== bootSig) {
-            console.log("[matter] exposed device set changed — exiting to re-expose (compose restart)");
-            process.exit(0);
-        }
-    }).catch((e) => console.warn("[matter] device-set check failed:", (e as Error).message));
-}, 60_000);
-
-// ---- DIDA live state -> Matter attributes -----------------------------------
-(async () => {
-    const sub = nc.subscribe("dida.events");
-    for await (const m of sub) {
-        let u: { entity_id?: string; capability?: string; value?: unknown };
-        // A decode failure here is a real contract bug (these are engine-produced
-        // msgpack frames), not noise — log it instead of dropping silently.
-        try { u = decode(m.data) as typeof u; } catch (e) {
-            console.warn("[matter] failed to decode dida.events frame:", (e as Error).message);
-            continue;
-        }
-        // Activity picker state: `source` flips the per-option plugs as a radio
-        // group — exactly the active one is on.
-        const perOption = u.entity_id ? activityEndpoints.get(u.entity_id) : undefined;
-        if (perOption && u.capability === "source") {
-            const current = String(u.value);
-            activityCurrent.set(u.entity_id!, current);
-            console.log(`[matter] activity ${u.entity_id}: ${current}`);
-            for (const [option, ep] of perOption) {
-                await ep.setStateOf("onOff", { onOff: option === current }).catch(
-                    (e: Error) => console.warn(`[matter] activity sync ${u.entity_id}/${option}:`, e.message),
-                );
+function requestSync(): void {
+    syncRequested = true;
+    if (!bridgeReady || syncTask || !busUp || shuttingDown) return;
+    syncTask = (async () => {
+        while (syncRequested && busUp && !shuttingDown) {
+            syncRequested = false;
+            const generation = mirror.begin();
+            try {
+                await nc.flush();
+                const snapshot = await loadVoice();
+                if (!mirror.current(generation)) {
+                    syncRequested = true;
+                    continue;
+                }
+                if (signatureOf(snapshot) !== bootSig) {
+                    console.log("[matter] exposed device set changed — exiting to re-expose (compose restart)");
+                    process.exit(0);
+                }
+                if (!await mirror.restore(Object.values(snapshot).flatMap((kind) => kind.states), generation)) {
+                    syncRequested = true;
+                }
+            } catch (error) {
+                console.warn("[matter] state snapshot sync failed; retrying:", (error as Error).message);
+                syncRequested = true;
+                await new Promise((resolve) => setTimeout(resolve, 5000));
             }
-            continue;
         }
-        const endpoint = u.entity_id ? endpoints.get(u.entity_id) : undefined;
-        if (!endpoint) continue;
-        try {
-            if (coverIds.has(u.entity_id!) && u.capability === "on_off") {
-                // Gate: mirror the virtual entity's on_off onto the lift position
-                // (on = open, off = closed) so the tile follows the sequence.
-                const lift = u.value ? LIFT_OPEN : LIFT_CLOSED;
-                await endpoint.setStateOf("windowCovering", { currentPositionLiftPercent100ths: lift, targetPositionLiftPercent100ths: lift });
-            } else if (u.capability === "on_off") {
-                await endpoint.setStateOf("onOff", { onOff: Boolean(u.value) });
-            } else if (u.capability === "brightness") {
-                await endpoint.setStateOf("levelControl", { currentLevel: pctToLevel(Number(u.value)) });
-            } else if (climateIds.has(u.entity_id!) && u.capability === "hvac_mode") {
-                // off/cool/heat map to a systemMode; auto/dry/fan_only have no
-                // Heating+Cooling representation — leave the last mode (the AC's
-                // real state still shows in the DIDA UI).
-                const mode = HVAC_TO_SYSTEMMODE[String(u.value)];
-                if (mode !== undefined) await endpoint.setStateOf("thermostat", { systemMode: mode });
-            } else if (climateIds.has(u.entity_id!) && u.capability === "target_temperature") {
-                const v = c100(clampC(Number(u.value)));
-                await endpoint.setStateOf("thermostat", { occupiedCoolingSetpoint: v, occupiedHeatingSetpoint: v });
-            } else if (climateIds.has(u.entity_id!) && u.capability === "temperature") {
-                // The server derives localTemperature from this external reading.
-                await endpoint.setStateOf("thermostat", { externalMeasuredIndoorTemperature: c100(Number(u.value)) });
-            }
-        } catch (e) {
-            console.warn(`[matter] failed to apply ${u.entity_id}/${u.capability}:`, (e as Error).message);
-        }
-    }
-})();
+    })().finally(() => {
+        syncTask = undefined;
+        if (syncRequested && busUp && !shuttingDown) requestSync();
+    });
+}
+setInterval(requestSync, 60_000);
 
 // ---- graceful shutdown -------------------------------------------------------
 // As PID 1 (host networking) Node gets NO default SIGTERM action, so without this

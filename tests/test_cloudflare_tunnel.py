@@ -9,11 +9,71 @@ The invariant that matters is the round trip: whatever is read has to render bac
 to the same ingress, because this file IS the routing — a lossy rewrite silently
 drops a hostname, and nobody finds out until that hostname stops answering.
 """
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
-from dida_adapter_cloudflare.adapter import validate_row
+from dida_adapter_cloudflare.adapter import CloudflareAdapter, validate_row
 from dida_adapter_cloudflare.tunnel import CATCHALL, parse_config, render_config
 
 ZONE = "example.com"
+
+
+async def test_a_save_during_dns_work_reconciles_the_latest_saved_routes(tmp_path, monkeypatch):
+    adapter = CloudflareAdapter()
+    adapter._zone = ZONE
+    adapter._token = "test-token"
+    adapter._config = str(tmp_path / "config.yml")
+    adapter._tunnel_meta = {"tunnel": "test-tunnel"}
+    started, release = asyncio.Event(), asyncio.Event()
+    batches = []
+
+    async def ensure(rows):
+        batches.append([row["host"] for row in rows])
+        if len(batches) == 1:
+            started.set()
+            await release.wait()
+
+    monkeypatch.setattr(adapter, "_ensure_dns", ensure)
+    first = {"host": "a", "origin": "http://192.0.2.1:80"}
+    second = {"host": "b", "origin": "http://192.0.2.2:80"}
+    adapter._write_tunnel([first])
+    await asyncio.wait_for(started.wait(), timeout=1)
+    adapter._write_tunnel([first, second])
+    release.set()
+    await asyncio.wait_for(adapter._dns_task, timeout=1)
+    assert batches == [["a"], ["a", "b"]]
+    assert adapter._dns_error is None
+
+
+async def test_dns_failures_remain_visible_until_the_latest_revision_succeeds(monkeypatch):
+    adapter = CloudflareAdapter()
+    adapter._token = "test-token"
+    adapter.status = AsyncMock()
+    adapter.status.error = lambda message: errors.append(message)
+    errors, batches = [], []
+    waiting, retry = asyncio.Event(), asyncio.Event()
+
+    async def ensure(rows):
+        batches.append([row["host"] for row in rows])
+        if len(batches) == 1:
+            raise OSError("DNS unavailable")
+
+    async def sleep(seconds):
+        waiting.set()
+        await retry.wait()
+
+    monkeypatch.setattr(adapter, "_ensure_dns", ensure)
+    monkeypatch.setattr("dida_adapter_cloudflare.adapter.asyncio.sleep", sleep)
+    adapter._schedule_dns([{"host": "a"}])
+    await asyncio.wait_for(waiting.wait(), timeout=1)
+    assert adapter._dns_error == "DNS unavailable"
+    assert errors == ["DNS: DNS unavailable"]
+    adapter._schedule_dns([{"host": "a"}, {"host": "b"}])
+    retry.set()
+    await asyncio.wait_for(adapter._dns_task, timeout=1)
+    assert batches == [["a"], ["a", "b"]]
+    assert adapter._dns_error is None
 
 LIVE = """tunnel: 239a26fc-cc17-4151-b212-4d7f1b616de6
 credentials-file: /etc/cloudflared/credentials.json

@@ -34,14 +34,14 @@ from dida_core import (
     command_vocabulary,
     house_timezone,
     local_str,
-    prepare_command,
     readable_capabilities,
     validate_definition,
 )
+from fastapi import HTTPException
 
 from dida_api.auth import AuthUser
+from dida_api.commands import dispatch_command
 from dida_api.help_docs import HELP_TOPIC_NAMES, help_text
-from dida_api.permissions import can_control_entity
 from dida_api.visibility import hidden_entity_ids, is_hidden
 
 log = logging.getLogger("dida.api.assistant")
@@ -655,16 +655,11 @@ async def _get_state(ctx: AssistantCtx, entity_id: str | None = None,
 
 async def _send_command(ctx: AssistantCtx, entity_id: str, capability: str,
                        command: str, args: dict | None = None) -> dict:
-    if ctx._restricted:
-        # Same boundary as POST /command: a hidden entity is invisible (don't leak
-        # its existence), and a controllable one still needs the user's control grant.
-        if await is_hidden(ctx.pool, ctx.user, entity_id):
-            raise CapabilityError("unknown device")
-        if not await can_control_entity(ctx.pool, ctx.user, entity_id, capability):
-            raise CapabilityError("you do not have permission to control this device")
-    await ctx.bus.publish_command(await prepare_command(
-        ctx.pool, entity_id, capability, command, args,
-        source=f"assistant:{ctx.user.username}" if ctx.user else "assistant"))
+    try:
+        await dispatch_command(ctx.pool, ctx.bus, ctx.user, entity_id, capability, command, args,
+                               source=f"assistant:{ctx.user.username}" if ctx.user else "assistant")
+    except HTTPException as exc:
+        raise CapabilityError("unknown device" if exc.status_code == 404 else str(exc.detail)) from exc
     ctx.actions.append({"type": "command", "entity_id": entity_id, "capability": capability, "command": command})
     return {"ok": True, "entity_id": entity_id, "command": command}
 
@@ -966,10 +961,9 @@ async def _command_log(ctx: AssistantCtx, entity_id: str | None = None,
     name), this assistant, or a voice assistant. It is the only thing that answers
     "why did the light come on at 3am", which no amount of current state can.
     """
+    _require_admin(ctx, "see command history")
     if ctx.ch is None:
         return {"error": "history store unavailable"}
-    if entity_id and ctx._restricted and await is_hidden(ctx.pool, ctx.user, entity_id):
-        return {"error": "unknown device"}
     tz = await house_timezone(ctx.pool)
     hours = max(1, min(int(hours), 24 * 30))
     limit = max(1, min(int(limit), 200))
@@ -988,11 +982,6 @@ async def _command_log(ctx: AssistantCtx, entity_id: str | None = None,
          "command": cmd, "source": src}
         for ts, eid, cap, cmd, src in res.result_rows
     ]
-    # Without an entity filter the log spans the house, so it has to be filtered
-    # for the caller the same way every other read is.
-    if ctx._restricted:
-        hidden = await hidden_entity_ids(ctx.pool, ctx.user)
-        rows = [r for r in rows if r["entity_id"] not in hidden]
     return rows
 
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
+from dida_core.heating import RoomEntities, derive_rooms
 
 from dida_api.auth import AuthUser
 
@@ -60,6 +61,27 @@ async def page_allowed_ids(pool: asyncpg.Pool, user: AuthUser) -> set[str] | Non
     allowed: set[str] = set()
     if "entry" in pages:
         allowed |= await _entry_entity_ids(pool)
+    if "heating" in pages:
+        allowed |= await _heating_entity_ids(pool)
+    return allowed
+
+
+async def _heating_entity_ids(pool: asyncpg.Pool) -> set[str]:
+    rooms, orphans = await derive_rooms(pool)
+    allowed = set(orphans) | {"heating:system"}
+    for row in await pool.fetch("SELECT id, heating_config FROM areas"):
+        here = rooms.get(row["id"], RoomEntities([], [], []))
+        config = row["heating_config"] or {}
+        if not here.valves and not config:
+            continue
+        allowed.add(f"heating:room:{row['id']}")
+        allowed.update(here.valves + here.sensors + here.contacts)
+        allowed.update(config.get("valves") or [])
+        if config.get("sensor"):
+            allowed.add(config["sensor"])
+    raw = await pool.fetchval("SELECT value FROM app_settings WHERE key = 'heating'")
+    settings = json.loads(raw) if raw else {}
+    allowed.update(settings[key] for key in ("boiler", "outdoor", "away_helper") if settings.get(key))
     return allowed
 
 

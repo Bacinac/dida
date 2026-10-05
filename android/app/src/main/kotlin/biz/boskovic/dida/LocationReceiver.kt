@@ -13,12 +13,14 @@ import kotlinx.coroutines.launch
 class LocationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val loc = LocationResult.extractResult(intent)?.lastLocation ?: return
+        val revision = intent.getStringExtra("revision") ?: return
+        if (revision != Prefs.revision(context)) return
         // Very coarse fixes are noise the server drops anyway — save the bytes.
         if (loc.accuracy > 200f) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                OwnTracksClient.postLocation(context.applicationContext, loc)
+                OwnTracksClient.postLocation(context.applicationContext, loc, revision)
             } finally {
                 pending.finish()
             }

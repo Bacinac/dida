@@ -9,7 +9,9 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import java.util.concurrent.TimeUnit
@@ -25,18 +27,21 @@ class HeartbeatWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(
     @SuppressLint("MissingPermission")
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        val revision = inputData.getString("revision") ?: return Result.success()
+        if (revision != Prefs.revision(ctx)) return Result.success()
         if (!Prefs.isProvisioned(ctx) || !Permissions.hasFineLocation(ctx)) return Result.success()
         val loc = try {
             LocationServices.getFusedLocationProviderClient(ctx)
                 .getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    CurrentLocationRequest.Builder().setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+                        .setMaxUpdateAgeMillis(0).build(),
                     CancellationTokenSource().token,
                 )
                 .await()
         } catch (_: Exception) {
             null
         } ?: return Result.success()
-        withContext(Dispatchers.IO) { OwnTracksClient.postLocation(ctx, loc) }
+        withContext(Dispatchers.IO) { OwnTracksClient.postLocation(ctx, loc, revision) }
         return Result.success()
     }
 
@@ -44,8 +49,10 @@ class HeartbeatWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(
         fun schedule(ctx: Context) {
             WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
                 "dida-heartbeat",
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES)
+                    .setInputData(workDataOf("revision" to Prefs.revision(ctx)))
+                    .addTag("dida-location")
                     .setConstraints(
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
                     )

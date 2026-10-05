@@ -17,6 +17,7 @@ Wires app.state directly (bypassing the lifespan) like the sibling suites;
 rate_limit.LOGIN is reset per-test by tests/conftest.py.
 """
 import dida_api.app as appmod
+from dida_api import radio_tuner
 from dida_core import apply_migrations, jsonb_init, pg_pool
 from home_core.auth import hash_password
 from httpx import ASGITransport, AsyncClient
@@ -118,7 +119,11 @@ async def test_metadata_list_endpoints_are_admin_only():
         await pool.close()
 
 
-async def test_radio_tuner_relay_respects_target_control_boundary():
+async def test_radio_tuner_relay_respects_target_control_boundary(monkeypatch):
+    async def opus_stations(pool):
+        return [{"id": 1, "name": "Test FM", "url": "https://stream.example/radio"}]
+
+    monkeypatch.setattr(radio_tuner.opus, "stations", opus_stations)
     pool = await _pool()
     _wire(pool)
     names = ("zzradadm", "zzraduser")

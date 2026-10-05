@@ -8,7 +8,9 @@ import android.util.Log
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
+import androidx.core.net.toUri
 import org.json.JSONArray
+import java.util.UUID
 
 /** DIDA zones registered as native geofences. This is what "wakes the phone":
  * the OS delivers enter/leave edges to GeofenceReceiver even in Doze, with no
@@ -22,17 +24,20 @@ object GeofenceManager {
     // echo the clean DB zone name.
     private fun cleanName(desc: String) = desc.replace(Regex("\\|\\d+\\|\\d+$"), "")
 
-    private fun pendingIntent(ctx: Context): PendingIntent =
+    private fun pendingIntent(ctx: Context, revision: String): PendingIntent =
         PendingIntent.getBroadcast(
-            ctx, 42, Intent(ctx, GeofenceReceiver::class.java),
+            ctx, 42, Intent(ctx, GeofenceReceiver::class.java).apply {
+                data = "dida-geofence:$revision".toUri()
+            },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
     /** Replace the registered geofence set with `wps` (OwnTracks waypoint dicts:
      * desc/lat/lon/rad) and persist them for the post-reboot re-arm. */
     @SuppressLint("MissingPermission")
-    fun sync(ctx: Context, wps: JSONArray) {
-        Prefs.setWaypoints(ctx, wps)
+    fun sync(ctx: Context, wps: JSONArray, revision: String) {
+        val generation = UUID.randomUUID().toString()
+        if (!Prefs.setWaypoints(ctx, wps, generation, revision)) return
         if (!Permissions.hasBackgroundLocation(ctx)) return
         val fences = mutableListOf<Geofence>()
         for (i in 0 until wps.length()) {
@@ -40,7 +45,7 @@ object GeofenceManager {
             val name = cleanName(wp.optString("desc"))
             if (name.isEmpty()) continue
             fences += Geofence.Builder()
-                .setRequestId(name)
+                .setRequestId("$generation:$i")
                 .setCircularRegion(
                     wp.optDouble("lat"),
                     wp.optDouble("lon"),
@@ -55,7 +60,8 @@ object GeofenceManager {
                 .build()
         }
         val client = LocationServices.getGeofencingClient(ctx)
-        client.removeGeofences(pendingIntent(ctx)).addOnCompleteListener {
+        client.removeGeofences(pendingIntent(ctx, revision)).addOnCompleteListener {
+            if (revision != Prefs.revision(ctx) || generation != Prefs.geofenceRevision(ctx)) return@addOnCompleteListener
             if (fences.isEmpty()) return@addOnCompleteListener
             val req = GeofencingRequest.Builder()
                 // Fire ENTER for zones we are already inside at registration, so a
@@ -63,7 +69,7 @@ object GeofenceManager {
                 .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
                 .addGeofences(fences)
                 .build()
-            client.addGeofences(req, pendingIntent(ctx))
+            client.addGeofences(req, pendingIntent(ctx, revision))
                 .addOnSuccessListener { Log.i(TAG, "registered ${fences.size} geofences") }
                 .addOnFailureListener { e -> Log.w(TAG, "addGeofences failed: ${e.message}") }
         }
@@ -71,6 +77,19 @@ object GeofenceManager {
 
     /** Geofences are lost on reboot and app update — re-arm from the stored copy. */
     fun reRegister(ctx: Context) {
-        Prefs.waypoints(ctx)?.let { sync(ctx, it) }
+        val revision = Prefs.revision(ctx) ?: return
+        Prefs.waypoints(ctx)?.let { sync(ctx, it, revision) }
+    }
+
+    fun stop(ctx: Context) {
+        val revision = Prefs.revision(ctx) ?: return
+        LocationServices.getGeofencingClient(ctx).removeGeofences(pendingIntent(ctx, revision))
+    }
+
+    fun zone(ctx: Context, requestId: String): String? {
+        val parts = requestId.split(':', limit = 2)
+        if (parts.size != 2 || parts[0] != Prefs.geofenceRevision(ctx)) return null
+        val index = parts[1].toIntOrNull() ?: return null
+        return Prefs.waypointName(ctx, parts[0], index)?.let { cleanName(it) }
     }
 }

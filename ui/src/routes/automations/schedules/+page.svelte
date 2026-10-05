@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { api, type Schedule } from "$lib/api";
   import { errMsg } from "$lib/errors";
-  import { Button, Card, PageActions, Picks, SaveButton, dialog, i18n } from "$lib/kit";
+  import { Button, Card, PageActions, Picks, SaveButton, dialog, formatNumber, i18n } from "$lib/kit";
   import { t, type MessageKey } from "$lib/i18n";
   import { isoDate } from "$lib/dt";
   import { auth } from "$lib/auth.svelte";
@@ -80,34 +80,27 @@
 
   const hasPattern = $derived(recurType === "weekly" || recurType === "monthly");
 
-  // --- calendar overlay: colour per schedule + "is active on date X" (mirrors
-  // the calendar adapter's day-level logic) so the grid shows dots on match days.
   const COLORS = ["bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-violet-500", "bg-sky-500", "bg-orange-500", "bg-pink-500", "bg-lime-500"];
   const colorFor = (b: Schedule) => COLORS[Math.max(0, beats.findIndex((x) => x.id === b.id)) % COLORS.length];
-  function _pd(s: unknown): Date | null { if (!s) return null; const d = new Date(String(s) + "T00:00:00"); return isNaN(d.getTime()) ? null : d; }
-  const _cmpMD = (a: Date, b: Date) => (a.getMonth() !== b.getMonth() ? a.getMonth() - b.getMonth() : a.getDate() - b.getDate());
-  const _inWindow = (d: Date, sd: Date, ed: Date) => (_cmpMD(sd, ed) <= 0 ? _cmpMD(sd, d) <= 0 && _cmpMD(d, ed) <= 0 : _cmpMD(d, sd) >= 0 || _cmpMD(d, ed) <= 0);
-  function _recur(d: Date, p: Record<string, unknown>, sd: Date): boolean {
-    const rt = String(p.recurrence_type ?? ""); const wd = (d.getDay() + 6) % 7;
-    if (rt === "daily") return true;
-    if (rt === "once") return d.getTime() === sd.getTime();
-    if (rt === "weekly") return (Array.isArray(p.weekdays) ? (p.weekdays as number[]) : []).includes(wd);
-    if (rt === "monthly") return p.monthly_mode === "weekday" ? wd === Number(p.monthly_weekday) && Math.ceil(d.getDate() / 7) === Number(p.week_occurrence) : d.getDate() === Number(p.monthly_day);
-    if (rt === "yearly") return d.getMonth() === sd.getMonth() && d.getDate() === sd.getDate();
-    return false;
-  }
-  function isActive(b: Schedule, dateStr: string): boolean {
-    const p = (b.params ?? {}) as Record<string, unknown>;
-    const d = new Date(dateStr + "T00:00:00");
-    const offset = Number(p.day_offset ?? 0);
-    const sd = _pd(p.start_date) ?? d;
-    const anchor = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
-    if (anchor < sd) return false;
-    const ed = _pd(p.end_date);
-    if (ed && !_inWindow(d, sd, ed)) return false;
-    return _recur(anchor, p, sd);
-  }
-  const dotColors = (dateStr: string) => beats.filter((b) => b.enabled && isActive(b, dateStr)).map(colorFor);
+  let matches = $state<Record<string, number[]>>({});
+  $effect(() => {
+    const days = [...new Set([...gridFrom, ...gridTo].map((cell) => cell.date))];
+    const version = JSON.stringify(beats);
+    const revision = auth.revision;
+    matches = {};
+    if (!beats.length) return;
+    const abort = new AbortController();
+    void api.previewSchedules(days, abort.signal).then((rows) => {
+      if (abort.signal.aborted || auth.revision !== revision || JSON.stringify(beats) !== version) return;
+      const next: Record<string, number[]> = {};
+      for (const row of rows) for (const day of row.days) (next[day] ??= []).push(row.id);
+      matches = next;
+    }).catch((error) => {
+      if (!abort.signal.aborted && auth.revision === revision) msg = errMsg(error);
+    });
+    return () => abort.abort();
+  });
+  const dotColors = (dateStr: string) => beats.filter((beat) => matches[dateStr]?.includes(beat.id)).map(colorFor);
 
   function buildParams(): Record<string, unknown> {
     const p: Record<string, unknown> = { recurrence_type: recurType, start_date: startDate };
@@ -124,7 +117,11 @@
   }
 
   const wdFull = (i: number) => t(`schedule.wdFull.${i}` as MessageKey);
-  const monthDay = (s: unknown) => { const d = _pd(s); return d ? `${monthName(d.getMonth())} ${d.getDate()}` : ""; };
+  const monthDay = (s: unknown) => {
+    if (!s) return "";
+    const d = new Date(String(s) + "T00:00:00");
+    return isNaN(d.getTime()) ? "" : `${monthName(d.getMonth())} ${formatNumber(d.getDate())}`;
+  };
   function summary(b: Schedule): string {
     const p = (b.params ?? {}) as Record<string, unknown>;
     const rt = String(p.recurrence_type ?? "");

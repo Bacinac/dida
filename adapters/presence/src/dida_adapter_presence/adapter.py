@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import time
 from urllib.parse import urlsplit
@@ -131,15 +132,18 @@ class PresenceAdapter:
         if not isinstance(payload, dict) or payload.get("_type") != "location":
             return  # ignore transition/lwt/cmd/waypoints frames
         lat, lon = payload.get("lat"), payload.get("lon")
-        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        if (not isinstance(lat, (int, float)) or isinstance(lat, bool)
+                or not isinstance(lon, (int, float)) or isinstance(lon, bool)
+                or not math.isfinite(lat) or not math.isfinite(lon)
+                or not -90 <= lat <= 90 or not -180 <= lon <= 180):
             return
         # Same accuracy discipline as the HTTP receiver: a fix coarser than the
         # zone scale can't say which zone the phone is in — drop the report and
         # wait for the next proper fix. A merely-coarse one still resolves, with
         # its error circle credited so it can't assert a false "away".
         acc = payload.get("acc")
-        acc_m = float(acc) if isinstance(acc, (int, float)) else 0.0
-        if acc_m > MAX_ACCURACY_M:
+        acc_m = float(acc) if isinstance(acc, (int, float)) and not isinstance(acc, bool) else 0.0
+        if not math.isfinite(acc_m) or not 0 <= acc_m <= MAX_ACCURACY_M:
             log.debug("presence: %s fix too coarse (acc %.0f m) — skipped", user, acc_m)
             return
 
@@ -152,25 +156,25 @@ class PresenceAdapter:
         # so every cap of this entity must carry the same flag — publish all as
         # non-diagnostic (lat/lon/battery render as secondary rows on the card).
         await self._pub(entity_id, "location", location, name)
-        await self._pub(entity_id, "latitude", round(float(lat), 6), name)
-        await self._pub(entity_id, "longitude", round(float(lon), 6), name)
+        await self._pub(entity_id, "latitude", round(float(lat), 6), name, force=True)
+        await self._pub(entity_id, "longitude", round(float(lon), 6), name, force=True)
         batt = payload.get("batt")
         if isinstance(batt, (int, float)):
             await self._pub(entity_id, "battery", float(batt), name)
 
-    async def _pub(self, entity_id: str, capability: str, value, name: str | None) -> None:
+    async def _pub(self, entity_id: str, capability: str, value, name: str | None, *, force: bool = False) -> None:
         if self._bus is None:
             return
         key = (entity_id, capability)
-        if self._last.get(key) == value:
+        if not force and self._last.get(key) == value:
             return  # dedupe unchanged values (OwnTracks re-reports on its own cadence)
-        self._last[key] = value
         await self._bus.publish_state(
             StateUpdate(
                 entity_id=entity_id, capability=capability, value=value,
                 adapter=NAMESPACE, ts_ns=time.time_ns(), name=name,
             )
         )
+        self._last[key] = value
 
     async def handle_command(self, command: Command) -> None:
         return  # read-only source (all caps are sensors) — nothing to command

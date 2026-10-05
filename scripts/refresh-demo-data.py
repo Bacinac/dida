@@ -756,21 +756,16 @@ def _demo_host(host: str) -> str:
     return f"{label}.example"
 
 
-def _drop_named_alerts(fixtures: dict) -> int:
-    """Dev runs the real adapters, so a device reappears under its real name between
-    refreshes and an alert about it reaches /system/alerts — from ClickHouse or from
-    the evaluator's memory, where no database pass reaches. Scrubbing ClickHouse
-    before recording lost a race: renaming the device resolves its alert, and the
-    evaluator writes that `resolved` row under the old name after the scrub. Such
-    alerts are dev's own incidents, not demo material, so they are dropped here,
-    from what was actually recorded."""
+def _drop_named_events(fixtures: dict) -> int:
+    """Live journal rows can arrive after anonymisation; filter the final recording."""
     people = re.compile(rf"(?i)(?<![a-z])({'|'.join(PEOPLE_CHILD + PEOPLE_ADULT)})(?![a-z])")
     glued = re.compile(rf"({camel(PEOPLE_CHILD + PEOPLE_ADULT)})(?![a-z])")
     dropped = 0
     for key, body in fixtures.items():
-        if key.split("?", 1)[0] != "/system/alerts" or not isinstance(body, dict):
+        parts = {"/system/alerts": ("active", "history"), "/logs": ("logs",)}.get(key.split("?", 1)[0])
+        if parts is None or not isinstance(body, dict):
             continue
-        for part in ("active", "history"):
+        for part in parts:
             rows = body.get(part) or []
             keep = [r for r in rows if not any(
                 p.search(json.dumps(r, ensure_ascii=False)) for p in (people, glued))]
@@ -790,7 +785,7 @@ def scrub_fixtures(path: Path) -> None:
     would break their agreement with snapshot filenames and floorplan configs.
     The persisted ip_map keeps one stand-in per host across both passes."""
     fixtures = json.loads(path.read_text())
-    dropped = _drop_named_alerts(fixtures)
+    dropped = _drop_named_events(fixtures)
     text = json.dumps(fixtures)
     doc_re = re.compile(r"\b(?:" + "|".join(n.replace(".", r"\.") for n in DOC_NETS)
                         + r")\.\d{1,3}\b")
@@ -825,7 +820,7 @@ def scrub_fixtures(path: Path) -> None:
     path.write_text(text)
     _A["ip_map"] = doc.map
     remember()
-    print(f"fixture identifiers scrubbed: {len(repl)}; alerts naming a person dropped: {dropped}")
+    print(f"fixture identifiers scrubbed: {len(repl)}; events naming a person dropped: {dropped}")
 
 
 def verify() -> int:

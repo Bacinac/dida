@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import contextlib
 import fcntl
+import json
 import os
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -238,3 +240,30 @@ def test_real_writer_pause_does_not_restart_an_engine_whose_history_rollback_fai
     with pytest.raises(HistoryRollbackError), namespace["_pause_history_writer"]():
         raise HistoryRollbackError("recovery required")
     assert [args[1] for args in commands] == ["inspect", "stop"]
+
+
+def test_demo_drops_named_live_logs_and_alerts_from_the_final_recording():
+    source = ast.parse((Path(__file__).parents[1] / "scripts/refresh-demo-data.py").read_text())
+    functions = [node for node in source.body if isinstance(node, ast.FunctionDef)
+                 and node.name in {"camel", "_drop_named_events"}]
+    namespace = {"json": json, "re": re, "PEOPLE_CHILD": ["demochild"], "PEOPLE_ADULT": ["demoadult"]}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), "demo_events", "exec"), namespace)
+    fixtures = {
+        "/logs?hours=6&limit=500": {"logs": [
+            {"message": "Demochild device unavailable"},
+            {"message": "adapter failed", "exc": "THDemoadultRoom"},
+            {"message": "adapter ready"},
+        ], "next": 42},
+        "/system/alerts?history=1": {
+            "active": [{"entity_id": "light_Demochild"}],
+            "history": [{"title": "Connection restored"}],
+        },
+        "/logs/services": ["engine", "journal"],
+        "/account": {"name": "Demoadult"},
+    }
+    assert namespace["_drop_named_events"](fixtures) == 3
+    assert fixtures["/logs?hours=6&limit=500"] == {"logs": [{"message": "adapter ready"}], "next": 42}
+    assert fixtures["/system/alerts?history=1"] == {"active": [], "history": [{"title": "Connection restored"}]}
+    assert fixtures["/logs/services"] == ["engine", "journal"]
+    assert fixtures["/account"] == {"name": "Demoadult"}
+    assert namespace["_drop_named_events"](fixtures) == 0

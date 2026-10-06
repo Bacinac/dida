@@ -26,7 +26,6 @@ async-upnp-client==0.48.0
 asyncpg==0.31.0
 asyncssh==2.24.0
 attrs==26.1.0
-backports-zstd==1.6.0 ; python_full_version < '3.14'
 beautifulsoup4==4.15.0
 bleak==3.0.2
 bleak-retry-connector==4.6.3
@@ -61,7 +60,7 @@ lz4==4.4.5
 mashumaro==3.22
 msgspec==0.21.1
 msmart-ng==2026.8.0
-multidict==6.7.1
+multidict==6.9.1
 nats-py==2.15.0
 noiseprotocol==0.3.1
 numpy==2.5.1
@@ -83,7 +82,7 @@ pycryptodome==3.23.0
 pydantic==2.13.4
 pydantic-core==2.46.4
 pyheos==1.0.6
-pyjwt==2.13.0
+pyjwt==2.15.1
 pynacl==1.6.2
 pyobjc-core==12.2.1 ; sys_platform == 'darwin'
 pyobjc-framework-cocoa==12.2.1 ; sys_platform == 'darwin'
@@ -111,7 +110,7 @@ typing-inspection==0.4.2
 tzdata==2026.3
 tzlocal==5.4.4
 uart-devices==0.1.1 ; sys_platform == 'linux'
-urllib3==2.7.0
+urllib3==2.8.0
 usb-devices==0.5.1 ; sys_platform == 'linux'
 uvicorn==0.52.1
 uvloop==0.22.1

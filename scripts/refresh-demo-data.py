@@ -585,12 +585,16 @@ def anonymise() -> None:
             f"UPDATE current_state SET value = to_jsonb(replace(value #>> '{{}}', '{o}', '{new}')) "  # noqa: S608
             f"WHERE jsonb_typeof(value) = 'string' AND strpos(value #>> '{{}}', '{o}') > 0;")
 
-    # 5. after step 4, so hostnames keep their meaningful stand-ins
-    stmts += _place_word_statements()
-
     stmts.append("COMMIT;")
     dev_psql("\n".join(stmts))
     remember()
+
+
+def rename_place_words() -> None:
+    """After anonymise(), so hostnames keep their meaningful stand-ins; after
+    move_the_world(), which looks zones up by their real names; and after
+    copy_settings(), whose camera layout lists ids that carry the place."""
+    dev_psql("\n".join(["BEGIN;", *_place_word_statements(), "COMMIT;"]))
 
 
 def _place_word_statements() -> list[str]:
@@ -878,6 +882,8 @@ def main() -> int:
     if args.anonymise_only:
         print("== anonymising ==", flush=True)
         anonymise()
+        print("== place words ==", flush=True)
+        rename_place_words()
         print("== scrubbing identifiers ==", flush=True)
         scrub_identifiers()
         print("== verifying ==", flush=True)
@@ -893,6 +899,8 @@ def main() -> int:
         move_the_world()
         print("== presentation settings ==", flush=True)
         copy_settings()
+        print("== place words ==", flush=True)
+        rename_place_words()
         print("== scrubbing identifiers ==", flush=True)
         scrub_identifiers()
         print("== energy history ==", flush=True)

@@ -234,3 +234,34 @@ async def test_running_the_rule_by_hand_is_not_held():
     await eng.on_event(upd(LIGHT, "on_off", True))
     await eng.run_now(eng._rules[0])
     assert [c.command for c in eng._bus.commands] == ["turn_off"]
+
+
+WALL = "esphome:hall:wall_button"
+
+
+def _wall_button_toggles_the_light():
+    return AutomationDef(
+        triggers=[Trigger(entity_id=WALL, capability="button", to="press")],
+        actions=[Action(entity_id=LIGHT, capability="on_off", command="toggle")],
+    )
+
+
+async def test_a_light_a_button_switched_on_is_held_like_one_switched_by_hand():
+    eng, pool = await _engine()
+    eng._rules.append(Rule(6, "wall", _wall_button_toggles_the_light()))
+    await eng.on_event(upd(WALL, "button", "press"))
+    await asyncio.sleep(0.02)
+    await eng.on_event(upd(LIGHT, "on_off", True))
+    await eng.on_event(upd(FP2, "occupancy", False))
+    await asyncio.sleep(0.02)
+    assert [c.command for c in eng._bus.commands] == ["toggle"]
+    assert LIGHT in pool.held
+
+
+async def test_the_button_turns_off_a_light_held_by_hand():
+    eng, _ = await _engine()
+    eng._rules.append(Rule(6, "wall", _wall_button_toggles_the_light()))
+    await eng.on_event(upd(LIGHT, "on_off", True))
+    await eng.on_event(upd(WALL, "button", "press"))
+    await asyncio.sleep(0.02)
+    assert [c.command for c in eng._bus.commands] == ["toggle"]

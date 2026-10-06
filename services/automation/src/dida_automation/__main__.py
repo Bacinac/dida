@@ -751,11 +751,13 @@ class AutomationEngine:
         """Execute the rule. Returns True if commands were actually published.
         A typed rule runs the same actions whichever trigger fired (uniform); a
         Starlark rule gets the firing trigger so it can branch on its id."""
+        # A button is a person pressing it, so what its rule does is done by hand.
+        by_hand = update.capability == "button"
         if rule.ast is not None:
-            return await self._run_starlark(rule, trig, update)
-        return await self._run_typed(rule)
+            return await self._run_starlark(rule, trig, update, by_hand=by_hand)
+        return await self._run_typed(rule, by_hand=by_hand)
 
-    async def _run_typed(self, rule: Rule) -> bool:
+    async def _run_typed(self, rule: Rule, *, by_hand: bool = False) -> bool:
         # Conditions (leaf or and/or/not groups) are evaluated against a snapshot
         # of the entities they reference; the top-level list is implicitly AND-ed.
         if rule.defn.conditions:
@@ -769,7 +771,7 @@ class AutomationEngine:
             for cond in rule.defn.conditions:
                 if not eval_condition(cond, snapshot):
                     return False  # a guard failed — not an error, just don't run actions
-        return await self._run_actions(rule)
+        return await self._run_actions(rule, by_hand=by_hand)
 
     async def _run_actions(self, rule: Rule, *, by_hand: bool = False) -> bool:
         # Actions run IN ORDER, honouring each action's delay — that's how a
@@ -790,7 +792,7 @@ class AutomationEngine:
             log.info("automation %r: %s held on by hand, not turned off", rule.name, cmd.entity_id)
             await self._record_run(rule, "held", cmd.entity_id)
             return False
-        self._manual.note_command(cmd)
+        self._manual.note_command(cmd, by_hand=by_hand)
         await self._bus.publish_command(cmd)
         return True
 

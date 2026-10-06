@@ -1,8 +1,8 @@
 """A light switched on by hand holds against automations while its room is occupied.
 
 "By hand" is anything the automation engine did not ask for: the UI, the app, a
-voice assistant, a scene, a wall switch. While the flag stands, no rule may turn
-that light off. It ends when the light goes off by any means, or once the light's
+voice assistant, a scene, a wall switch, a rule a button press fired. While the
+flag stands, no rule may turn that light off. It ends when the light goes off by any means, or once the light's
 area has been empty for RELEASE_AFTER_S; from then on rules act on it as before.
 
 An area with no presence sensor can never be seen empty, so a light there is never
@@ -73,8 +73,12 @@ class ManualOverrides:
             return False
         return None
 
-    def note_command(self, cmd: Command) -> None:
-        if cmd.entity_id in self._light_area:
+    def note_command(self, cmd: Command, *, by_hand: bool = False) -> None:
+        if cmd.entity_id not in self._light_area:
+            return
+        if by_hand:
+            self._commanded.pop(cmd.entity_id, None)
+        else:
             self._commanded[cmd.entity_id] = time.monotonic()
 
     def holds(self, cmd: Command, snapshot: dict) -> bool:

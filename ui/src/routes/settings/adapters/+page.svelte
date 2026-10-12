@@ -1627,42 +1627,47 @@
           {#each sortedNodes as node (node.key)}
             {@const st = nodeStatus(node)}
             {@const ex = deviceExposure(nodeFields(node.key))}
+            {@const ident = [devices.deviceRawName(node.key), node.host].filter(Boolean).join(" · ")}
             <div class="rounded-lg border border-dida-border bg-dida-panel-2 p-3">
-              <div class="flex items-center gap-2 text-m" class:mb-2={openDevice === node.key || connKey === node.key}>
-                {#if editKey === node.key}
-                  <input bind:value={editVal} use:focusEl placeholder={nodeLabel(node)}
-                    onkeydown={(e) => { if (e.key === "Enter") saveEdit(node.key); if (e.key === "Escape") editKey = null; }}
-                    onblur={() => saveEdit(node.key)} class="w-48 shrink-0" />
-                {:else}
-                  <button onclick={() => (openDevice = openDevice === node.key ? null : node.key)}
-                    class="flex min-w-0 items-center gap-1.5 text-left">
-                    <span class="shrink-0 text-s text-dida-text-faint">{openDevice === node.key ? "▾" : "▸"}</span>
-                    <span class="truncate font-medium">{nodeLabel(node)}</span>
-                  </button>
-                  <Button size="small" label={t("common.rename")} title={t("common.rename")} onclick={() => startEdit(node.key)}>✎</Button>
-                {/if}
-                <span class="flex shrink-0 items-center gap-1 text-s {TONE_TXT[st.tone]}" title={st.title}>
-                  <span class="h-1.5 w-1.5 rounded-full {TONE_DOT[st.tone]}"></span>{st.label}
-                </span>
-                {#if ex.total}<span class="shrink-0 text-s text-dida-text-faint" title={t("fields.shownTotal")}>{ex.shown}/{ex.total}</span>{/if}
-                <span class="hidden shrink-0 font-mono text-s text-dida-text-faint sm:inline">
-                  {#if devices.deviceRawName(node.key)}{devices.deviceRawName(node.key)} · {/if}{node.host}
-                </span>
-                {#if node.has_psk || node.has_password}<span class="shrink-0 text-s" title={t("esphome.encrypted")}>🔒</span>{/if}
-                <Button size="small" label={t("esphome.editConn")} title={t("esphome.editConn")} selected={connKey === node.key} onclick={() => openConnEdit(node)}>🔧</Button>
-                <select value={deviceKind(node.key)} title={t("adapters.deviceType")}
-                  onchange={(e) => devices.setDeviceType(node.key, e.currentTarget.value)}
-                  class="ml-auto shrink-0 py-0.5 text-s">
-                  <option value="" disabled>—</option>
-                  {#each DEVICE_TYPES as ty (ty)}<option value={ty}>{typeLabel(ty)}</option>{/each}
-                </select>
-                <select value={deviceArea(node.key) ?? ""} title={t("adapters.room")}
-                  onchange={(e) => devices.setDeviceArea(node.key, e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-                  class="shrink-0 py-0.5 text-s">
-                  <option value="">{t("adapters.noRoom")}</option>
-                  {#each devices.sortedAreas as a (a.id)}<option value={a.id}>{areaName(a)}</option>{/each}
-                </select>
-                <Button tone="danger" size="small" onclick={() => removeNode(node.key)}>{t("common.remove")}</Button>
+              <div class="flex flex-wrap items-center gap-2 text-m" class:mb-2={openDevice === node.key || connKey === node.key}>
+                <!-- The name never truncates: the mono identity gives way first (w-0 grow keeps it
+                     out of the group's min-content), then the selects wrap below; on a phone the name wraps. -->
+                <div class="flex flex-1 items-center gap-2">
+                  {#if editKey === node.key}
+                    <input bind:value={editVal} use:focusEl placeholder={nodeLabel(node)}
+                      onkeydown={(e) => { if (e.key === "Enter") saveEdit(node.key); if (e.key === "Escape") editKey = null; }}
+                      onblur={() => saveEdit(node.key)} class="w-48 shrink-0" />
+                  {:else}
+                    <button onclick={() => (openDevice = openDevice === node.key ? null : node.key)}
+                      class="flex items-center gap-1.5 text-left sm:shrink-0">
+                      <span class="text-s text-dida-text-faint">{openDevice === node.key ? "▾" : "▸"}</span>
+                      <span class="font-medium sm:whitespace-nowrap">{nodeLabel(node)}</span>
+                    </button>
+                    <Button size="small" label={t("common.rename")} title={t("common.rename")} onclick={() => startEdit(node.key)}>✎</Button>
+                  {/if}
+                  <span class="flex shrink-0 items-center gap-1 whitespace-nowrap text-s {TONE_TXT[st.tone]}" title={st.title}>
+                    <span class="h-1.5 w-1.5 rounded-full {TONE_DOT[st.tone]}"></span>{st.label}
+                  </span>
+                  {#if ex.total}<span class="shrink-0 text-s text-dida-text-faint" title={t("fields.shownTotal")}>{ex.shown}/{ex.total}</span>{/if}
+                  <span class="hidden w-0 grow truncate font-mono text-s text-dida-text-faint sm:inline" title={ident}>{ident}</span>
+                  {#if node.has_psk || node.has_password}<span class="shrink-0 text-s" title={t("esphome.encrypted")}>🔒</span>{/if}
+                  <Button size="small" label={t("esphome.editConn")} title={t("esphome.editConn")} selected={connKey === node.key} onclick={() => openConnEdit(node)}>🔧</Button>
+                </div>
+                <div class="ml-auto flex min-w-0 items-center gap-2">
+                  <select value={deviceKind(node.key)} title={t("adapters.deviceType")}
+                    onchange={(e) => devices.setDeviceType(node.key, e.currentTarget.value)}
+                    class="min-w-0 py-0.5 text-s">
+                    <option value="" disabled>—</option>
+                    {#each DEVICE_TYPES as ty (ty)}<option value={ty}>{typeLabel(ty)}</option>{/each}
+                  </select>
+                  <select value={deviceArea(node.key) ?? ""} title={t("adapters.room")}
+                    onchange={(e) => devices.setDeviceArea(node.key, e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+                    class="min-w-0 py-0.5 text-s">
+                    <option value="">{t("adapters.noRoom")}</option>
+                    {#each devices.sortedAreas as a (a.id)}<option value={a.id}>{areaName(a)}</option>{/each}
+                  </select>
+                  <Button tone="danger" size="small" onclick={() => removeNode(node.key)}>{t("common.remove")}</Button>
+                </div>
               </div>
               {#if connKey === node.key}
                 <!-- Edit connection in place (host / noise_psk / password) — no remove+re-add -->

@@ -35,6 +35,11 @@ DIAGNOSTIC_CAPS = frozenset({"voltage", "current", "frequency", "power_factor", 
 # the IoT Core resource-pack quota, and locks/sensors change rarely.
 _CLOUD_POLL = 60
 
+# A persistent socket can go stale on the device side: it keeps acknowledging every
+# query with an empty frame (tinytuya returns None) while a fresh connection reads
+# the full status. Only reopening the socket recovers it.
+_STALE_REOPEN = 3
+
 
 def _dp_spec(spec: object) -> tuple[str, list | None, list | None, str | None]:
     """A device's dps entry is either a plain capability string, or a dict
@@ -380,18 +385,37 @@ class TuyaAdapter:
         self._handles[dev["id"]] = await loop.run_in_executor(self._exec, self._make_handle, dev)
         poll = self._cfg.int("poll_seconds", 10) if self._cfg else 10
         log.info("tuya device %s (%s) polling every %ds", dev.get("name", "?"), dev["ip"], poll)
+        empty = 0
         while True:
             try:
                 handle = self._handles[dev["id"]]
                 async with self._lock_for(dev["id"]):
                     data = await loop.run_in_executor(self._exec, handle.status)
                 if isinstance(data, dict) and isinstance(data.get("dps"), dict):
+                    empty = 0
+                    self._seen[dev["id"]] = time.monotonic()
                     self._emit(dev, dev_slug, data["dps"])
                 elif isinstance(data, dict) and data.get("Error"):
                     log.warning("tuya %s: %s", dev.get("name", dev["ip"]), data.get("Error"))
+                else:
+                    empty += 1
+                    if empty >= _STALE_REOPEN:
+                        log.warning("tuya %s: %d polls answered without a status, reopening the connection",
+                                    dev.get("name", dev["ip"]), empty)
+                        await self._reopen(dev)
+                        empty = 0
             except Exception as exc:
                 log.warning("tuya %s poll: %s", dev.get("name", dev["ip"]), exc, exc_info=True)
             await asyncio.sleep(self._cfg.int("poll_seconds", 10) if self._cfg else 10)
+
+    async def _reopen(self, dev: dict) -> None:
+        loop = asyncio.get_running_loop()
+        async with self._lock_for(dev["id"]):
+            old = self._handles.get(dev["id"])
+            if old is not None:
+                with contextlib.suppress(Exception):
+                    old.close()  # type: ignore[attr-defined]
+            self._handles[dev["id"]] = await loop.run_in_executor(self._exec, self._make_handle, dev)
 
     def _emit(self, dev: dict, dev_slug: str, dps: dict) -> None:
         if self._bus is None:
@@ -430,7 +454,6 @@ class TuyaAdapter:
                     )
                 ), log=log, name=f"publish {entity_id}/{capability}",
             )
-        self._seen[dev["id"]] = now
 
     async def _ensure_cloud(self):
         """Shared tinytuya.Cloud (auth token auto-refreshes on use). None if no

@@ -18,10 +18,11 @@ a socket — which is the whole reason this file exists rather than a mock of ti
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 
 import pytest
-from dida_adapter_tuya.adapter import TuyaAdapter
+from dida_adapter_tuya.adapter import _STALE_REOPEN, TuyaAdapter
 from dida_core.health import StatusReporter
 
 
@@ -244,3 +245,65 @@ async def test_only_the_device_past_the_poll_horizon_flips(rig):
     assert len(rig._bus.reach) == 2
     await rig._publish_reach_verdicts(desired, now - 60)
     assert len(rig._bus.reach) == 2, "an unchanged verdict is not re-published"
+
+
+# --- a stale persistent socket: every query acknowledged, never with a status -------
+
+
+class _Handle:
+    def __init__(self, reply) -> None:
+        self.reply = reply
+        self.polls = 0
+        self.closed = False
+
+    def status(self):
+        self.polls += 1
+        return self.reply
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FastCfg:
+    def int(self, key, default):
+        return 0
+
+
+async def _poll_until(rig, handles, done):
+    made: list = []
+
+    def make(dev):
+        made.append(handles[min(len(made), len(handles) - 1)])
+        return made[-1]
+
+    rig._make_handle = make
+    rig._cfg = _FastCfg()
+    task = asyncio.create_task(rig._poll_device(
+        {"id": "bf1234", "name": "Strip Patio Left R", "ip": "192.0.2.75", "dps": {"20": "on_off"}}))
+    try:
+        for _ in range(400):
+            await asyncio.sleep(0.005)
+            if done(made):
+                return made
+        raise AssertionError(f"poll loop never reached the expected state: {made}")
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def test_a_socket_answering_without_a_status_is_reopened(rig):
+    stale, fresh = _Handle(None), _Handle({"dps": {"20": True}})
+    await _poll_until(rig, [stale, fresh], lambda made: fresh.polls > 0 and rig._bus.published)
+    assert stale.closed
+    assert stale.polls == _STALE_REOPEN
+    assert "bf1234" in rig._seen
+    assert ("tuya:strip_patio_left_r", "on_off", True) in rig._bus.published
+
+
+async def test_a_status_carrying_only_unmapped_dps_still_counts_as_alive(rig):
+    alive = _Handle({"dps": {"25": "scene-data"}})
+    await _poll_until(rig, [alive], lambda made: alive.polls > _STALE_REOPEN)
+    assert "bf1234" in rig._seen
+    assert rig._bus.published == []
+    assert not alive.closed, "a device that answers with a status is never reopened"

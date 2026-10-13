@@ -174,3 +174,14 @@ async def jsonb_init(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
+
+
+# Removing a device runs twice at once: the api deletes it while the engine, told to
+# forget the key, deletes the same rows. Both lock the entity rows first and in
+# entity_id order, and leave current_state/manual_overrides to the FK cascade —
+# locking them in any other order lets each side hold what the other waits for.
+DELETE_DEVICE_ENTITIES = (
+    "DELETE FROM entities WHERE entity_id IN ("
+    "SELECT entity_id FROM entities WHERE device_key = $1 OR entity_id = $1 "
+    "ORDER BY entity_id FOR UPDATE)"
+)

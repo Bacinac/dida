@@ -52,6 +52,11 @@ RECONNECT_SECONDS = 10.0
 # (a half-open socket keeps a green badge while commands vanish into a dead writer).
 PROBE_SECONDS = 30.0
 PROBE_DEADLINE = 60.0
+# A receiver still booting after a power cut takes the telnet connection but answers
+# SSFUN/SSSOD with nothing. Until the table lands SI reports bare codes (CD for the
+# input renamed MUSIC) and every named source is refused, so keep asking.
+SOURCE_RETRY_SECONDS = 10.0
+SOURCE_SETTLE_SECONDS = 1.5  # the table arrives as a burst of frames after the query
 _UNITS = {"volume": "%"}
 
 # Projector power runs over IR (unacknowledged), so we verify each transition
@@ -235,11 +240,26 @@ class DenonAdapter:
     async def _interrogate(self) -> None:
         """On (re)connect: pull the source table, then every zone's state. The
         receiver answers each as a normal frame, which _on_line publishes."""
+        writer = self._writer
+        await self._ask_sources()
+        await self._query(("PW?", "ZM?", "MV?", "MU?", "SI?", "Z2?", "Z2MU?", "SSINFSIGRES ?"))
+        while not self._source_options and writer is not None and self._writer is writer:
+            log.warning("denon: no source table from the receiver yet, asking again in %ss",
+                        SOURCE_RETRY_SECONDS)
+            await asyncio.sleep(SOURCE_RETRY_SECONDS)
+            await self._ask_sources()
+            if self._source_options:
+                log.info("denon: source table received: %s", self._source_options)
+                await self._query(("SI?", "Z2?"))
+
+    async def _ask_sources(self) -> None:
         await self._send("SSFUN ?")
         await self._send("SSSOD ?")
-        await asyncio.sleep(1.5)  # let the source frames accumulate
+        await asyncio.sleep(SOURCE_SETTLE_SECONDS)
         self._rebuild_sources()
-        for q in ("PW?", "ZM?", "MV?", "MU?", "SI?", "Z2?", "Z2MU?", "SSINFSIGRES ?"):
+
+    async def _query(self, queries: tuple[str, ...]) -> None:
+        for q in queries:
             await self._send(q)
             await asyncio.sleep(0.15)
 

@@ -15,8 +15,12 @@ Runs in the api image (dida_api + httpx); the runner supplies the ephemeral
 Postgres (see tests/run.sh). Bypasses the app lifespan by wiring app.state
 directly. rate_limit.LOGIN is reset per-test by tests/conftest.py.
 """
+import asyncio
+
+import asyncpg
 import dida_api.app as appmod
 from dida_core import apply_migrations, jsonb_init, pg_pool
+from dida_core.db import DELETE_DEVICE_ENTITIES
 from home_core.auth import hash_password
 from httpx import ASGITransport, AsyncClient
 
@@ -147,3 +151,92 @@ async def test_devices_crud():
 
     await _cleanup(pool)
     await pool.close()
+
+
+# --- remove vs the engine's forget: both delete the same rows at once -------------
+
+RACE = "zztest:race"
+_PLAIN_ENTITIES = "DELETE FROM entities WHERE device_key = $1 OR entity_id = $1"
+_STATE_FIRST = (
+    "DELETE FROM current_state WHERE entity_id IN "
+    "(SELECT entity_id FROM entities WHERE device_key = $1 OR entity_id = $1)"
+)
+
+
+async def _seed_race(pool):
+    await pool.execute("DELETE FROM entities WHERE device_key = $1", RACE)
+    await pool.execute("DELETE FROM devices WHERE device_key = $1", RACE)
+    await pool.execute("INSERT INTO devices (device_key, adapter, name) VALUES ($1, 'cast', 'Race')", RACE)
+    for eid in (f"{RACE}:a", f"{RACE}:b"):
+        await pool.execute("INSERT INTO entities (entity_id, adapter, device_key) VALUES ($1, 'cast', $2)", eid, RACE)
+        await pool.execute(
+            "INSERT INTO current_state (entity_id, capability, value) VALUES ($1, 'on_off', 'true')", eid)
+
+
+async def _wait_until_blocked(pool, pid):
+    for _ in range(300):
+        if await pool.fetchval("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = $1", pid):
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("the engine's delete never blocked, so the interleaving was not reproduced")
+
+
+async def _race(pool, api_steps, engine_sql):
+    """The api's remove transaction takes its first lock, the engine's forget starts
+    and blocks behind it, then the api carries on: the interleaving that deadlocked
+    on production (13. 10. 2026)."""
+    await _seed_race(pool)
+    errors = []
+    async with pool.acquire() as api, pool.acquire() as engine:
+        pid = await engine.fetchval("SELECT pg_backend_pid()")
+        forget = None
+        try:
+            async with api.transaction():
+                await api.execute(api_steps[0], RACE)
+                forget = asyncio.create_task(engine.execute(engine_sql, RACE))
+                await _wait_until_blocked(pool, pid)
+                for step in api_steps[1:]:
+                    await api.execute(step, RACE)
+                await api.execute("DELETE FROM devices WHERE device_key = $1", RACE)
+        except asyncpg.exceptions.DeadlockDetectedError as exc:
+            errors.append(exc)
+        if forget is not None:
+            try:
+                await forget
+            except asyncpg.exceptions.DeadlockDetectedError as exc:
+                errors.append(exc)
+    return errors
+
+
+async def _race_pool():
+    pool = await pg_pool(min_size=1, max_size=4, init=jsonb_init)
+    await apply_migrations(pool, "db/migrations")
+    return pool
+
+
+async def test_the_old_remove_order_deadlocks_against_forget():
+    """Proves the rig reproduces the production interleaving; without it the test
+    below could pass by never racing at all."""
+    pool = await _race_pool()
+    try:
+        errors = await _race(pool, [_STATE_FIRST, _PLAIN_ENTITIES], _PLAIN_ENTITIES)
+        assert len(errors) == 1, "state-first locking must deadlock against the engine's entity delete"
+    finally:
+        await pool.execute("DELETE FROM entities WHERE device_key = $1", RACE)
+        await pool.execute("DELETE FROM devices WHERE device_key = $1", RACE)
+        await pool.close()
+
+
+async def test_remove_and_forget_together_cannot_deadlock():
+    pool = await _race_pool()
+    try:
+        errors = await _race(pool, [DELETE_DEVICE_ENTITIES], DELETE_DEVICE_ENTITIES)
+        assert errors == []
+        assert await pool.fetchval("SELECT count(*) FROM entities WHERE device_key = $1", RACE) == 0
+        assert await pool.fetchval(
+            "SELECT count(*) FROM current_state WHERE entity_id LIKE $1", f"{RACE}:%") == 0, \
+            "current_state goes with its entity through the cascade"
+    finally:
+        await pool.execute("DELETE FROM entities WHERE device_key = $1", RACE)
+        await pool.execute("DELETE FROM devices WHERE device_key = $1", RACE)
+        await pool.close()

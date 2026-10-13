@@ -118,3 +118,79 @@ async def test_reachability_follows_the_telnet_connection():
     await a._publish_reach("192.168.1.50", False, "connection lost")
     await a._publish_reach("192.168.1.50", False, "connection lost")
     assert _rkeys(a._bus) == [("192.168.1.50", True), ("192.168.1.50", False)]
+
+
+# --- a receiver still booting after a power cut -------------------------------------
+
+
+class _StateBus(_ReachBus):
+    def __init__(self) -> None:
+        super().__init__()
+        self.states: list = []
+
+    async def publish_state(self, update) -> None:
+        self.states.append((update.entity_id, update.capability, update.value))
+
+
+class _BootingReceiver:
+    """A telnet writer standing in for a Marantz that takes the connection while it
+    is still booting: the first source-table queries get no answer, later ones the
+    real table (input CD renamed MUSIC)."""
+
+    def __init__(self, adapter, empty_tables: int) -> None:
+        self.adapter = adapter
+        self.empty_tables = empty_tables
+        self.sent: list[str] = []
+        self._pending: list[str] = []
+
+    def write(self, data: bytes) -> None:
+        cmd = data.decode().strip()
+        self.sent.append(cmd)
+        booted = self.sent.count("SSSOD ?") > self.empty_tables
+        if cmd == "SSFUN ?" and self.sent.count("SSFUN ?") > self.empty_tables:
+            self._pending += ["SSFUNCD MUSIC", "SSFUNSAT/CBL SHIELD", "SSFUN END"]
+        elif cmd == "SSSOD ?" and booted:
+            self._pending += ["SSSODCD USE", "SSSODSAT/CBL USE", "SSSOD END"]
+        elif cmd == "SI?":
+            self._pending.append("SICD")
+
+    async def drain(self) -> None:
+        frames, self._pending = self._pending, []
+        for frame in frames:
+            await self.adapter._on_line(frame)
+
+
+def _booting_adapter(monkeypatch, empty_tables: int):
+    import dida_adapter_denon.adapter as mod
+
+    monkeypatch.setattr(mod, "SOURCE_RETRY_SECONDS", 0)
+    monkeypatch.setattr(mod, "SOURCE_SETTLE_SECONDS", 0)
+    a = mod.DenonAdapter()
+    a._bus = _StateBus()
+    a._main = mod.Zone("denon:marantz_main", "Marantz")
+    a._zone2 = mod.Zone("denon:marantz_zone2", "Marantz Zone 2")
+    a._writer = _BootingReceiver(a, empty_tables)
+    return a
+
+
+async def test_a_source_table_missed_while_booting_is_asked_for_again(monkeypatch):
+    a = _booting_adapter(monkeypatch, empty_tables=2)
+    await a._interrogate()
+    assert a._writer.sent.count("SSFUN ?") == 3
+    assert a._source_options == ["MUSIC", "SHIELD"]
+    sources = [v for e, c, v in a._bus.states if e == "denon:marantz_main" and c == "source"]
+    assert sources == ["CD", "MUSIC"], "the bare code is corrected once the table lands"
+
+
+async def test_the_retry_stops_with_the_connection(monkeypatch):
+    import dida_adapter_denon.adapter as mod
+
+    a = _booting_adapter(monkeypatch, empty_tables=10**6)
+    receiver = a._writer
+
+    async def connection_drops(_seconds):
+        a._writer = None
+
+    monkeypatch.setattr(mod.asyncio, "sleep", connection_drops)
+    await a._interrogate()
+    assert receiver.sent.count("SSFUN ?") == 1, "a dead connection is not asked again"

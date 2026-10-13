@@ -7,6 +7,7 @@ brings the device back on its own.
 
 from __future__ import annotations
 
+from dida_core.db import DELETE_DEVICE_ENTITIES
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -127,9 +128,5 @@ async def delete_device(key: str, request: Request, _admin: AuthUser = Depends(r
     # re-publish can't resurrect the rows we're about to remove.
     await request.app.state.bus.nc.publish("dida.engine.forget", key.encode())
     async with pool.acquire() as conn, conn.transaction():
-        await conn.execute(
-            "DELETE FROM current_state WHERE entity_id IN "
-            "(SELECT entity_id FROM entities WHERE device_key = $1 OR entity_id = $1)", key
-        )
-        await conn.execute("DELETE FROM entities WHERE device_key = $1 OR entity_id = $1", key)
+        await conn.execute(DELETE_DEVICE_ENTITIES, key)
         await conn.execute("DELETE FROM devices WHERE device_key = $1", key)

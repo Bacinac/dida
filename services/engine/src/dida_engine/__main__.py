@@ -29,6 +29,7 @@ from dida_core import (
     setup_logging,
     validate_state,
 )
+from dida_core.db import DELETE_DEVICE_ENTITIES
 from dida_core.entity_identity import rewrite_entity_references
 from dida_core.events import HEARTBEAT_S
 from dida_core.journal import JournalKind
@@ -343,9 +344,7 @@ class Engine:
         await self._journal("removed", key, device_key=key, severity="notice",
                             message="device removed by the user")
         try:
-            await self._pool.execute(
-                "DELETE FROM entities WHERE device_key = $1 OR entity_id = $1", key
-            )
+            await self._pool.execute(DELETE_DEVICE_ENTITIES, key)
         except Exception as exc:
             log.warning("forget %s: cleanup delete failed: %s", key, exc, exc_info=True)
 

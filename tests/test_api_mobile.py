@@ -3,7 +3,7 @@ plus the sliding-session refresh in /auth/me, against a real Postgres.
 
 Covers the three legs the app stands on:
   * /me/mobile-config — session → endpoint-scoped location credentials +
-    waypoints (and the fail-loud 503 when DIDA_PUBLIC_URL is loopback);
+    waypoints (and the fail-loud 503 when the public address is loopback);
   * /me/app-link — the browser→app handoff URL, carrying the user's ONE
     reusable login token (never minting over a live one — that killed the QR);
   * /app/apk.json + /app/dida.apk — sideload artifact serving (404 loud when
@@ -36,7 +36,7 @@ async def _reseed(pool) -> None:
     exactly what the code no longer does, so a test may not either."""
     from dida_core.db import _setting_cache
 
-    await pool.execute("DELETE FROM app_settings WHERE key IN ('public_url', 'app_url')")
+    await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
     _setting_cache.clear()
     await seed_from_env(pool)
 
@@ -72,7 +72,7 @@ async def test_mobile_config_provisions_location_credentials():
     await _seed(pool)
     appmod.app.state.pool = pool
     appmod.app.state.secret_key = SECRET
-    os.environ["DIDA_PUBLIC_URL"] = "https://dida.example.test"
+    os.environ["DIDA_APP_URL"] = "https://dida.example.test"
     await _reseed(pool)
     try:
         async with _client() as c:
@@ -103,11 +103,11 @@ async def test_mobile_config_provisions_location_credentials():
             # Loopback public address → credentials would arm a reporter that can
             # never reach us from outside. Refused loudly, not handed out. Set it the
             # way an admin would (the stored setting), not through the environment.
-            await set_app_setting(pool, "public_url", "http://localhost:5273")
+            await set_app_setting(pool, "app_url", "http://localhost:5273")
             assert (await c.get("/me/mobile-config")).status_code == 503
     finally:
-        os.environ.pop("DIDA_PUBLIC_URL", None)
-        await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+        os.environ.pop("DIDA_APP_URL", None)
+        await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
         _setting_cache.clear()
         await _cleanup(pool)
         await pool.close()
@@ -119,7 +119,7 @@ async def test_app_link_handoff_signs_the_app_in():
     await _seed(pool)
     appmod.app.state.pool = pool
     appmod.app.state.secret_key = SECRET
-    await set_app_setting(pool, "public_url", "https://dida.example.test")
+    await set_app_setting(pool, "app_url", "https://dida.example.test")
     _setting_cache.clear()
     try:
         async with _client() as c:
@@ -155,8 +155,8 @@ async def test_app_link_handoff_signs_the_app_in():
             k2 = r.json()["url"].split("k=")[1].split("&")[0]
             assert k2 == k, "app-link must carry the SAME token, not mint a new one"
     finally:
-        os.environ.pop("DIDA_PUBLIC_URL", None)
-        await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+        os.environ.pop("DIDA_APP_URL", None)
+        await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
         _setting_cache.clear()
         await _cleanup(pool)
         await pool.close()
@@ -428,7 +428,7 @@ async def test_location_status_reports_why_a_phone_stayed_dark():
     appmod.app.state.pool = pool
     appmod.app.state.secret_key = SECRET
     appmod.app.state.bus = bus
-    os.environ["DIDA_PUBLIC_URL"] = "https://dida.example.test"
+    os.environ["DIDA_APP_URL"] = "https://dida.example.test"
     await _reseed(pool)
     try:
         async with _client() as c:
@@ -472,8 +472,8 @@ async def test_location_status_reports_why_a_phone_stayed_dark():
             assert record.level == "WARNING"
             assert "no-background-grant" in record.message
     finally:
-        os.environ.pop("DIDA_PUBLIC_URL", None)
-        await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+        os.environ.pop("DIDA_APP_URL", None)
+        await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
         _setting_cache.clear()
         await _cleanup(pool)
         await pool.close()
@@ -499,7 +499,7 @@ async def test_a_lost_notification_picture_is_reported_by_the_phone():
     appmod.app.state.pool = pool
     appmod.app.state.secret_key = SECRET
     appmod.app.state.bus = bus
-    os.environ["DIDA_PUBLIC_URL"] = "https://dida.example.test"
+    os.environ["DIDA_APP_URL"] = "https://dida.example.test"
     await _reseed(pool)
     try:
         async with _client() as c:
@@ -521,8 +521,8 @@ async def test_a_lost_notification_picture_is_reported_by_the_phone():
             assert "zzmobuser" in record.message and "SocketTimeoutException" in record.message
             assert "v0.1.871" in record.message and "SM-S721B" in record.message
     finally:
-        os.environ.pop("DIDA_PUBLIC_URL", None)
-        await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+        os.environ.pop("DIDA_APP_URL", None)
+        await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
         _setting_cache.clear()
         await _cleanup(pool)
         await pool.close()

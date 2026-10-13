@@ -231,10 +231,10 @@ _LOOPBACK_HINTS = ("localhost", "127.0.0.1", "[::1]", "//::1")
 
 async def public_base_url(pool) -> str:
     """The externally reachable origin (Cloudflare tunnel) the phone POSTs to.
-    The same stored setting the Spotify/SmartThings OAuth flows use."""
+    The same stored setting the SmartThings/Google OAuth flows use."""
     from dida_core import host_setting
 
-    return (await host_setting(pool, "public_url")).rstrip("/")
+    return (await host_setting(pool, "app_url")).rstrip("/")
 
 
 def is_reachable(url: str) -> bool:
@@ -405,7 +405,7 @@ async def _waypoint_sync(pool: asyncpg.Pool, username: str) -> list[dict]:
 async def provision_payload(pool: asyncpg.Pool, username: str, token: str) -> dict:
     """Everything Settings → Users needs to render the setup panel for one user:
     the OwnTracks config, the inline import URL, a QR of it, and a fail-loud
-    `reachable` flag when DIDA_PUBLIC_URL is still loopback."""
+    `reachable` flag when the public address is still loopback."""
     public = await public_base_url(pool)
     enc = await get_setting(pool, "owntracks_secret")
     secret = (

@@ -202,6 +202,7 @@
       stStatus = null;
     }
   }
+  const ST_SETUP_GUIDE = "https://github.com/Bacinac/dida/blob/main/adapters/smartthings/README.md";
   async function stConnect() {
     stBusy = true;
     try {
@@ -1554,6 +1555,8 @@
             </span>
             <Button tone="danger" size="small" onclick={stDisconnect} disabled={stBusy}>{t("smartthings.disconnect")}</Button>
           {:else}
+            <a href={ST_SETUP_GUIDE} target="_blank" rel="noreferrer"
+              class="mr-auto text-s text-dida-accent hover:underline">{t("smartthings.setupGuide")}</a>
             <Button size="small" onclick={stConnect} disabled={stBusy || !stStatus?.configured}
               title={stStatus?.configured ? "" : t("smartthings.fillFirst")}
             >{t("smartthings.connect")}</Button>

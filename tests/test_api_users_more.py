@@ -239,9 +239,9 @@ async def test_users_owntracks_revoke_and_access_lifecycle():
             assert (await c.get(f"/users/{GONE}/access")).status_code == 404
 
             # --- rotate issues a fresh token; with a public URL the payload carries a QR
-            old = os.environ.get("DIDA_PUBLIC_URL")
-            os.environ["DIDA_PUBLIC_URL"] = "https://dida.example.test"
-            await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+            old = os.environ.get("DIDA_APP_URL")
+            os.environ["DIDA_APP_URL"] = "https://dida.example.test"
+            await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
             _setting_cache.clear()
             await seed_from_env(pool)
             try:
@@ -252,9 +252,9 @@ async def test_users_owntracks_revoke_and_access_lifecycle():
                 assert pl["reachable"] is True and "<svg" in pl["qr_svg"]
             finally:
                 if old is None:
-                    os.environ.pop("DIDA_PUBLIC_URL", None)
+                    os.environ.pop("DIDA_APP_URL", None)
                 else:
-                    os.environ["DIDA_PUBLIC_URL"] = old
+                    os.environ["DIDA_APP_URL"] = old
             rotated = await pool.fetchval("SELECT login_token FROM users WHERE id = $1", tid)
             assert rotated and rotated != reminted, "rotate mints a new token"
             assert (await c.post(f"/users/{GONE}/access")).status_code == 404

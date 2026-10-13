@@ -27,7 +27,6 @@ PLAIN = {
     "lan_ip": "DIDA_LAN_IP",
     "opus_url": "DIDA_OPUS_URL",
     "app_url": "DIDA_APP_URL",
-    "public_url": "DIDA_PUBLIC_URL",
     "net_parent": "DIDA_NET_PARENT",
     "announce_lang": "DIDA_ANNOUNCE_LANG",
 }

@@ -59,14 +59,14 @@ async def _cfg(request: Request) -> dict:
         decrypt_secret(secret, d["client_secret"], adapter="smartthings", key="client_secret")
         if d.get("client_secret") else ""
     )
-    # Redirect URI defaults to the installation's public origin (Settings → Network,
-    # already set to the Cloudflare tunnel for Spotify) so the user doesn't type it
-    # twice — only registers it once at SmartThings. An explicit field overrides.
+    # Redirect URI defaults to the installation's public address (Settings → Network)
+    # so the user doesn't type it twice — only registers it once at SmartThings. An
+    # explicit field overrides.
     redirect_uri = (d.get("redirect_uri") or "").strip()
     if not redirect_uri:
         from dida_core import host_setting
 
-        base = (await host_setting(request.app.state.pool, "public_url")).rstrip("/")
+        base = (await host_setting(request.app.state.pool, "app_url")).rstrip("/")
         redirect_uri = f"{base}/api/smartthings/callback" if base else ""
     return {
         "client_id": (d.get("client_id") or "").strip(),
@@ -85,8 +85,7 @@ async def _app_origin(pool, redirect_uri: str) -> str:
         return f"{p.scheme}://{p.netloc}"
     from dida_core import host_setting
 
-    base = await host_setting(pool, "app_url")
-    return (base or await host_setting(pool, "public_url")).rstrip("/")
+    return (await host_setting(pool, "app_url")).rstrip("/")
 
 
 @router.get("/status")
@@ -116,7 +115,7 @@ async def locations(request: Request, _admin: AuthUser = Depends(require_admin))
 async def login(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
     cfg = await _cfg(request)
     if not (cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]):
-        raise HTTPException(503, "Unesi Client ID, Client Secret i Redirect URI pa spremi.")
+        raise HTTPException(503, "Enter Client ID, Client Secret and Redirect URI, then save.")
     state = await issue_state(request, _admin, "smartthings")
     params = {
         "client_id": cfg["client_id"], "response_type": "code",

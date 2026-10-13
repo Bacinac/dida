@@ -179,7 +179,7 @@ async def test_an_adapter_hears_only_what_is_addressed_to_it(login, subject):
     probe = subject.replace(">", "probe")
     await core.nc.publish(probe, b"not yours")
     await core.nc.publish("dida.command.mqtt.mqtt:hall", b"yours")
-    await _settle(core)
+    await _after_twin(core, own)
     assert own == [b"yours"], "its own commands arrive"
     assert overheard == [], f"mqtt heard {probe}"
     assert mqtt.refused("subscription")

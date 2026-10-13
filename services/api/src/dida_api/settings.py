@@ -116,7 +116,7 @@ async def get_settings(request: Request, _admin: AuthUser = Depends(require_admi
     lan_ip = await host_setting(pool, "lan_ip")
     opus_url = await host_setting(pool, "opus_url")
     opus_token = await get_setting(pool, "opus_token")
-    app_url = await host_setting(pool, "app_url") or await host_setting(pool, "public_url")
+    app_url = await host_setting(pool, "app_url")
     net_parent = await host_setting(pool, "net_parent")
     vlans = await get_setting(pool, "managed_vlans") or ""
     try:

@@ -193,7 +193,6 @@ SETTING_REFERENCES: dict[str, tuple[str, ...]] = {
     "panel_seen_at": (),
     "panel_token": (),
     "presence_hidden": ("[]",),
-    "public_url": (),
     "radio_current_id": (),
     "radio_player": ("",),
     "smartthings_locations": (),

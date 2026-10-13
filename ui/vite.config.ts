@@ -2,7 +2,7 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
-const publicHosts = [process.env.DIDA_PUBLIC_URL ?? "", ...(process.env.DIDA_CORS_ORIGINS ?? "").split(",")]
+const publicHosts = [process.env.DIDA_APP_URL ?? "", ...(process.env.DIDA_CORS_ORIGINS ?? "").split(",")]
   .map((origin) => URL.parse(origin.trim())?.hostname)
   .filter((host): host is string => !!host);
 

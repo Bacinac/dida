@@ -1941,7 +1941,7 @@ export interface AccessSetup {
    * button that installs the app or opens it signed in. */
   setup_url: string;
   public_url: string;
-  /** false ⇒ DIDA_PUBLIC_URL is loopback; a phone off-LAN can't open it. */
+  /** false ⇒ the public address is loopback; a phone off-LAN can't open it. */
   reachable: boolean;
   /** inline SVG of the login QR. */
   qr_svg: string;

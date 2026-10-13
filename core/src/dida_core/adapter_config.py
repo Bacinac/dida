@@ -244,11 +244,11 @@ ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
     # (encrypted), never a form field — like homekit's `pairings`.
     "smartthings": [
         ConfigField("client_id", "OAuth Client ID",
-                    help="From the SmartThings OAuth app (`smartthings apps:create` → OAuth-In App)."),
+                    help="From the OAuth app you create once at SmartThings; the setup guide is linked on this card."),
         ConfigField("client_secret", "OAuth Client Secret", type="password", secret=True),
         ConfigField("redirect_uri", "Redirect URI (optional)",
-                    placeholder="auto: <DIDA_PUBLIC_URL>/api/smartthings/callback",
-                    help="Empty = auto from the public URL (Cloudflare tunnel). This is the value you register in the OAuth app."),
+                    placeholder="auto: <public address>/api/smartthings/callback",
+                    help="Empty = the public address (Settings → Network) + /api/smartthings/callback. SmartThings accepts only https or http://localhost; register the same value in the OAuth app."),
         # Home location: a SmartThings account can span multiple homes; without this
         # the adapter would ingest every device on the account (e.g. a TV at another
         # house). Rendered bespoke in the ST card (a dropdown of the account's
@@ -274,8 +274,8 @@ ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
                     help="Google Cloud → Credentials → OAuth client ID → Web application, in a project of its own (not the FCM one)."),
         ConfigField("client_secret", "OAuth Client Secret", type="password", secret=True),
         ConfigField("redirect_uri", "Redirect URI (optional)",
-                    placeholder="auto: <DIDA_PUBLIC_URL>/api/contacts/callback",
-                    help="Empty = auto from the public URL (Cloudflare tunnel). This is the value you register as an Authorised redirect URI."),
+                    placeholder="auto: <public address>/api/contacts/callback",
+                    help="Empty = the public address (Settings → Network) + /api/contacts/callback. This is the value you register as an Authorised redirect URI."),
         ConfigField("announce_days", "Announce days ahead", type="number", default="1",
                     help="How far ahead a birthday is announced. 1 = today and tomorrow."),
         ConfigField("sync_hour", "Daily sync at (local hour)", type="number", default="4",

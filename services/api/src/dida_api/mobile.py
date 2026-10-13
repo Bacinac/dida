@@ -76,7 +76,7 @@ async def my_mobile_config(request: Request, user: AuthUser = Depends(current_us
         # Fail loud: credentials that can only ever POST to a loopback origin
         # would arm a reporter that goes dark the moment the phone leaves WiFi.
         raise HTTPException(
-            503, "DIDA_PUBLIC_URL is not externally reachable — set it to the tunnel origin"
+            503, "The public address is not externally reachable — set it to the tunnel origin in Settings → Network"
         )
     return {
         "user_id": str(user.id),

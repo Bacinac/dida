@@ -711,10 +711,6 @@ services:
       # For the Zigbee console link on the Adapters page — the same value the
       # zigbee2mqtt service publishes on, read here rather than copied into the UI.
       DIDA_Z2M_PORT: ${DIDA_Z2M_PORT:-8092}
-      # DIDA_PUBLIC_URL is the origin the outside world reaches (OAuth callbacks,
-      # the app link); DIDA_APP_URL is the user's normal origin to land back on
-      # (logged in).
-      DIDA_PUBLIC_URL: ${DIDA_PUBLIC_URL:-http://[::1]:5273}
       DIDA_APP_URL: ${DIDA_APP_URL:-http://localhost:5273}
       # Seeded into app_settings on first boot like the rest; netmgr reads the stored
       # value, so this has to reach the SEEDER (here) — not the service that uses it.
@@ -819,7 +815,7 @@ services:
       # both vite.config.ts (dev) and server.js (prod).
       DIDA_API_URL: http://api:${DIDA_API_PORT:-8090}
       # The Vite dev server accepts only the hosts named here (plus IPs/localhost).
-      DIDA_PUBLIC_URL: ${DIDA_PUBLIC_URL:-}
+      DIDA_APP_URL: ${DIDA_APP_URL:-}
       DIDA_CORS_ORIGINS: ${DIDA_CORS_ORIGINS:-}
     # LAN-exposed (like BABA web) so it's reachable from a workstation at
     # http://<host>:${DIDA_UI_PORT}. The API/NATS/MQTT stay loopback — the

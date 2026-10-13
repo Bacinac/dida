@@ -468,11 +468,11 @@ def text_columns() -> list[tuple[str, str, bool]]:
 def anonymise() -> None:
     stmts = ["BEGIN;"]
 
-    # 0. the dev instance's own URL settings name the family domain (app_url /
-    # public_url exist for push and share links, neither of which the demo
-    # recording performs), and so does the Cloudflare adapter's DNS zone — drop
-    # them rather than rewrite them, there is no demo value that would be true.
-    stmts.append("DELETE FROM app_settings WHERE key IN ('app_url', 'public_url');")
+    # 0. the dev instance's own public address names the family domain (app_url
+    # exists for push and share links, neither of which the demo recording
+    # performs), and so does the Cloudflare adapter's DNS zone — drop them rather
+    # than rewrite them, there is no demo value that would be true.
+    stmts.append("DELETE FROM app_settings WHERE key = 'app_url';")
     stmts.append("DELETE FROM adapter_config WHERE adapter = 'cloudflare' AND key = 'zone';")
 
     # 0c. A reverse-DNS application id carries the family domain with its labels

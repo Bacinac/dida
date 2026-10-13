@@ -51,8 +51,8 @@ async def test_setup_qr_auto_signs_in_as_the_assigned_name_and_provisions_locati
     uid = await _seed(pool)
     appmod.app.state.pool = pool
     appmod.app.state.secret_key = SECRET
-    os.environ["DIDA_PUBLIC_URL"] = "https://dida.example.test"
-    await pool.execute("DELETE FROM app_settings WHERE key IN ('public_url', 'app_url')")
+    os.environ["DIDA_APP_URL"] = "https://dida.example.test"
+    await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
     _setting_cache.clear()
     await seed_from_env(pool)
 
@@ -107,8 +107,8 @@ async def test_setup_qr_auto_signs_in_as_the_assigned_name_and_provisions_locati
             assert r4.status_code == 303
             assert SESSION_COOKIE.name not in r4.cookies, "a rotated-away QR gets no session"
     finally:
-        os.environ.pop("DIDA_PUBLIC_URL", None)
-        await pool.execute("DELETE FROM app_settings WHERE key = 'public_url'")
+        os.environ.pop("DIDA_APP_URL", None)
+        await pool.execute("DELETE FROM app_settings WHERE key = 'app_url'")
         _setting_cache.clear()
         await pool.execute("DELETE FROM zones WHERE name = 'zzonboard_zone'")
         await pool.execute("DELETE FROM users WHERE username = $1", NAME)

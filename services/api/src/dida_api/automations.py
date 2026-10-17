@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 
+from anthropic import APIError
 from dida_core import CapabilityError, validate_definition
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -191,6 +192,8 @@ async def synthesize_automation(body: SynthesizeIn, request: Request,
         )
     except CapabilityError as exc:
         raise HTTPException(422, f"AI je predložio nevažeće pravilo: {exc}") from exc
+    except APIError:
+        raise
     except Exception as exc:  # malformed model output / timeout / SDK error → clean 502, not a raw 500
         log.exception("automation synthesis failed (mode=%s)", body.mode)
         raise HTTPException(502, "AI generation failed — try again or rephrase the description.") from exc

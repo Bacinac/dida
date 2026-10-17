@@ -11,7 +11,7 @@ import json
 import logging
 import os
 
-from anthropic import AsyncAnthropic
+from anthropic import APIError, AsyncAnthropic, AuthenticationError, PermissionDeniedError
 from dida_core import DEVICE_TYPES as DEVICE_TYPES  # re-export (single source of truth)
 from dida_core import ConfigDecryptError, decrypt_secret
 
@@ -24,9 +24,9 @@ log = logging.getLogger("dida.api")
 
 
 async def resolve_assistant_client(state) -> AsyncAnthropic | None:
-    """Build (and cache on app.state) the Claude client from the stored key,
-    falling back to the env var. Rebuilds when the key changes so UI edits take
-    effect live. `state` is request.app.state (or app.state)."""
+    """Build (and cache on app.state) the Claude client from the stored key.
+    Rebuilds when the key changes so UI edits take effect live. `state` is
+    request.app.state (or app.state)."""
     key = await stored_api_key(state.pool, "anthropic_api_key") or None
     if not key:
         return None
@@ -34,6 +34,12 @@ async def resolve_assistant_client(state) -> AsyncAnthropic | None:
         state.anthropic_client = AsyncAnthropic(api_key=key)
         state.anthropic_key = key
     return state.anthropic_client
+
+
+def assistant_failure(exc: APIError) -> str:
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return "Anthropic rejected the API key — replace it in System → Settings"
+    return f"AI service failed ({exc.__class__.__name__})"
 
 
 def as_list(v: object) -> list:

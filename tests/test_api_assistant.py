@@ -683,3 +683,75 @@ async def test_run_assistant_drives_the_tool_loop():
 
     await _cleanup(pool)
     await pool.close()
+
+
+class _RejectedKey:
+    """A client whose key Anthropic no longer accepts."""
+
+    def __init__(self):
+        import anthropic
+        import httpx
+
+        response = httpx.Response(401, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
+
+        async def create(**_kwargs):
+            raise anthropic.AuthenticationError("invalid x-api-key", response=response, body=None)
+
+        self.messages = SimpleNamespace(create=create)
+
+
+async def test_rejected_key_names_the_key_not_a_bare_500():
+    import os
+
+    import dida_api.app as appmod
+    from dida_api.auth import hash_password
+    from httpx import ASGITransport, AsyncClient
+
+    pool = await pg_pool(min_size=1, max_size=4, init=jsonb_init)
+    await apply_migrations(pool, "db/migrations")
+    await _seed(pool)
+    await pool.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES ('zzasstadmin', $1, 'admin')",
+        await hash_password("pw"),
+    )
+    rule = await pool.fetchval(
+        "INSERT INTO automations (name, enabled, definition) VALUES ('zzasst-explain', true, $1::jsonb) "
+        "RETURNING id",
+        {"triggers": [{"entity_id": "denon:zzavr", "capability": "on_off"}],
+         "actions": [{"entity_id": "denon:zzavr", "command": "turn_off"}]},
+    )
+    appmod.app.state.pool = pool
+    appmod.app.state.secret_key = "assistant-sse-test-secret-0123456789abcdef"
+    appmod.app.state.bus = StubBus()
+    appmod.app.state.ch = None
+    os.environ["ANTHROPIC_API_KEY"] = "test-key"
+    await seed_from_env(pool)
+    appmod.app.state.anthropic_client = _RejectedKey()
+    appmod.app.state.anthropic_key = "test-key"
+    expected = "Anthropic rejected the API key — replace it in System → Settings"
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=appmod.app),
+                               base_url="http://itest") as c:
+            r = await c.post("/auth/login", json={"username": "zzasstadmin", "password": "pw"})
+            assert r.status_code == 200
+
+            r = await c.post(f"/automations/{rule}/explain")
+            assert (r.status_code, r.json()["detail"]) == (502, expected)
+
+            r = await c.post("/automations/synthesize", json={"description": "ugasi pojačalo"})
+            assert (r.status_code, r.json()["detail"]) == (502, expected)
+
+            from dida_api.rate_limit import ASSISTANT_LIMITER
+
+            ASSISTANT_LIMITER._buckets.clear()
+            r = await c.post("/assistant", json={"message": "što je DIDA?"})
+            events = [json.loads(line[5:].strip()) for line in r.text.splitlines() if line.startswith("data:")]
+            assert events[-1] == {"type": "error", "detail": expected}
+    finally:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        appmod.app.state.anthropic_client = None
+        appmod.app.state.anthropic_key = None
+
+    await _cleanup(pool)
+    await pool.close()

@@ -11,6 +11,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 import clickhouse_connect
+from anthropic import APIError
 from dida_core import (
     CORE,
     Bus,
@@ -31,7 +32,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from home_core.auth import (
     bootstrap_admin_if_empty,
     encode_session_token,
@@ -91,7 +92,7 @@ from dida_api.backup import backup_scheduler
 from dida_api.backup import router as backup_router
 from dida_api.broker import serve_broker
 from dida_api.commands import dispatch_command
-from dida_api.common import get_setting, resolve_assistant_client, stored_api_key
+from dida_api.common import assistant_failure, get_setting, resolve_assistant_client, stored_api_key
 from dida_api.contacts import router as contacts_router
 from dida_api.hub import Hub
 from dida_api.opus_media import router as opus_router
@@ -179,6 +180,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DIDA API", lifespan=lifespan)
 app.state.hub = Hub()
+
+
+@app.exception_handler(APIError)
+async def _assistant_failed(_request: Request, exc: APIError) -> JSONResponse:
+    log.warning("assistant call failed: %s", exc)
+    return JSONResponse({"detail": assistant_failure(exc)}, status_code=502)
+
 app.include_router(system_router)  # observability: /system/stats + /metrics (Prometheus)
 app.include_router(alerts_router)  # system-health alerts: /system/alerts + /system/alert-rules
 app.include_router(orphans.router)  # dangling entity references: /system/orphans
@@ -662,11 +670,12 @@ async def assistant(body: AssistantIn, user: AuthUser = Depends(current_user)) -
         try:
             async for event in assistant_events(ctx, history, body.message):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception:
+        except Exception as exc:
             # Headers are long gone, so this cannot be a 500 — surface it in-band
             # rather than closing the stream silently and leaving a dead spinner.
             log.exception("assistant turn failed mid-stream")
-            payload = json.dumps({"type": "error", "detail": "assistant failed"})
+            detail = assistant_failure(exc) if isinstance(exc, APIError) else "assistant failed"
+            payload = json.dumps({"type": "error", "detail": detail})
             yield f"data: {payload}\n\n"
 
     return StreamingResponse(

@@ -140,13 +140,13 @@ ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
     # camera lives in the single `frigate:<cam>` namespace and carries the site's
     # name as a `site` label the UI groups by. Add/remove is live.
     "frigate": [
-        ConfigField("sites", "Lokacije (JSON)", type="textarea", secret=True,
+        ConfigField("sites", "Sites (JSON)", type="textarea", secret=True,
                     placeholder='[{"name": "Cabin", "url": "https://cabin-frigate.example", "user": "dida", "password": "…", "go2rtc": ""}]',
-                    help="Frigate NVR po lokaciji: name, url (točka 8971 ako traži login), user, password, opc. go2rtc. Za LOKALNI Frigate dodaj i mqtt_url za žive događaje. Kamere svih lokacija dijele isti popis, razlikuje ih `site` oznaka."),
+                    help="One Frigate per site: name, url (port 8971 if it asks for a login), user, password, optional go2rtc. For a LOCAL Frigate add mqtt_url as well, for live events. The cameras of all sites share one list, told apart by the `site` label."),
         ConfigField("config_refresh_s", "Roster refresh (s)", type="number", default="300",
-                    help="Koliko često se ponovno čita /api/config svake lokacije (nova kamera/zona se pojavi bez restarta)."),
+                    help="How often each site's /api/config is read again (a new camera or zone appears without a restart)."),
         ConfigField("track_ttl_s", "Event staleness threshold (s)", type="number", default="600",
-                    help="Ako se izgubi Frigate 'end' event (lokalni MQTT), praćeni objekt se odbaci nakon toliko sekundi bez updatea."),
+                    help="If Frigate's 'end' event is lost (local MQTT), a tracked object is dropped after this many seconds without an update."),
     ],
     "broadlink": [
         ConfigField("host", "Blaster IP", placeholder="192.0.2.50",

@@ -3,8 +3,8 @@ real Postgres: GET reflects the app_settings key/value store (with sane
 defaults when a key is absent), PUT writes round-trip through GET for a plain
 setting (announce_lang) and a validated one (discovery_subnets — an invalid
 CIDR is rejected loud, without clobbering the previously stored value), and a
-secret (anthropic_api_key) is never echoed back — only a last-4 hint once
-configured, gone once cleared. Also covers the require_admin boundary, and the
+secret (owntracks_secret) is never echoed back — only whether it is set, and
+not once cleared. Also covers the require_admin boundary, and the
 uniform /settings/test surface for opus (stubbed upstream, typed OR stored
 url+token) and owntracks (freshest received presence fix).
 
@@ -33,7 +33,7 @@ async def test_settings_get_put_roundtrip():
     pool = await pg_pool(min_size=1, max_size=4, init=jsonb_init)
     await apply_migrations(pool, "db/migrations")
     await pool.execute(
-        "DELETE FROM app_settings WHERE key IN ('announce_lang', 'discovery_subnets', 'anthropic_api_key')"
+        "DELETE FROM app_settings WHERE key IN ('announce_lang', 'discovery_subnets', 'owntracks_secret')"
     )
     await pool.execute("DELETE FROM users WHERE username IN ('stgadmin', 'stguser')")
     await pool.execute(
@@ -65,7 +65,7 @@ async def test_settings_get_put_roundtrip():
         body = r.json()
         assert body["announce_lang"] == "hr", "no stored/env lang → 'hr' default"
         assert body["discovery_subnets"] == ""
-        assert body["anthropic_configured"] is False and body["anthropic_hint"] is None
+        assert body["owntracks_configured"] is False
 
         # plain setting round-trips
         r = await c.put("/settings", json={"announce_lang": "en"})
@@ -85,24 +85,21 @@ async def test_settings_get_put_roundtrip():
         r = await c.get("/settings")
         assert r.json()["discovery_subnets"] == "192.0.2.0/24", "the rejected write left the prior value intact"
 
-        # a secret key: write succeeds, GET never echoes it back — only a last-4 hint
-        r = await c.put("/settings", json={"anthropic_api_key": "sk-test-abcd1234"})
+        # a secret: write succeeds, GET never echoes it back — only that it is set
+        r = await c.put("/settings", json={"owntracks_secret": "ot-test-abcd1234"})
         assert r.status_code == 204
         r = await c.get("/settings")
-        body = r.json()
-        assert body["anthropic_configured"] is True
-        assert body["anthropic_hint"] == "1234", "only the last 4 chars are ever exposed"
-        assert "sk-test-abcd1234" not in r.text, "the raw key is never returned"
+        assert r.json()["owntracks_configured"] is True
+        assert "ot-test-abcd1234" not in r.text, "the raw secret is never returned"
 
         # "" clears it back to unconfigured
-        r = await c.put("/settings", json={"anthropic_api_key": ""})
+        r = await c.put("/settings", json={"owntracks_secret": ""})
         assert r.status_code == 204
         r = await c.get("/settings")
-        body = r.json()
-        assert body["anthropic_configured"] is False and body["anthropic_hint"] is None, "clearing removes the key"
+        assert r.json()["owntracks_configured"] is False, "clearing removes the secret"
 
     await pool.execute(
-        "DELETE FROM app_settings WHERE key IN ('announce_lang', 'discovery_subnets', 'anthropic_api_key')"
+        "DELETE FROM app_settings WHERE key IN ('announce_lang', 'discovery_subnets', 'owntracks_secret')"
     )
     await pool.execute("DELETE FROM users WHERE username IN ('stgadmin', 'stguser')")
     await pool.close()
@@ -168,26 +165,26 @@ async def test_settings_test_uniform_surface(monkeypatch):
         r = await c.post("/settings/test", json={"provider": "immich"})
         assert r.status_code == 400, "a retired provider is unknown, not silently ok"
 
-        # opus without any url/token → honest "URL nije upisan"
+        # opus without any url/token → says the address is missing
         r = await c.post("/settings/test", json={"provider": "opus"})
-        assert r.status_code == 200 and r.json() == {"ok": False, "detail": "URL nije upisan"}
+        assert r.status_code == 200 and r.json() == {"ok": False, "detail": "no OPUS address entered"}
 
         # typed values validate WITHOUT storing; the upstream sees them verbatim
         _StubUpstream.opus_status = 200
         r = await c.post("/settings/test", json={"provider": "opus", "url": "http://opus.test/", "api_key": "optoken"})
-        assert r.json() == {"ok": True, "detail": "radi"}
+        assert r.json() == {"ok": True, "detail": "OPUS answers"}
         _, url, kw = _StubUpstream.last
         assert url == "http://opus.test/api/radio/stations" and kw["headers"]["X-OPUS-Token"] == "optoken"
         _StubUpstream.opus_status = 401
         r = await c.post("/settings/test", json={"provider": "opus", "url": "http://opus.test", "api_key": "bad"})
-        assert r.json() == {"ok": False, "detail": "token odbijen"}
+        assert r.json() == {"ok": False, "detail": "OPUS rejected the token"}
 
         # stored url+token resolve when nothing is typed (the post-save re-test path)
         _StubUpstream.opus_status = 200
         r = await c.put("/settings", json={"opus_url": "http://opus.test", "opus_token": "storedtoken"})
         assert r.status_code == 204
         r = await c.post("/settings/test", json={"provider": "opus"})
-        assert r.json() == {"ok": True, "detail": "radi"}
+        assert r.json() == {"ok": True, "detail": "OPUS answers"}
         _, url, kw = _StubUpstream.last
         assert url == "http://opus.test/api/radio/stations"
         assert kw["headers"]["X-OPUS-Token"] == "storedtoken", "stored token decrypted and used"
@@ -207,7 +204,7 @@ async def test_settings_test_uniform_surface(monkeypatch):
             time.time_ns(),
         )
         r = await c.post("/settings/test", json={"provider": "owntracks"})
-        assert r.json()["ok"] is True and "prije 0 min" in r.json()["detail"]
+        assert r.json() == {"ok": True, "detail": "last location received", "age_min": 0}
 
     await pool.execute(
         "DELETE FROM app_settings WHERE key IN ('opus_url', 'opus_token')"

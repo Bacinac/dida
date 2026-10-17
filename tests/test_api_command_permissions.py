@@ -126,7 +126,7 @@ async def test_rest_and_assistant_authorize_the_same_radio_player(monkeypatch, a
     async with AsyncClient(transport=ASGITransport(app=appmod.app), base_url="http://itest") as client:
         await _login(client, "radioperm", "pw")
         response = await client.post("/command", json=command)
-    ctx = assistant.AssistantCtx(client=None, pool=pool, bus=bus, ch=None,
+    ctx = assistant.AssistantCtx(chat=None, author=None, pool=pool, bus=bus, ch=None,
                                  user=AuthUser(id=uid, username="radioperm", role="user"))
     output = json.loads(await assistant._execute_tool(ctx, "send_command", command))
     if access == "allowed":

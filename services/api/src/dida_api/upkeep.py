@@ -38,10 +38,11 @@ import httpx
 from dida_core.adapter_config import decrypt_secret
 from dida_core.people import plain
 from fastapi import APIRouter, Depends, HTTPException, Request
+from home_core.llm import AiNotConfigured
 from pydantic import BaseModel, Field
 
+from dida_api.ai import Llm, llm_for
 from dida_api.auth import AuthUser, require_admin
-from dida_api.common import resolve_assistant_client
 
 log = logging.getLogger("dida.api.upkeep")
 
@@ -53,10 +54,6 @@ _PEOPLE = "https://people.googleapis.com/v1"
 # update is accepted.
 _FIELDS = "names,birthdays,emailAddresses,phoneNumbers,memberships,organizations,metadata"
 
-# Restoring a name is a judgement about a person, not a lookup: no dictionary can
-# tell Šimić from Simić, and getting it wrong renames somebody in their own
-# address book. The most capable model, and a human confirming every line.
-_MODEL = "claude-opus-5"
 # Small enough that one bad batch is a small loss and the model keeps the whole
 # family in view while it works.
 _BATCH = 40
@@ -356,10 +353,10 @@ def _label_proposals(book: list[dict], labels: dict[str, str]) -> list[Proposal]
     return out
 
 
-async def _spelling_proposals(client, book: list[dict],
+async def _spelling_proposals(author: Llm | None, book: list[dict],
                               labels: dict[str, str]) -> list[Proposal]:
     candidates = [p for p in book if _display(p) and not _has_diacritics(_display(p))]
-    if not client or not candidates:
+    if author is None or not candidates:
         return []
     out: list[Proposal] = []
     for start in range(0, len(candidates), _BATCH):
@@ -370,10 +367,13 @@ async def _spelling_proposals(client, book: list[dict],
                         "family": _name(p).get("familyName", "")}, ensure_ascii=False)
             for p in chunk)
         try:
-            resp = await client.messages.create(
-                model=_MODEL, max_tokens=4096, system=_SPELL_SYSTEM,
-                thinking={"type": "adaptive"},
-                output_config={"format": {"type": "json_schema", "schema": _SPELL_SCHEMA}},
+            # Restoring a name is a judgement about a person, not a lookup: no
+            # dictionary can tell Šimić from Simić, and getting it wrong renames
+            # somebody in their own address book. Full effort, and a human
+            # confirming every line.
+            resp = await author.create(
+                think=True, effort="high", schema=_SPELL_SCHEMA,
+                max_tokens=16000, system=_SPELL_SYSTEM,
                 messages=[{"role": "user", "content": listing}],
             )
             answer = json.loads(next(b.text for b in resp.content if b.type == "text"))
@@ -566,9 +566,12 @@ async def proposals(request: Request, _admin: AuthUser = Depends(require_admin))
     token = await _token(request.app.state.pool)
     book = await _book(token)
     labels = await _labels(token)
-    client = await resolve_assistant_client(request.app.state)
+    try:
+        author: Llm | None = await llm_for(request.app.state, "author")
+    except AiNotConfigured:
+        author = None
 
-    spelling = {p.contact: p for p in await _spelling_proposals(client, book, labels)}
+    spelling = {p.contact: p for p in await _spelling_proposals(author, book, labels)}
     filing = {p.contact: p for p in _label_proposals(book, labels)}
     empty = {p.contact for p in _empty_proposals(book, labels)}
 
@@ -605,7 +608,7 @@ async def proposals(request: Request, _admin: AuthUser = Depends(require_admin))
     rows.sort(key=lambda r: plain(r.name))
     return {
         "contacts": len(rows),
-        "assistant": client is not None,
+        "assistant": author is not None,
         "suggested": sum(1 for r in rows if r.suggest),
         "people": [r.model_dump() for r in rows],
         "duplicates": [Finding(id=f.id, who=f.name, detail=f.detail).model_dump()

@@ -3,31 +3,28 @@
 Two invariants, and the second one has already been broken once in this codebase.
 
 A secret goes in and never comes back. `GET /settings` answers with
-`*_configured: bool` and a four-character hint, because an admin needs to know
-WHICH key is set, not what it is — and a response that carries the key puts it in
-the browser, in the devtools network tab, and in whatever the browser caches. The
-test enumerates the response model rather than checking a few fields by hand: a
-new secret added to the settings page without a `_configured` flag fails here.
+`*_configured: bool`, because an admin needs to know a key is set, not what it is
+— and a response that carries the key puts it in the browser, in the devtools
+network tab, and in whatever the browser caches. The test enumerates the response
+model rather than checking a few fields by hand: a new secret added to the
+settings page without a `_configured` flag fails here.
 
-And a secret is encrypted at rest. The anthropic and openai keys used to sit in
-`app_settings` in plaintext while every peer secret — opus, owntracks, adapter
-credentials — was Fernet-encrypted. They rode out inside every `pg_dump` config
-backup, which are the files this installation deliberately copies off-box to NFS.
-A billing credential in a backup on another machine is the failure; the fix was
-one line, and this is what keeps it.
+And a secret is encrypted at rest. LLM keys once sat in `app_settings` in
+plaintext while every peer secret was Fernet-encrypted, and rode out inside every
+`pg_dump` config backup — the files this installation deliberately copies off-box
+to NFS. A credential in a backup on another machine is the failure.
 """
 
 from __future__ import annotations
 
 import json
 
+import dida_api.common as common
 import pytest
 from dida_api import settings as mod
-from dida_api.common import key_hint
+from dida_core import encrypt_secret
 
 SECRETS = {
-    "anthropic_api_key": "sk-ant-REAL-SECRET-abcd",
-    "openai_api_key": "sk-openai-REAL-SECRET-wxyz",
     "owntracks_secret": "owntracks-REAL-SECRET",
     "opus_token": "opus-REAL-SECRET",
 }
@@ -64,15 +61,11 @@ def stored(monkeypatch):
         "managed_vlans": "",
     })
 
-    async def _resolved(pool_, provider):
-        return SECRETS[f"{provider}_api_key"]
-
     async def _host(pool_, key):
         return {"lan_ip": "192.0.2.10",
                 "opus_url": "http://opus.local:8098",
                 "app_url": "https://dida.example",
                 "net_parent": "eth0"}.get(key, "")
-    monkeypatch.setattr(mod, "resolved_key", _resolved)
     monkeypatch.setattr(mod, "host_setting", _host)
     return pool
 
@@ -93,17 +86,14 @@ async def test_every_secret_is_reported_as_a_flag_not_a_value(stored):
     without a `_configured` flag fails here rather than shipping."""
     for field, info in mod.SettingsOut.model_fields.items():
         if any(w in field for w in ("key", "secret", "token", "password")):
-            assert field.endswith(("_configured", "_hint")), \
-                f"{field} looks like it carries a secret"
-            assert info.annotation in (bool, str | None), f"{field}: {info.annotation}"
+            assert field.endswith("_configured"), f"{field} looks like it carries a secret"
+            assert info.annotation is bool, f"{field}: {info.annotation}"
 
 
 async def test_a_configured_key_is_visible_as_configured(stored):
     """The flag has to be true for a set key, or the admin is told to re-enter a
     key that is already there."""
     out = await mod.get_settings(_Request(stored))
-    assert out.anthropic_configured is True
-    assert out.openai_configured is True
     assert out.owntracks_configured is True
     assert out.opus_configured is True
 
@@ -117,41 +107,13 @@ async def test_a_player_with_a_url_but_no_token_is_not_configured(stored, monkey
     assert out.opus_url == "http://opus.local:8098"
 
 
-async def test_the_hint_is_four_characters_and_not_the_key(stored):
-    out = await mod.get_settings(_Request(stored))
-    assert out.anthropic_hint == SECRETS["anthropic_api_key"][-4:]
-    assert len(out.anthropic_hint) == 4
-
-
-@pytest.mark.parametrize("value,expect", [
-    (None, None),
-    ("", None),
-    ("ab", "ab"),
-    ("sk-ant-0123456789", "6789"),
-])
-def test_the_hint_never_returns_more_than_the_tail(value, expect):
-    """A short value is its own tail — which is fine, because a two-character
-    secret is not a secret. What must never happen is a hint that grows with the
-    key."""
-    assert key_hint(value) == expect
-    assert key_hint(value) is None or len(key_hint(value)) <= 4
-
-
-async def test_an_unconfigured_installation_reports_nothing_rather_than_empty_strings(
-        monkeypatch):
-    """Fresh install: flags false, hints absent — not `""`, which the UI would
-    render as a key that is set to nothing."""
-    async def _none(pool_, provider):
-        return None
-
+async def test_an_unconfigured_installation_reports_nothing(monkeypatch):
     async def _host(pool_, key):
         return ""
-    monkeypatch.setattr(mod, "resolved_key", _none)
     monkeypatch.setattr(mod, "host_setting", _host)
     out = await mod.get_settings(_Request(_Pool()))
-    assert out.anthropic_configured is False
-    assert out.anthropic_hint is None
     assert out.owntracks_configured is False
+    assert out.opus_configured is False
 
 
 async def test_corrupt_status_json_does_not_take_the_settings_page_down(stored):
@@ -186,8 +148,6 @@ def written(monkeypatch):
 
 
 @pytest.mark.parametrize("field,key", [
-    ("anthropic_api_key", "anthropic_api_key"),
-    ("openai_api_key", "openai_api_key"),
     ("owntracks_secret", "owntracks_secret"),
     ("opus_token", "opus_token"),
 ])
@@ -211,37 +171,36 @@ async def test_a_setting_that_is_not_a_secret_is_stored_as_typed(written):
 
 async def test_an_omitted_field_leaves_the_stored_key_alone(written):
     """The settings form posts every field. If an untouched blank cleared the key,
-    saving the language would delete the Anthropic credential."""
+    saving the language would delete the OwnTracks secret."""
     rows, cleared = written
     await mod.put_settings(mod.SettingsIn(announce_lang="hr"), _Request(_Pool()))
-    assert "anthropic_api_key" not in rows
-    assert "anthropic_api_key" not in cleared
+    assert "owntracks_secret" not in rows
+    assert "owntracks_secret" not in cleared
 
 
 async def test_an_explicitly_empty_field_clears_the_key(written):
     """The only way to remove a key from the UI — it has to actually remove it,
     not store the empty string, which would read as "configured"."""
     rows, cleared = written
-    await mod.put_settings(mod.SettingsIn(anthropic_api_key=""), _Request(_Pool()))
-    assert "anthropic_api_key" in cleared
-    assert "anthropic_api_key" not in rows
+    await mod.put_settings(mod.SettingsIn(owntracks_secret=""), _Request(_Pool()))
+    assert "owntracks_secret" in cleared
+    assert "owntracks_secret" not in rows
 
 
 async def test_whitespace_only_counts_as_clearing_not_as_a_key(written):
-    """A pasted blank line stored as a key produces `configured: true` and an
-    assistant that fails on every call with an authentication error."""
+    """A pasted blank line stored as a key produces `configured: true` and a
+    receiver that fails on every report."""
     _, cleared = written
-    await mod.put_settings(mod.SettingsIn(anthropic_api_key="   "), _Request(_Pool()))
-    assert "anthropic_api_key" in cleared
+    await mod.put_settings(mod.SettingsIn(owntracks_secret="   "), _Request(_Pool()))
+    assert "owntracks_secret" in cleared
 
 
 async def test_a_key_is_stripped_before_it_is_stored(written):
-    """Copy-paste from a dashboard brings a trailing newline, and the provider
-    rejects it with the same 401 a wrong key gets."""
+    """Copy-paste from a dashboard brings a trailing newline, and the far end
+    rejects it the way it rejects a wrong key."""
     rows, _ = written
-    await mod.put_settings(mod.SettingsIn(anthropic_api_key="  sk-ant-real\n"),
-                           _Request(_Pool()))
-    assert rows["anthropic_api_key"] == "ENC(sk-ant-real)"
+    await mod.put_settings(mod.SettingsIn(opus_token="  opus-real\n"), _Request(_Pool()))
+    assert rows["opus_token"] == "ENC(opus-real)"
 
 
 def test_the_write_model_bounds_every_field():
@@ -251,3 +210,20 @@ def test_the_write_model_bounds_every_field():
         if info.annotation in (str | None,):
             assert any(getattr(m, "max_length", None) for m in info.metadata), \
                 f"{field} has no length bound"
+
+
+async def test_a_stored_secret_that_will_not_decrypt_is_never_handed_back_raw(monkeypatch, caplog):
+    """A rotated DIDA_SECRET_KEY or a corrupt row: that ciphertext must not leave
+    as a token and come back as an opaque 401 from the far end. None, loudly."""
+    secret = "test-secret-for-key-encryption-0123456789"
+    monkeypatch.setenv("DIDA_SECRET_KEY", secret)
+    store = {"opus_token": encrypt_secret(secret, "opus-live"),
+             "owntracks_secret": encrypt_secret("a-different-secret-key-0123456789ab", "x")}
+
+    async def fake_get(pool, key):
+        return store.get(key)
+    monkeypatch.setattr(common, "get_setting", fake_get)
+    assert await common.stored_api_key(None, "opus_token") == "opus-live"
+    assert await common.stored_api_key(None, "panel_token") is None
+    assert await common.stored_api_key(None, "owntracks_secret") is None
+    assert "undecryptable" in caplog.text

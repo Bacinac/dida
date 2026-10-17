@@ -53,6 +53,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
       { href: "/settings/network", key: "nav.network", admin: true },
       { href: "/settings/panel", key: "nav.panel", admin: true },
       { href: "/settings/keys", key: "nav.keys", admin: true },
+      { href: "/settings/ai", key: "nav.ai", admin: true },
       { href: "/settings/translations", key: "nav.translations", admin: true },
     ],
   },

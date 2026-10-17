@@ -3,7 +3,8 @@
 - **Health** shows every service and [adapter](/help/adapters), with the reason next to anything that is not healthy. An adapter reports its own status, so a bad credential says so instead of looking merely quiet.
 - **Alerts** are thresholds on the house itself: an adapter down, a flat battery, a sensor gone silent. A firing alert is visible in the app and can notify.
 - **Network** is which interface the house's own devices are reached on, and **Wall panel** the tablet that shows the panel view. Which routes are published to the internet is set on the Cloudflare adapter, under [Adapters](/help/adapters).
-- **Keys** holds every stored key — the assistant's LLM keys, the location-sharing key — each with a Test button.
+- **Keys** holds the location-sharing key, with a Test button.
+- **AI** holds the language-model provider's key and the model each job uses — one for the conversation, one for writing rules — chosen from the provider's live list; Test asks each chosen model once.
 - **Translations** edits the display names adapters supply, without touching the device.
 
 ## Data

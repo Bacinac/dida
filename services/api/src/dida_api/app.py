@@ -40,6 +40,7 @@ from home_core.auth import (
     load_or_create_secret,
     verify_password,
 )
+from home_core.llm import AiNotConfigured, ai_router
 from pydantic import BaseModel, Field
 
 from dida_api import (  # routers
@@ -70,6 +71,7 @@ from dida_api import (  # routers
     virtual,
     zones,
 )
+from dida_api.ai import ai_settings, llm_for, settings_of
 from dida_api.alerts import alert_loop
 from dida_api.alerts import router as alerts_router
 from dida_api.androidtv import router as androidtv_router
@@ -92,7 +94,7 @@ from dida_api.backup import backup_scheduler
 from dida_api.backup import router as backup_router
 from dida_api.broker import serve_broker
 from dida_api.commands import dispatch_command
-from dida_api.common import assistant_failure, get_setting, resolve_assistant_client, stored_api_key
+from dida_api.common import assistant_failure, get_setting
 from dida_api.contacts import router as contacts_router
 from dida_api.hub import Hub
 from dida_api.opus_media import router as opus_router
@@ -144,10 +146,8 @@ async def lifespan(app: FastAPI):
     except Exception:
         log.exception("clickhouse client init failed; /history will 503 until it recovers")
         app.state.ch = None
-    # Assistant client is built lazily from the stored key (app_settings) or env,
-    # so the key can be set / rotated from the UI without an API restart.
-    app.state.anthropic_client = None
-    app.state.anthropic_key = None
+    # The assistant's client is built lazily from the stored key, so the key can be
+    # replaced on Settings → AI without an API restart.
     app.state.hub = Hub()
     # The environment's one say: copy what it declared into app_settings, once.
     await seed_from_env(app.state.pool)
@@ -187,6 +187,12 @@ async def _assistant_failed(_request: Request, exc: APIError) -> JSONResponse:
     log.warning("assistant call failed: %s", exc)
     return JSONResponse({"detail": assistant_failure(exc)}, status_code=502)
 
+
+@app.exception_handler(AiNotConfigured)
+async def _assistant_unset(_request: Request, exc: AiNotConfigured) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
 app.include_router(system_router)  # observability: /system/stats + /metrics (Prometheus)
 app.include_router(alerts_router)  # system-health alerts: /system/alerts + /system/alert-rules
 app.include_router(orphans.router)  # dangling entity references: /system/orphans
@@ -203,7 +209,8 @@ app.include_router(virtual.router)  # virtual-entity helpers (list; admin CRUD)
 app.include_router(computed_helpers.router)  # computed helpers (pure derivation layer)
 app.include_router(schedules.router)  # calendar/"beat" schedules (list; admin CRUD)
 app.include_router(heating.router)  # heating: house-wide settings + per-room config
-app.include_router(settings.router)  # admin settings (API keys, TTS lang, network)
+app.include_router(settings.router)  # admin settings (secrets, TTS lang, network)
+app.include_router(ai_router(settings_of), dependencies=[Depends(require_admin)])  # AI key + model per role
 app.include_router(automations.router)  # automation rules (CRUD, AI synth, run)
 app.include_router(devices.router)  # device list / label+room edit / remove
 app.include_router(entities.router)  # entity + area (room) topology
@@ -285,13 +292,17 @@ class MeResponse(BaseModel):
     # uses its device default; otherwise these follow the user across devices.
     theme: str | None = None
     locale: str | None = None
-    # An assistant key is set, so the assistant can answer — the client offers it
-    # under a help article only then.
+    # A chat model is configured, so the assistant can answer — the client offers
+    # it under a help article only then.
     assistant: bool = False
 
 
 async def _assistant_ready() -> bool:
-    return bool(await stored_api_key(app.state.pool, "anthropic_api_key"))
+    try:
+        await ai_settings(app.state.pool).pick("chat")
+    except AiNotConfigured:
+        return False
+    return True
 
 
 @app.post("/auth/login", response_model=MeResponse)
@@ -653,11 +664,9 @@ async def assistant(body: AssistantIn, user: AuthUser = Depends(current_user)) -
     if not can_see_page(user, "assistant"):
         raise HTTPException(403, "you do not have access to the assistant")
     enforce_assistant_limit(user.username)
-    client = await resolve_assistant_client(app.state)
-    if client is None:
-        raise HTTPException(503, "assistant is not configured — add an Anthropic key in System → Settings")
     ctx = AssistantCtx(
-        client=client,
+        chat=await llm_for(app.state, "chat"),
+        author=await llm_for(app.state, "author"),
         pool=app.state.pool,
         bus=app.state.bus,
         ch=app.state.ch,

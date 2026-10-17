@@ -168,7 +168,6 @@ AREA_REFERENCES: dict[str, tuple[str, ...]] = {
 SETTING_REFERENCES: dict[str, tuple[str, ...]] = {
     "alert_recipients": ("[]",),
     "announce_lang": (),
-    "anthropic_api_key": (),
     "app_url": (),
     "backup_schedule": (),
     "camera_order": ("[]",),
@@ -185,7 +184,6 @@ SETTING_REFERENCES: dict[str, tuple[str, ...]] = {
     "lan_status": (),
     "managed_vlans": (),
     "net_parent": (),
-    "openai_api_key": (),
     "opus_token": (),
     "opus_url": (),
     "owntracks_secret": (),

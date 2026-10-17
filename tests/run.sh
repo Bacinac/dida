@@ -215,7 +215,7 @@ $RUN dida/api:latest -c "$INSTALL; export PYTHONPATH=$PP_API:/w/services/runner/
     tests/test_bus_subjects.py tests/test_bus_identity.py tests/test_device_type.py tests/test_health.py tests/test_logbus.py tests/test_logsetup.py \
     tests/test_layering.py \
     tests/test_presence.py tests/test_bus.py tests/test_discovery.py tests/test_adapter_runner.py \
-    tests/test_automations_core.py tests/test_alerts.py tests/test_llm_keys.py \
+    tests/test_automations_core.py tests/test_alerts.py \
     tests/test_heating_core.py \
     tests/test_help_docs.py \
     tests/test_assistant.py tests/test_astro_mapping.py \
@@ -346,7 +346,7 @@ docker run --rm --network "$NET" $APPENV -e UV_CACHE_DIR=/uvcache -v dida-uv-cac
         tests/test_api_boundary_more.py tests/test_api_mobile.py tests/test_api_photos.py \
         tests/test_api_translations.py tests/test_onboarding_flow.py \
         tests/test_api_panel.py tests/test_api_assistant.py tests/test_api_heating.py \
-        tests/test_api_contacts.py tests/test_api_oauth.py tests/test_api_upkeep.py tests/test_api_broker.py"
+        tests/test_api_contacts.py tests/test_api_oauth.py tests/test_api_upkeep.py tests/test_api_broker.py tests/test_api_ai.py"
 # The roles themselves, in their own database from the superuser's seat: the upgrade
 # a house takes (tables the superuser owns, handed over, the new migration applied by
 # the app role) and what each role is refused.

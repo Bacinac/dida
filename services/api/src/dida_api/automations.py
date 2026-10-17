@@ -14,11 +14,11 @@ from dida_core import CapabilityError, validate_definition
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from dida_api.ai import llm_for
 from dida_api.assistant import CHECK_SUBJECT as _CHECK_SUBJECT
 from dida_api.assistant import RUN_SUBJECT as _RUN_SUBJECT
 from dida_api.assistant import explain_automation, synthesize_definition
 from dida_api.auth import AuthUser, require_admin
-from dida_api.common import resolve_assistant_client
 
 log = logging.getLogger("dida.api.automations")
 
@@ -182,16 +182,14 @@ async def synthesize_automation(body: SynthesizeIn, request: Request,
     (compile + dry-run + command validation) before return. The editor loads the
     result for review/tweak before the user saves it through the normal
     (re-validated) create path. AI proposes, the boundary disposes."""
-    client = await resolve_assistant_client(request.app.state)
-    if client is None:
-        raise HTTPException(503, "assistant is not configured — add an Anthropic key in System → Settings")
+    author = await llm_for(request.app.state, "author")
     try:
         definition = await synthesize_definition(
-            client, request.app.state.pool, body.description,
+            author, request.app.state.pool, body.description,
             bus=request.app.state.bus, mode=body.mode,
         )
     except CapabilityError as exc:
-        raise HTTPException(422, f"AI je predložio nevažeće pravilo: {exc}") from exc
+        raise HTTPException(422, f"AI proposed an invalid rule: {exc}") from exc
     except APIError:
         raise
     except Exception as exc:  # malformed model output / timeout / SDK error → clean 502, not a raw 500
@@ -205,11 +203,9 @@ async def explain_automation_endpoint(automation_id: int, request: Request,
                                       _admin: AuthUser = Depends(require_admin)) -> dict:
     """Plain-language explanation of a rule + a 'would it fire now / why not'
     diagnosis grounded in the live state of the entities it observes."""
-    client = await resolve_assistant_client(request.app.state)
-    if client is None:
-        raise HTTPException(503, "assistant is not configured — add an Anthropic key in System → Settings")
+    chat = await llm_for(request.app.state, "chat")
     try:
-        explanation = await explain_automation(client, request.app.state.pool, automation_id)
+        explanation = await explain_automation(chat, request.app.state.pool, automation_id)
     except CapabilityError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"explanation": explanation}
@@ -240,5 +236,5 @@ async def check_script(body: CheckScriptIn, request: Request,
     try:
         reply = await request.app.state.bus.nc.request(_CHECK_SUBJECT, payload, timeout=5.0)
     except Exception as exc:
-        raise HTTPException(503, "automation servis ne odgovara") from exc
+        raise HTTPException(503, "the automation service is not answering") from exc
     return json.loads(reply.data)

@@ -733,8 +733,6 @@ services:
       # Prometheus scraping (?token= or Authorization: Bearer). /system/stats is
       # always available to a signed-in user.
       DIDA_METRICS_TOKEN: ${DIDA_METRICS_TOKEN:-}
-      # Claude assistant (natural-language control). Unset → /assistant 503s.
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # App revision stamp (GET /version). Git-derived by the push hook, mounted
       # read-only below and read per-request so a push refreshes it live.
       DIDA_REVISION_FILE: /app/revision.json

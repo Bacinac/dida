@@ -1,10 +1,10 @@
 """DIDA assistant — natural-language home control via Claude tool-use.
 
-Hybrid model strategy:
-  * claude-sonnet-5 drives the conversation + tool loop (fast, cheap control and
-    queries) on adaptive thinking at low effort.
-  * claude-opus-4-8 is a sub-call inside the create_automation tool, where it
-    synthesises a typed automation definition from a natural-language spec.
+Two roles, each a model chosen on Settings → AI (dida_api.ai):
+  * `chat` drives the conversation + tool loop (control and queries) on adaptive
+    thinking at low effort, and explains a rule.
+  * `author` is a sub-call inside the create_automation tool, where it
+    synthesises an automation definition from a natural-language spec.
 
 The turn is a STREAM (`assistant_events`); `run_assistant` is a drain of the same
 generator, so the tool loop exists once.
@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import asyncpg
-from anthropic import AsyncAnthropic
 from dida_core import (
     CHOICE_CAPABILITIES,
     DEVICE_TYPES,
@@ -39,6 +38,7 @@ from dida_core import (
 )
 from fastapi import HTTPException
 
+from dida_api.ai import Llm
 from dida_api.auth import AuthUser
 from dida_api.commands import dispatch_command
 from dida_api.help_docs import HELP_TOPIC_NAMES, help_text
@@ -46,17 +46,6 @@ from dida_api.visibility import hidden_entity_ids, is_hidden
 
 log = logging.getLogger("dida.api.assistant")
 
-CONTROL_MODEL = "claude-sonnet-5"     # conversation + tool loop
-AUTHOR_MODEL = "claude-opus-4-8"      # automation synthesis (harder reasoning)
-# The tool loop runs on ADAPTIVE thinking: with thinking off, Sonnet 5 reaches for
-# tools noticeably less, and an assistant that answers "the light is on" from memory
-# instead of calling get_state is worse than a slow one. Effort stays low — this is
-# lookup-and-act, not reasoning. The one-shot jobs below (explain, translate) keep
-# thinking DISABLED explicitly: they are deterministic, and on Sonnet 5 an OMITTED
-# thinking field means adaptive, which would eat into their max_tokens.
-CONTROL_THINKING: dict[str, str] = {"type": "adaptive"}
-CONTROL_EFFORT: dict[str, str] = {"effort": "low"}
-ONE_SHOT_THINKING: dict[str, str] = {"type": "disabled"}
 MAX_TOOL_ROUNDS = 8
 # Control-channel subjects owned by services/automation. Defined here because
 # dida_api.automations already imports from this module, so this is the one
@@ -492,7 +481,8 @@ TOOLS: list[dict[str, Any]] = [
 
 @dataclass
 class AssistantCtx:
-    client: AsyncAnthropic
+    chat: Llm | None
+    author: Llm | None
     pool: asyncpg.Pool
     bus: Bus
     ch: Any | None
@@ -665,7 +655,7 @@ async def _send_command(ctx: AssistantCtx, entity_id: str, capability: str,
 
 
 async def synthesize_definition(
-    client: AsyncAnthropic, pool: asyncpg.Pool, description: str,
+    author: Llm, pool: asyncpg.Pool, description: str,
     bus: Bus | None = None, mode: str = "typed",
 ) -> dict[str, Any]:
     """NL spec → a validated automation definition (NOT saved). mode='typed' →
@@ -692,7 +682,7 @@ async def synthesize_definition(
         for r in rows
     )
     if mode == "starlark":
-        return await _synthesize_starlark(client, bus, catalog, description)
+        return await _synthesize_starlark(author, bus, catalog, description)
 
     # Self-correct on a rejected definition, exactly as the Starlark path does. The
     # boundary's errors are machine-actionable ("sun_state: 'above_horizon' not one
@@ -703,12 +693,9 @@ async def synthesize_definition(
     ]
     last_err = "unknown error"
     for _ in range(3):  # first attempt + two self-corrections
-        resp = await client.messages.create(
-            model=AUTHOR_MODEL,
-            max_tokens=2048,
-            system=_AUTHOR_SYSTEM,
-            output_config={"format": {"type": "json_schema", "schema": _AUTODEF_SCHEMA}},
-            messages=msgs,
+        resp = await author.create(
+            think=True, effort="medium", schema=_AUTODEF_SCHEMA,
+            max_tokens=16000, system=_AUTHOR_SYSTEM, messages=msgs,
         )
         text = next((b.text for b in resp.content if b.type == "text"), "")
         raw = json.loads(text)
@@ -756,11 +743,11 @@ async def _check_script(bus: Bus | None, script: str, trig: dict) -> dict:
         return json.loads(reply.data)
     except Exception as exc:
         log.warning("assistant: automation check not answered", exc_info=True)
-        return {"ok": False, "error": f"automation servis ne odgovara: {exc}"}
+        return {"ok": False, "error": f"the automation service is not answering: {exc}"}
 
 
 async def _synthesize_starlark(
-    client: AsyncAnthropic, bus: Bus | None, catalog: str, description: str
+    author: Llm, bus: Bus | None, catalog: str, description: str
 ) -> dict[str, Any]:
     """Generate a Starlark rule, sandbox-check it, and self-correct once on a
     failing check (the error is fed back to the model). Same boundary a typed
@@ -771,12 +758,9 @@ async def _synthesize_starlark(
     ]
     last_err = "unknown error"
     for _ in range(3):  # first attempt + two self-corrections
-        resp = await client.messages.create(
-            model=AUTHOR_MODEL,
-            max_tokens=2048,
-            system=_STARLARK_AUTHOR_SYSTEM,
-            output_config={"format": {"type": "json_schema", "schema": _STARLARK_SCHEMA}},
-            messages=msgs,
+        resp = await author.create(
+            think=True, effort="medium", schema=_STARLARK_SCHEMA,
+            max_tokens=16000, system=_STARLARK_AUTHOR_SYSTEM, messages=msgs,
         )
         text = next((b.text for b in resp.content if b.type == "text"), "")
         raw = json.loads(text)
@@ -821,7 +805,7 @@ def _condition_entity_ids(conditions: list[dict]) -> list[str]:
     return out
 
 
-async def explain_automation(client: AsyncAnthropic, pool: asyncpg.Pool, automation_id: int) -> str:
+async def explain_automation(chat: Llm, pool: asyncpg.Pool, automation_id: int) -> str:
     """Plain-language explanation + 'would it fire now / why not' diagnosis. Reads
     the rule plus the live state of the entities it depends on, so the answer is
     grounded in the real current state, not just the rule text."""
@@ -848,17 +832,17 @@ async def explain_automation(client: AsyncAnthropic, pool: asyncpg.Pool, automat
     # Local, not UTC. This sentence is read by the homeowner ("last fired at…"), and
     # the stores are UTC — two hours apart here for half the year.
     tz = await house_timezone(pool)
-    last = local_str(rule["last_triggered_at"], tz) or "nikad"
+    last = local_str(rule["last_triggered_at"], tz) or "never"
     ctx_txt = (
         f"Name: {rule['name']}\nEnabled: {rule['enabled']}\n"
         f"Last trigger: {last}\nLast error: {rule['last_error'] or 'none'}\n\n"
         f"Definicija (JSON):\n{json.dumps(defn, ensure_ascii=False)}\n\n"
         f"CURRENT STATE of the observed devices:\n{state_lines}"
     )
-    resp = await client.messages.create(
-        model=CONTROL_MODEL, max_tokens=512, system=_EXPLAIN_SYSTEM,
-        thinking=ONE_SHOT_THINKING,  # must be explicit: omitting it means adaptive on
-        messages=[{"role": "user", "content": ctx_txt}],  # Sonnet 5, which would eat the 512
+    # Headroom: a model that cannot turn thinking off spends from the same budget.
+    resp = await chat.create(
+        think=False, max_tokens=4096, system=_EXPLAIN_SYSTEM,
+        messages=[{"role": "user", "content": ctx_txt}],
     )
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
@@ -868,7 +852,7 @@ async def _create_automation(ctx: AssistantCtx, name: str, description: str) -> 
     # /automations POST requires admin); the assistant must not be a side door.
     if ctx._restricted:
         raise CapabilityError("only an administrator can create automations")
-    definition = await synthesize_definition(ctx.client, ctx.pool, description)
+    definition = await synthesize_definition(ctx.author, ctx.pool, description)
     row = await ctx.pool.fetchrow(
         "INSERT INTO automations (name, enabled, definition) VALUES ($1, true, $2::jsonb) "
         "RETURNING id, name, definition",
@@ -929,7 +913,7 @@ async def _explain_rule(ctx: AssistantCtx, automation_id: int) -> dict:
     Explain button; the assistant had no way to reach it, so "why doesn't the
     watering rule run" got a guess instead of the answer."""
     _require_admin(ctx, "inspect an automation")
-    return {"explanation": await explain_automation(ctx.client, ctx.pool, automation_id)}
+    return {"explanation": await explain_automation(ctx.chat, ctx.pool, automation_id)}
 
 
 async def _automation_runs(ctx: AssistantCtx, automation_id: int | None = None,
@@ -1108,13 +1092,13 @@ async def assistant_events(
 
     final = ""
     for _ in range(MAX_TOOL_ROUNDS):
-        resp = await ctx.client.messages.create(
-            model=CONTROL_MODEL,
-            # Headroom: adaptive thinking spends from the same budget as the reply,
-            # and Sonnet 5's tokenizer counts a given text higher than 4.6's did.
+        # Thinking ON: with it off a model reaches for tools noticeably less, and an
+        # assistant that answers "the light is on" from memory instead of calling
+        # get_state is worse than a slow one. Effort low — this is lookup-and-act.
+        resp = await ctx.chat.create(
+            think=True, effort="low",
+            # Headroom: adaptive thinking spends from the same budget as the reply.
             max_tokens=8192,
-            thinking=CONTROL_THINKING,
-            output_config=CONTROL_EFFORT,
             # Cache the tools+system prefix. Render order is tools → system →
             # messages, so a breakpoint on the last system block covers both: 4.2k
             # tokens that were re-sent in full on EVERY round of every turn. It is

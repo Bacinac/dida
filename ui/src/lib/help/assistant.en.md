@@ -1,4 +1,4 @@
-The assistant is the chat that opens over any page. It runs on Anthropic's Claude — Sonnet for the conversation and the tools, and Opus for the harder job of turning a description into an automation — and it needs an Anthropic key, set under Settings → System → Keys. The house sends it the devices and readings it asks for; it keeps no memory between conversations.
+The assistant is the chat that opens over any page. It runs on Anthropic's Claude — one model for the conversation and the tools, and one for the harder job of turning a description into an automation, each chosen under Settings → System → AI, where the key is entered too. The house sends it the devices and readings it asks for; it keeps no memory between conversations.
 
 It drives the same validated path as the rest of the app: commands are checked against the capability model and published to the bus, and rules are checked before they are stored. It cannot exceed the permissions of the person talking to it — entities hidden from you stay invisible, control still needs your grant, and only an admin can create automations.
 

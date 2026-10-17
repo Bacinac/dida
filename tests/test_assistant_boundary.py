@@ -105,7 +105,7 @@ class _Bus:
 
 
 def _ctx(user, *, pool=None, ch=None, bus=None):
-    return mod.AssistantCtx(client=None, pool=pool or _Pool(), bus=bus or _Bus(),
+    return mod.AssistantCtx(chat=None, author=None, pool=pool or _Pool(), bus=bus or _Bus(),
                             ch=ch, user=user)
 
 
@@ -191,7 +191,7 @@ async def test_an_internal_caller_with_no_user_is_not_restricted():
     """The rule editor drives the same authoring functions with `user=None`. That
     path never exposes tools, so it is admin-equivalent by design — stated here so
     it stays a decision rather than becoming a hole."""
-    assert mod.AssistantCtx(client=None, pool=_Pool(), bus=_Bus(), ch=None,
+    assert mod.AssistantCtx(chat=None, author=None, pool=_Pool(), bus=_Bus(), ch=None,
                             user=None)._restricted is False
 
 

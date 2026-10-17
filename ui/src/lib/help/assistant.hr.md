@@ -1,4 +1,4 @@
-Asistent je razgovor koji se otvara iznad bilo koje stranice. Pokreće ga Anthropicov Claude — Sonnet za razgovor i alate, a Opus za zahtjevniji posao pretvaranja opisa u automatizaciju — i treba mu Anthropic ključ, postavljen pod Postavke → Sustav → Ključevi. Kuća mu šalje uređaje i očitanja koja zatraži; između razgovora ništa ne pamti.
+Asistent je razgovor koji se otvara iznad bilo koje stranice. Pokreće ga Anthropicov Claude — jedan model za razgovor i alate, a drugi za zahtjevniji posao pretvaranja opisa u automatizaciju; oba se biraju pod Postavke → Sustav → AI, gdje se upisuje i ključ. Kuća mu šalje uređaje i očitanja koja zatraži; između razgovora ništa ne pamti.
 
 Koristi isti provjereni put kao i ostatak aplikacije: komande se provjeravaju prema modelu sposobnosti i objavljuju na sabirnici, a pravila se provjeravaju prije spremanja. Ne može prijeći dozvole osobe koja s njim razgovara — entiteti sakriveni od vas ostaju nevidljivi, upravljanje i dalje traži vašu dozvolu, a automatizacije može stvarati samo administrator.
 

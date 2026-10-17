@@ -3,7 +3,8 @@
 - **Zdravlje** prikazuje sve servise i [adaptere](/help/adapters), s razlogom uz sve što nije zdravo. Adapter sam javlja svoje stanje, pa neispravna vjerodajnica to i kaže, umjesto da adapter samo šuti.
 - **Upozorenja** su pragovi nad samom kućom: adapter ne radi, baterija je prazna, senzor se prestao javljati. Aktivno upozorenje vidi se u aplikaciji i može poslati obavijest.
 - **Mreža** određuje preko kojeg se sučelja dohvaćaju kućni uređaji, a **Zidni panel** tablet koji prikazuje prikaz panela. Koje su rute objavljene na internetu, postavlja se na Cloudflare adapteru, pod [Adapterima](/help/adapters).
-- **Ključevi** drže sve spremljene ključeve — ključeve jezičnih modela za asistenta, ključ za dijeljenje lokacije — svaki s gumbom za provjeru.
+- **Ključevi** drže ključ za dijeljenje lokacije, s gumbom za provjeru.
+- **AI** drži ključ pružatelja jezičnih modela i model za svaki posao — jedan za razgovor, jedan za pisanje pravila — odabran s pružateljeva živog popisa; Testiraj jednom pita svaki odabrani model.
 - **Prijevodi** mijenjaju nazive koje daju adapteri, bez diranja uređaja.
 
 ## Podaci

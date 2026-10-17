@@ -16,12 +16,11 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from dida_api.assistant import CONTROL_MODEL, ONE_SHOT_THINKING
+from dida_api.ai import llm_for
 from dida_api.auth import AuthUser, current_user, require_admin
-from dida_api.common import resolve_assistant_client
 
 router = APIRouter(tags=["translations"])
 
@@ -176,9 +175,7 @@ async def autofill_translations(lang: str, request: Request,
     overwrites a curated row — so the admin reviews/edits the fills afterwards.
     Idempotent: re-running touches only whatever is still missing."""
     pool = request.app.state.pool
-    client = await resolve_assistant_client(request.app.state)
-    if client is None:
-        raise HTTPException(503, "assistant is not configured — add an Anthropic key in System → Settings")
+    chat = await llm_for(request.app.state, "chat")
 
     # Same universe as the management list (/translations/keys), narrowed to the
     # keys that have no value for this language yet.
@@ -200,15 +197,13 @@ async def autofill_translations(lang: str, request: Request,
 
     async def translate(chunk: list[str]) -> dict[str, str]:
         async with sem:
-            resp = await client.messages.create(
-                model=CONTROL_MODEL,
-                max_tokens=8192,
-                # Explicit: on the control model an OMITTED thinking field means
-                # adaptive, and thinking would spend the budget this bulk JSON
-                # response needs. Translation is deterministic — nothing to reason about.
-                thinking=ONE_SHOT_THINKING,
+            # Thinking off: it would spend the budget this bulk JSON response needs,
+            # and translation is deterministic. A model that cannot turn it off
+            # still thinks a little, hence the headroom.
+            resp = await chat.create(
+                think=False, schema=_AUTOFILL_SCHEMA,
+                max_tokens=16000,
                 system=system,
-                output_config={"format": {"type": "json_schema", "schema": _AUTOFILL_SCHEMA}},
                 messages=[{"role": "user",
                            "content": "Translate these UI strings:\n"
                            + json.dumps(chunk, ensure_ascii=False)}],

@@ -21,8 +21,8 @@ from dida_core.references import (
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ("core", "services", "adapters", "scripts")
-ACCESSORS = {"app_setting", "cached_app_setting", "host_setting", "set_app_setting",
-             "ensure_app_setting", "seed_app_setting", "clear_app_setting"}
+ACCESSORS = {"app_setting", "cached_app_setting", "host_setting", "get_setting", "stored_api_key",
+             "_store", "set_app_setting", "ensure_app_setting", "seed_app_setting", "clear_app_setting"}
 _SQL_KEY = re.compile(
     r"app_settings\b.*?(?:key\s*(?:=|IN\s*\()\s*|VALUES\s*\(\s*)'([a-z0-9_]+)'",
     re.IGNORECASE | re.DOTALL)
@@ -102,7 +102,7 @@ def test_every_setting_key_in_the_code_is_declared():
 def test_the_scan_sees_the_known_writers():
     used = {k for p in _python_files() for k, _ in _keys_in(p)}
     assert {"heating", "entry_controls", "energy_config", "lan_ip", "contacts_last_sync",
-            "fcm_service_account", "anthropic_api_key"} <= used
+            "fcm_service_account", "opus_token"} <= used
 
 
 def test_seeded_keys_are_declared():

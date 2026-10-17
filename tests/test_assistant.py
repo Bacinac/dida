@@ -147,14 +147,34 @@ def test_system_prompt_is_static():
     assert "LAST AND MOST VISIBLE RULE — LANGUAGE" in _SYSTEM
 
 
-def test_control_model_calls_are_explicit_about_thinking():
-    """On the control model an OMITTED thinking field means adaptive. The tool loop
-    wants that; the one-shot jobs (explain, translate) must opt out or thinking eats
-    their small max_tokens. Both settings are named constants so neither drifts."""
-    from dida_api.assistant import CONTROL_THINKING, ONE_SHOT_THINKING
+async def test_a_role_call_is_shaped_for_its_model_and_marks_the_key_used():
+    """Thinking on or off is asked of the chosen model the way that model takes it
+    (home_core.llm.claude_options): Sonnet 5.5 refuses `disabled`, Opus 5.5 cannot
+    turn it off at all. And a call stamps the key as used for Settings → AI."""
+    from dida_api.ai import Llm
 
-    assert CONTROL_THINKING == {"type": "adaptive"}
-    assert ONE_SHOT_THINKING == {"type": "disabled"}
+    sent, touched = [], []
+
+    class _Client:
+        class messages:
+            @staticmethod
+            async def create(**kwargs):
+                sent.append(kwargs)
+                return "resp"
+
+    class _Ai:
+        async def touch(self, provider):
+            touched.append(provider)
+
+    await Llm(_Client(), "claude-sonnet-5-5", _Ai()).create(think=False, max_tokens=10, messages=[])
+    await Llm(_Client(), "claude-opus-5-5").create(think=True, effort="medium",
+                                                     schema={"type": "object"}, max_tokens=10, messages=[])
+    assert sent[0]["model"] == "claude-sonnet-5-5"
+    assert sent[0]["thinking"] == {"type": "between_tools"}
+    assert sent[1]["thinking"] == {"type": "adaptive"}
+    assert sent[1]["output_config"] == {"effort": "medium",
+                                        "format": {"type": "json_schema", "schema": {"type": "object"}}}
+    assert touched == ["anthropic"]
 
 
 # ── rate limit ───────────────────────────────────────────────────────────────

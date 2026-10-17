@@ -21,6 +21,7 @@ Postgres (see tests/run.sh). No network: _StubClient replaces AsyncAnthropic.
 import json
 from types import SimpleNamespace
 
+from dida_api.ai import Llm, ai_settings
 from dida_api.assistant import (
     AssistantCtx,
     _execute_tool,
@@ -29,7 +30,6 @@ from dida_api.assistant import (
     synthesize_definition,
 )
 from dida_api.auth import AuthUser
-from dida_api.seed import seed_from_env
 from dida_core import apply_migrations, jsonb_init, pg_pool
 
 
@@ -75,6 +75,22 @@ class _StubClient:
 
     def __init__(self, *script):
         self.messages = _Messages(script)
+
+
+CHAT, AUTHOR = "claude-sonnet-5-5", "claude-opus-5-5"
+
+
+def _llm(client, model=CHAT):
+    return Llm(client, model)
+
+
+async def _configure(appmod, pool, client):
+    """Settings → AI as an admin leaves it, with `client` standing in for the one
+    built from the stored key."""
+    await ai_settings(pool).put("anthropic", api_key="sk-ant-test-key", enabled=True,
+                                  models={"chat": CHAT, "author": AUTHOR})
+    appmod.app.state.anthropic_client = client
+    appmod.app.state.anthropic_key = "sk-ant-test-key"
 
 
 async def _seed(pool):
@@ -132,7 +148,7 @@ async def test_assistant_tools():
 
     admin = AuthUser(id=1, username="zzasstadmin", role="admin")
     bus = StubBus()
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=bus, ch=None, user=admin)
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=bus, ch=None, user=admin)
 
     # explain_dida — DIDA's only explain-itself surface. Returned as raw text.
     out = await _execute_tool(ctx, "explain_dida", {"topic": "automations"})
@@ -210,7 +226,7 @@ async def test_list_entities_carries_type_and_floor_and_hides_diagnostics():
         "INSERT INTO entities (entity_id, adapter, name, capabilities, diagnostic) "
         "VALUES ('mqtt:zzrssi', 'mqtt', 'zz RSSI', '[\"signal\"]'::jsonb, true)")
 
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=None,
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=StubBus(), ch=None,
                        user=AuthUser(id=1, username="zzasstadmin", role="admin"))
 
     listed = json.loads(await _execute_tool(ctx, "list_entities", {"room": "zz Kitchen"}))
@@ -262,13 +278,13 @@ async def test_list_alerts_reads_the_live_evaluator():
         def active_list(self):
             return [{"key": "adapter_stale", "scope": "mqtt", "severity": "warning"}]
 
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=None,
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=StubBus(), ch=None,
                        user=AuthUser(id=1, username="zzasstadmin", role="admin"),
                        alert_evaluator=Evaluator())
     out = json.loads(await _execute_tool(ctx, "list_alerts", {}))
     assert out["active"][0]["key"] == "adapter_stale"
 
-    down = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=None,
+    down = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=StubBus(), ch=None,
                         user=AuthUser(id=1, username="zzasstadmin", role="admin"))
     out = json.loads(await _execute_tool(down, "list_alerts", {}))
     assert "not running" in out["error"], "a dead evaluator must not read as 'no alerts'"
@@ -293,7 +309,7 @@ async def test_assistant_enforces_the_user_boundary():
     )
     restricted = AuthUser(id=user_id, username="zzasstuser", role="user", can_control=False)
     bus = StubBus()
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=bus, ch=None, user=restricted)
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=bus, ch=None, user=restricted)
 
     listed = json.loads(await _execute_tool(ctx, "list_entities", {"adapter": "mqtt"}))
     ids = {e["entity_id"] for e in listed}
@@ -302,7 +318,7 @@ async def test_assistant_enforces_the_user_boundary():
     # includes what you may not see still leaks that it exists. Asserted as a
     # DIFFERENCE against an admin's view, because the shared test database means
     # neither absolute total is this suite's to predict.
-    admin_ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=bus, ch=None,
+    admin_ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=bus, ch=None,
                              user=AuthUser(id=1, username="zzasstadmin", role="admin"))
     admin_total = json.loads(await _execute_tool(admin_ctx, "list_entities", {}))["total"]
     user_total = json.loads(await _execute_tool(ctx, "list_entities", {}))["total"]
@@ -350,9 +366,10 @@ async def test_synthesis_catalog_carries_option_values():
     }
     client = _StubClient(_Resp("end_turn", [_Block("text", text=json.dumps(definition))]))
 
-    out = await synthesize_definition(client, pool, "when the avr turns on, select the tuner")
+    out = await synthesize_definition(_llm(client, AUTHOR), pool, "when the avr turns on, select the tuner")
     assert out["actions"][0]["args"] == {"value": "TUNER"}
 
+    assert client.messages.calls[0]["model"] == AUTHOR
     sent = client.messages.calls[0]["messages"][0]["content"]
     assert "denon:zzavr" in sent
     assert '"TUNER"' in sent and "MPLAY" in sent, (
@@ -388,7 +405,7 @@ async def test_typed_synthesis_self_corrects_a_rejected_definition():
         _Resp("end_turn", [_Block("text", text=json.dumps(bad))]),
         _Resp("end_turn", [_Block("text", text=json.dumps(good))]),
     )
-    out = await synthesize_definition(client, pool, "when the avr turns on, turn it off")
+    out = await synthesize_definition(_llm(client, AUTHOR), pool, "when the avr turns on, turn it off")
     assert out["triggers"][0]["to"] is True
 
     # The retry carried the boundary's own words back to the model.
@@ -416,7 +433,7 @@ async def test_automation_and_scene_tools():
     )
 
     bus = StubBus()
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=bus, ch=None,
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=bus, ch=None,
                        user=AuthUser(id=1, username="zzasstadmin", role="admin"))
 
     listed = json.loads(await _execute_tool(ctx, "list_automations", {}))
@@ -474,7 +491,7 @@ async def test_rule_tools_are_admin_only_and_scenes_keep_their_boundary():
         "VALUES ('zzasstuser', 'x', 'user', false) RETURNING id"
     )
     bus = StubBus()
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=bus, ch=None,
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=bus, ch=None,
                        user=AuthUser(id=user_id, username="zzasstuser", role="user",
                                      can_control=False))
 
@@ -528,7 +545,7 @@ async def test_command_log_requires_admin_before_reading_history():
 
     restricted = AuthUser(id=user_id, username="zzasstuser", role="user")
     ch = StubCH()
-    ctx = AssistantCtx(client=_StubClient(), pool=pool, bus=StubBus(), ch=ch,
+    ctx = AssistantCtx(chat=_llm(_StubClient()), author=_llm(_StubClient(), AUTHOR), pool=pool, bus=StubBus(), ch=ch,
                        user=restricted)
 
     for args in ({}, {"entity_id": "mqtt:zzsecret"}, {"entity_id": "denon:zzavr"}):
@@ -561,7 +578,7 @@ async def test_assistant_events_reports_each_tool_then_done():
                                   input={"topic": "scenes"}, id="tu_2")]),
         _Resp("end_turn", [_Block("text", text="Evo.")]),
     )
-    ctx = AssistantCtx(client=client, pool=pool, bus=StubBus(), ch=None,
+    ctx = AssistantCtx(chat=_llm(client), author=_llm(client, AUTHOR), pool=pool, bus=StubBus(), ch=None,
                        user=AuthUser(id=1, username="zzasstadmin", role="admin"))
 
     events = [e async for e in assistant_events(ctx, [], "što imam?")]
@@ -571,7 +588,7 @@ async def test_assistant_events_reports_each_tool_then_done():
 
     # run_assistant is a drain of the same generator — one loop, not two.
     client2 = _StubClient(_Resp("end_turn", [_Block("text", text="Bok.")]))
-    ctx2 = AssistantCtx(client=client2, pool=pool, bus=StubBus(), ch=None,
+    ctx2 = AssistantCtx(chat=_llm(client2), author=_llm(client2, AUTHOR), pool=pool, bus=StubBus(), ch=None,
                         user=AuthUser(id=1, username="zzasstadmin", role="admin"))
     assert (await run_assistant(ctx2, [], "bok"))["reply"] == "Bok."
 
@@ -582,8 +599,6 @@ async def test_assistant_events_reports_each_tool_then_done():
 async def test_assistant_endpoint_streams_sse():
     """End to end over HTTP: the endpoint frames the turn as text/event-stream, the
     gate checks still produce ordinary status codes, and the rate limit bites."""
-    import os
-
     import dida_api.app as appmod
     from dida_api.auth import hash_password
     from httpx import ASGITransport, AsyncClient
@@ -605,11 +620,8 @@ async def test_assistant_endpoint_streams_sse():
     appmod.app.state.secret_key = "assistant-sse-test-secret-0123456789abcdef"
     appmod.app.state.bus = StubBus()
     appmod.app.state.ch = None
-    # resolve_assistant_client returns the cached client when the key matches.
-    os.environ["ANTHROPIC_API_KEY"] = "test-key"
-    await seed_from_env(pool)
-    appmod.app.state.anthropic_client = client
-    appmod.app.state.anthropic_key = "test-key"
+    # llm_for keeps the client while the stored key is the one it was built with.
+    await _configure(appmod, pool, client)
 
     try:
         async with AsyncClient(transport=ASGITransport(app=appmod.app),
@@ -641,7 +653,7 @@ async def test_assistant_endpoint_streams_sse():
             r = await c.post("/assistant", json={"message": "opet"})
             assert r.status_code == 429
     finally:
-        os.environ.pop("ANTHROPIC_API_KEY", None)
+        await pool.execute("DELETE FROM ai_settings")
         appmod.app.state.anthropic_client = None
         appmod.app.state.anthropic_key = None
 
@@ -660,7 +672,7 @@ async def test_run_assistant_drives_the_tool_loop():
                                   input={"topic": "helpers"}, id="tu_1")]),
         _Resp("end_turn", [_Block("text", text="Helperi su virtualni entiteti.")]),
     )
-    ctx = AssistantCtx(client=client, pool=pool, bus=StubBus(), ch=None,
+    ctx = AssistantCtx(chat=_llm(client), author=_llm(client, AUTHOR), pool=pool, bus=StubBus(), ch=None,
                        user=AuthUser(id=1, username="zzasstadmin", role="admin"))
 
     result = await run_assistant(ctx, [], "što su helperi?")
@@ -669,6 +681,7 @@ async def test_run_assistant_drives_the_tool_loop():
     # The tool result really was fed back, and the loop asked for the tools + the
     # thinking/effort settings the tool-reaching behaviour depends on.
     first, second = client.messages.calls
+    assert first["model"] == CHAT
     assert any(t["name"] == "explain_dida" for t in first["tools"])
     assert first["thinking"] == {"type": "adaptive"}
     assert first["output_config"] == {"effort": "low"}
@@ -701,8 +714,6 @@ class _RejectedKey:
 
 
 async def test_rejected_key_names_the_key_not_a_bare_500():
-    import os
-
     import dida_api.app as appmod
     from dida_api.auth import hash_password
     from httpx import ASGITransport, AsyncClient
@@ -724,11 +735,8 @@ async def test_rejected_key_names_the_key_not_a_bare_500():
     appmod.app.state.secret_key = "assistant-sse-test-secret-0123456789abcdef"
     appmod.app.state.bus = StubBus()
     appmod.app.state.ch = None
-    os.environ["ANTHROPIC_API_KEY"] = "test-key"
-    await seed_from_env(pool)
-    appmod.app.state.anthropic_client = _RejectedKey()
-    appmod.app.state.anthropic_key = "test-key"
-    expected = "Anthropic rejected the API key — replace it in System → Settings"
+    await _configure(appmod, pool, _RejectedKey())
+    expected = "Anthropic rejected the API key — replace it in Settings → AI"
 
     try:
         async with AsyncClient(transport=ASGITransport(app=appmod.app),
@@ -749,7 +757,7 @@ async def test_rejected_key_names_the_key_not_a_bare_500():
             events = [json.loads(line[5:].strip()) for line in r.text.splitlines() if line.startswith("data:")]
             assert events[-1] == {"type": "error", "detail": expected}
     finally:
-        os.environ.pop("ANTHROPIC_API_KEY", None)
+        await pool.execute("DELETE FROM ai_settings")
         appmod.app.state.anthropic_client = None
         appmod.app.state.anthropic_key = None
 

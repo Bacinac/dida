@@ -32,8 +32,6 @@ PLAIN = {
 }
 # Same, for values stored Fernet-encrypted (the shape stored_api_key reads back).
 SECRET = {
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "openai_api_key": "OPENAI_API_KEY",
     "opus_token": "DIDA_OPUS_TOKEN",
 }
 # A value every installation must have a row for, even on a host that declared

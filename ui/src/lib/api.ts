@@ -2,7 +2,7 @@
 // SvelteKit, which proxies /api/* to the FastAPI service (see vite.config.ts).
 
 import { tr } from "$lib/translations.svelte";
-import { ApiError, refusal, send, TRANSFER_MS, type Locale, type Sending, type Theme } from "$lib/kit";
+import { ApiError, refusal, send, TRANSFER_MS, type AiSetting, type Locale, type Sending, type Theme } from "$lib/kit";
 import { t } from "$lib/i18n";
 
 const API = "/api";
@@ -1289,19 +1289,28 @@ export const api = {
   getSettings: (): Promise<Settings> =>
     request(`/settings`).then(jsonOrThrow),
 
-  updateSettings: (body: { anthropic_api_key?: string; openai_api_key?: string; owntracks_secret?: string; announce_lang?: string; lan_ip?: string; opus_url?: string; opus_token?: string; radio_player?: string; app_url?: string; net_parent?: string; discovery_subnets?: string; managed_vlans?: string; vlan_config?: Record<string, { mac?: string; hostname?: string }> }): Promise<null> =>
+  updateSettings: (body: { owntracks_secret?: string; announce_lang?: string; lan_ip?: string; opus_url?: string; opus_token?: string; radio_player?: string; app_url?: string; net_parent?: string; discovery_subnets?: string; managed_vlans?: string; vlan_config?: Record<string, { mac?: string; hostname?: string }> }): Promise<null> =>
     request(`/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then(jsonOrThrow),
 
-  testSettings: (provider: "anthropic" | "openai" | "opus" | "owntracks", api_key?: string, url?: string): Promise<{ ok: boolean; detail: string }> =>
+  testSettings: (provider: "opus" | "owntracks", api_key?: string, url?: string): Promise<SettingCheck> =>
     request(`/settings/test`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ provider, api_key, url }),
-    }).then(jsonOrThrow),
+    })
+      .then(jsonOrThrow)
+      .then((r: SettingCheck) => ({ ...r, detail: tr(r.detail) })),
+
+  // Settings → AI: home-core's /ai routes. `ai` is the request the kit's
+  // AiProviderCard is handed; a model list or a test waits on the provider.
+  getAiSettings: (): Promise<AiSettings> =>
+    request(`/ai/settings`).then(jsonOrThrow),
+  ai: <T>(path: string, init: RequestInit = {}): Promise<T> =>
+    request(path, { ...init, deadlineMs: MODEL_MS }).then(jsonOrThrow),
 
   // --- adapter config (UI-editable, secrets encrypted server-side) ---
   listAdapters: (): Promise<AdapterCfg[]> =>
@@ -1963,11 +1972,19 @@ export interface LanStatus {
   interfaces?: LanInterface[];
 }
 
+export interface SettingCheck {
+  ok: boolean;
+  detail: string;
+  age_min?: number | null;
+}
+
+export interface AiSettings {
+  providers: string[];
+  roles: string[];
+  settings: AiSetting[];
+}
+
 export interface Settings {
-  anthropic_configured: boolean;
-  anthropic_hint: string | null;
-  openai_configured: boolean;
-  openai_hint: string | null;
   owntracks_configured: boolean; // payload-encryption key for the OwnTracks receiver
   announce_lang: string; // TTS default language code
   // Host values — the DB is the source, .env only what install.sh seeded.

@@ -1,29 +1,25 @@
-"""Admin settings routes — API keys (Fernet secrets in app_settings), TTS
+"""Admin settings routes — secrets (Fernet in app_settings), TTS
 language, and network discovery/VLAN config. Extracted from app.py. Reads/writes
-the app_settings key/value store; secrets are never returned (only a last-4 hint).
+the app_settings key/value store; a secret is never returned, only whether it is set.
 """
 
 from __future__ import annotations
 
-import asyncio
 import ipaddress
 import json
 import logging
 import os
 import re
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import httpx
-from anthropic import AsyncAnthropic
 from dida_core import clear_app_setting, encrypt_secret, host_setting, set_app_setting, subnet_hosts
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from dida_api.auth import AuthUser, require_admin
-from dida_api.common import get_setting, key_hint, resolved_key, stored_api_key, vlan_networks
+from dida_api.common import get_setting, stored_api_key, vlan_networks
 
 log = logging.getLogger("dida.api.settings")
 
@@ -31,10 +27,6 @@ router = APIRouter(tags=["settings"])
 
 
 class SettingsOut(BaseModel):
-    anthropic_configured: bool
-    anthropic_hint: str | None
-    openai_configured: bool
-    openai_hint: str | None
     owntracks_configured: bool  # payload-encryption key for the OwnTracks receiver
     announce_lang: str  # TTS default language code (e.g. "hr"); editable here
     lan_ip: str  # THIS host's address on the LAN the AV devices are on, e.g. 192.0.2.10
@@ -58,8 +50,6 @@ class SettingsOut(BaseModel):
 
 class SettingsIn(BaseModel):
     # Only provided keys are touched; "" clears that key (falls back to env).
-    anthropic_api_key: str | None = Field(default=None, max_length=400)
-    openai_api_key: str | None = Field(default=None, max_length=400)
     owntracks_secret: str | None = Field(default=None, max_length=200)
     announce_lang: str | None = Field(default=None, max_length=16)
     lan_ip: str | None = Field(default=None, max_length=64)
@@ -74,7 +64,7 @@ class SettingsIn(BaseModel):
 
 
 class SettingsTestIn(BaseModel):
-    provider: str  # "anthropic" | "openai" | "opus" | "owntracks"
+    provider: str  # "opus" | "owntracks"
     api_key: str | None = Field(default=None, max_length=400)
     url: str | None = Field(default=None, max_length=300)  # opus: typed base URL
 
@@ -107,8 +97,6 @@ def zigbee_token(_admin: AuthUser = Depends(require_admin)) -> dict:
 @router.get("/settings", response_model=SettingsOut)
 async def get_settings(request: Request, _admin: AuthUser = Depends(require_admin)) -> SettingsOut:
     pool = request.app.state.pool
-    a = await resolved_key(pool, "anthropic")
-    o = await resolved_key(pool, "openai")
     lang = await get_setting(pool, "announce_lang") or "hr"
     subnets = await get_setting(pool, "discovery_subnets") or ""
     # Host values live in the DB and only there — the environment seeded them once,
@@ -136,8 +124,6 @@ async def get_settings(request: Request, _admin: AuthUser = Depends(require_admi
     # a secret in an address ends up in browser history and in every referrer.
     z2m = f"http://{lan_ip}:{os.environ.get('DIDA_Z2M_PORT', '8092')}" if lan_ip else ""
     return SettingsOut(
-        anthropic_configured=bool(a), anthropic_hint=key_hint(a),
-        openai_configured=bool(o), openai_hint=key_hint(o),
         owntracks_configured=bool(await get_setting(pool, "owntracks_secret")),
         announce_lang=lang, discovery_subnets=subnets, lan_status=lstatus,
         lan_ip=lan_ip, opus_url=opus_url, opus_configured=bool(opus_url and opus_token),
@@ -148,46 +134,23 @@ async def get_settings(request: Request, _admin: AuthUser = Depends(require_admi
     )
 
 
-def _check_openai(key: str) -> tuple[bool, str]:
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {key}"}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return r.status == 200, "ok"
-    except urllib.error.HTTPError as e:
-        return False, f"HTTP {e.code}"
-    except Exception as e:
-        log.debug("settings: OpenAI key check failed", exc_info=True)
-        return False, str(e)
-
-
-async def _check_anthropic(key: str) -> tuple[bool, str]:
-    try:
-        await AsyncAnthropic(api_key=key).models.list()  # validates auth, no tokens
-        return True, "ok"
-    except Exception as e:
-        log.debug("settings: Anthropic key check failed", exc_info=True)
-        return False, str(e)
-
-
 async def _check_opus(url: str, token: str) -> tuple[bool, str]:
     """One call the media page itself makes — proves the address and the token
     together."""
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             r = await client.get(f"{url}/api/radio/stations", headers={"X-OPUS-Token": token})
-    except Exception as e:
+    except Exception:
         log.debug("settings: OPUS check failed", exc_info=True)
-        return False, f"server nedostupan ({e.__class__.__name__})"
+        return False, "OPUS does not answer"
     if r.status_code in (401, 403):
-        return False, "token odbijen"
+        return False, "OPUS rejected the token"
     if r.status_code >= 400:
         return False, f"HTTP {r.status_code}"
-    return True, "ok"
+    return True, "OPUS answers"
 
 
-async def _check_owntracks(pool) -> tuple[bool, str]:
+async def _check_owntracks(pool) -> tuple[bool, str, int | None]:
     """A symmetric payload key has no upstream to ping — the honest end-to-end
     signal is whether location fixes still ARRIVE and decrypt: the freshest
     presence update. A wrong key makes every encrypted frame drop at decrypt
@@ -196,11 +159,9 @@ async def _check_owntracks(pool) -> tuple[bool, str]:
         "SELECT max(ts_ns) FROM current_state WHERE entity_id LIKE 'presence:%'"
     )
     if not ts_ns:
-        return False, "nijedna lokacija još nije primljena"
+        return False, "no location received yet", None
     age_min = int((time.time() - ts_ns / 1e9) / 60)
-    if age_min > 24 * 60:
-        return False, f"zadnja lokacija prije {age_min // 60} h"
-    return True, f"zadnja lokacija prije {age_min} min"
+    return age_min <= 24 * 60, "last location received", age_min
 
 
 @router.post("/settings/test")
@@ -211,28 +172,19 @@ async def test_setting(body: SettingsTestIn, request: Request,
     for every key on the Settings page."""
     pool = request.app.state.pool
     provider = body.provider
-    if provider not in ("anthropic", "openai", "opus", "owntracks"):
+    if provider not in ("opus", "owntracks"):
         raise HTTPException(400, "unknown provider")
     if provider == "owntracks":
-        ok, detail = await _check_owntracks(pool)
-        return {"ok": ok, "detail": detail}
-    if provider == "opus":
-        url = (body.url or "").strip().rstrip("/") or await host_setting(pool, "opus_url")
-        key = (body.api_key or "").strip() or await stored_api_key(pool, "opus_token")
-        if not url:
-            return {"ok": False, "detail": "URL nije upisan"}
-        if not key:
-            return {"ok": False, "detail": "token nije upisan"}
-        ok, detail = await _check_opus(url, key)
-        return {"ok": ok, "detail": "radi" if ok else detail}
-    key = (body.api_key or "").strip() or await resolved_key(pool, provider)
+        ok, detail, age_min = await _check_owntracks(pool)
+        return {"ok": ok, "detail": detail, "age_min": age_min}
+    url = (body.url or "").strip().rstrip("/") or await host_setting(pool, "opus_url")
+    key = (body.api_key or "").strip() or await stored_api_key(pool, "opus_token")
+    if not url:
+        return {"ok": False, "detail": "no OPUS address entered"}
     if not key:
-        return {"ok": False, "detail": "ključ nije upisan"}
-    ok, detail = (
-        await _check_anthropic(key) if provider == "anthropic"
-        else await asyncio.to_thread(_check_openai, key)
-    )
-    return {"ok": ok, "detail": "radi" if ok else detail}
+        return {"ok": False, "detail": "no OPUS token entered"}
+    ok, detail = await _check_opus(url, key)
+    return {"ok": ok, "detail": detail}
 
 
 def _seal(value: str) -> str:
@@ -344,10 +296,7 @@ async def put_settings(body: SettingsIn, request: Request,
                        _admin: AuthUser = Depends(require_admin)) -> None:
     """Store/clear secret keys. Never logged; never returned by GET."""
     pool = request.app.state.pool
-    for key in ("anthropic_api_key", "openai_api_key", "owntracks_secret"):
-        await _store(pool, key, getattr(body, key), secret=True)
-    request.app.state.anthropic_client = None
-    request.app.state.anthropic_key = None
+    await _store(pool, "owntracks_secret", body.owntracks_secret, secret=True)
     await _store(pool, "announce_lang", body.announce_lang)
     for key in ("lan_ip", "opus_url", "app_url", "net_parent"):
         await _store(pool, key, _host_value(key, getattr(body, key)))

@@ -11,6 +11,12 @@ SmartThings personal access tokens created since 30 December 2024 expire after
 24 hours, so DIDA connects through an OAuth app of your own, whose refresh token
 renews itself. The app is created once.
 
+Samsung has announced a paid SmartThings API plan for individuals, $4.99 a
+month, targeted for October 2026
+([announcement](https://community.smartthings.com/t/a-new-enhanced-smartthings-api-experience/309947)).
+Until it takes effect the API is free. Once it does, an account without the plan
+may lose API access, and this adapter with it.
+
 ## 1. Pick the redirect URI
 
 After you sign in, SmartThings sends the browser back to DIDA, and it accepts

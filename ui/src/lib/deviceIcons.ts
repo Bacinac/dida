@@ -37,6 +37,7 @@ export const ICONS: Record<string, string> = {
   camera: '<path d="M3 8h3l2-2h4l2 2h5a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.3"/>',
   siren: '<path d="M6 16v-5a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
   smoke: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none"/><path d="M12 5v1.6M12 17.4V19M5 12h1.6M17.4 12H19"/>',
+  leak: '<path d="M12 2.5s4.5 5.2 4.5 8.3a4.5 4.5 0 0 1-9 0c0-3.1 4.5-8.3 4.5-8.3z"/><path d="M3 20c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/>',
   // Robot mower (the real device is one), not a push mower: dome chassis on two
   // wheels with a stub antenna.
   mower: '<path d="M3 15v-1c0-4.4 3.6-8 8-8h2c4.4 0 8 3.6 8 8v1"/><path d="M2 15h20"/><circle cx="7" cy="18" r="1.7"/><circle cx="17" cy="18" r="1.7"/><path d="M12 6V3.5"/>',
@@ -108,7 +109,7 @@ export const ICON_LIST: string[] = [
   // media
   "media", "remote", "player", "speaker", "avr", "projector", "laser",
   // sensors / security
-  "sensor", "motion", "presence", "camera", "smoke", "siren", "shield",
+  "sensor", "motion", "presence", "camera", "smoke", "leak", "siren", "shield",
   // garden / utility / energy
   "valve", "pump", "mower", "pool", "water", "solar", "battery", "ev", "energy", "router",
   // misc

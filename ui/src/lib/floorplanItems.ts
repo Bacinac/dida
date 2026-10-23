@@ -166,7 +166,7 @@ export function buildPlanItems(candidates: Device[]): PlaceItem[] {
       if (otherEnts.length) {
         const rep = otherEnts[0];
         const auto = otherEnts.some((e) => shown(e, "smoke")) ? "smoke"
-                   : otherEnts.some((e) => shown(e, "water_leak")) ? "water"
+                   : otherEnts.some((e) => shown(e, "water_leak")) ? "leak"
                    : otherEnts.some((e) => shown(e, "contact")) ? "window"
                    : otherEnts.some((e) => ["power", "current", "energy"].some((c) => shown(e, c))) ? "outlet"
                    : "sensor";

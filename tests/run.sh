@@ -183,12 +183,16 @@ docker run --rm -u 0:0 -v dida-uv-cache:/uvcache --entrypoint sh dida/base:lates
 # Every image installs from uv.lock with --frozen, which trusts the lock as written:
 # a pyproject edited without `uv lock` would build from the stale lock without a
 # word. The lock check refuses that, and ruff is the lint gate the root pyproject
-# declares, at the version the lock pins.
+# declares, at the version the lock pins. The default dummy-variable pattern matches
+# every leading underscore, which exempts private methods from F811: a second
+# `_announce` silently replaced the first and stopped the OPUS poll (23.10.2026).
+# F811 alone runs again with only bare underscores as dummies.
 echo "== uv lock --check, ruff =="
 $RUN dida/base:latest -c "uv lock --check --offline --directory /w \
   && uv export -q --frozen --directory /w --no-emit-workspace --only-group lint -o /tmp/lint.txt \
   && env -u UV_CONSTRAINT -u UV_OVERRIDE uv pip install -q --python /opt/venv/bin/python --target /tmp/tools --require-hashes -r /tmp/lint.txt \
-  && /tmp/tools/bin/ruff check --no-cache --quiet ." \
+  && /tmp/tools/bin/ruff check --no-cache --quiet . \
+  && /tmp/tools/bin/ruff check --no-cache --quiet --select F811 --config 'lint.dummy-variable-rgx = \"^_+\$\"' ." \
   || { echo "FAILED: uv.lock is stale (run uv lock) or ruff found an error" >&2; exit 1; }
 
 echo "== core + capability + auth + permissions + energy + history + retention (api image) =="
@@ -462,7 +466,7 @@ adapter_test volumio tests/test_volumio_lifecycle.py
 adapter_test roidmi
 adapter_test dreame
 adapter_test samsungtv
-adapter_test opus tests/test_opus_announce.py
+adapter_test opus tests/test_opus_announce.py tests/test_opus_lifecycle.py
 adapter_test baba tests/test_baba_light.py
 adapter_test panasonic
 # unifi maps people to controller CLIENTS, not to device state, so its suite is

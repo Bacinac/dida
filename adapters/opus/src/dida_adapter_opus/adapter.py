@@ -174,7 +174,7 @@ class OpusAdapter:
                 said = (await resp.text())[:200]
                 raise RuntimeError(f"OPUS · Player answered {resp.status} to {path}: {said}")
 
-    async def _announce(self, url: str, token: str, out: _Output, args: dict) -> None:
+    async def _speak(self, url: str, token: str, out: _Output, args: dict) -> None:
         """The sentence's sound, not its address: OPUS hands an amplifier only what
         it fetched itself or was given."""
         if out.entity != DAC:
@@ -207,7 +207,7 @@ class OpusAdapter:
                 raise CommandRejected(f"play_queue carried nothing {out.entity} can play")
             await self._post(url, token, f"{out.base}/play", order)
         elif command.command == "play_media" and command.args.get("announce"):
-            await self._announce(url, token, out, dict(command.args))
+            await self._speak(url, token, out, dict(command.args))
         elif command.command == "play_media" and str(command.args.get("uri") or "").startswith("opus:"):
             asked = order_from_address(dict(command.args)) if out.entity == TV else None
             if asked is None:

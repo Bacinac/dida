@@ -116,6 +116,7 @@ _FIELD_MAP: dict[str, tuple[CapabilityKind, Callable[[object], Value | None]]] =
     "presence": (CapabilityKind.OCCUPANCY, _bool),
     "motion": (CapabilityKind.MOTION, _bool),
     "smoke": (CapabilityKind.SMOKE, _bool),
+    "water_leak": (CapabilityKind.WATER_LEAK, _bool),
     "action": (CapabilityKind.BUTTON, _action),
 }
 

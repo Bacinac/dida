@@ -18,7 +18,7 @@ export type CapabilityKind =
   | "pressure" | "wind_speed" | "wind_gust" | "wind_direction" | "dew_point"
   | "solar_radiation" | "uv_index" | "rain_rate" | "rain_daily"
   | "voltage" | "current" | "frequency" | "power_factor" | "signal" | "duration" | "remaining"
-  | "battery" | "contact" | "motion" | "occupancy" | "smoke" | "connectivity" | "schedule_active" | "binary" | "button" | "text"
+  | "battery" | "contact" | "motion" | "occupancy" | "smoke" | "water_leak" | "connectivity" | "schedule_active" | "binary" | "button" | "text"
   | "measurement" | "location" | "latitude" | "longitude" | "source"
   | "camera" | "person_count" | "object_class" | "scene_state" | "parked_vehicle" | "light_condition"
   | "identity_presence" | "identity_since" | "object_presence";
@@ -96,6 +96,7 @@ export const CAP_META: Record<CapabilityKind, CapMeta> = {
   motion:      { control: "binary" },
   occupancy:   { control: "binary" },
   smoke:       { control: "binary" },
+  water_leak:  { control: "binary" },
   connectivity: { control: "binary" },
   schedule_active: { control: "binary" },
   button:      { control: "event" },
@@ -175,7 +176,7 @@ export function mowerErrorLabel(s: string): string {
 export const MOWER_STATE_ORDER = ["docked", "charging", "idle", "paused", "returning", "starting", "mowing", "cleaning", "error"];
 
 // Capabilities whose binary state has dedicated on/off labels.
-const BADGE_CAPS = new Set<string>(["lock", "contact", "motion", "occupancy", "connectivity", "schedule_active", "smoke"]);
+const BADGE_CAPS = new Set<string>(["lock", "contact", "motion", "occupancy", "connectivity", "schedule_active", "smoke", "water_leak"]);
 
 /** Translated badge for a binary/lock state (true/false). */
 export function capBadge(capability: string, on: boolean): string {
@@ -300,7 +301,7 @@ export const CAP_GROUPS: { key: MessageKey; caps: string[] }[] = [
     "power", "energy", "voltage", "current", "frequency", "power_factor", "production"] },
   { key: "capgroup.presence", caps: [
     "presence", "motion", "occupancy", "contact", "person_count", "object_class",
-    "scene_state", "parked_vehicle", "identity_presence", "object_presence", "camera", "smoke",
+    "scene_state", "parked_vehicle", "identity_presence", "object_presence", "camera", "smoke", "water_leak",
     "light_condition"] },
   { key: "capgroup.media", caps: [
     "media_transport", "media_title", "media_artist", "media_album", "media_art",

@@ -76,6 +76,9 @@ def test_build_state_updates():
     assert u.get("temperature") == 21.5, "local_temperature -> temperature"
     assert u.get("occupancy") is True, "presence -> occupancy"
 
+    u = dict((cap, val) for cap, val, _ in build_state_updates({"water_leak": True}))
+    assert u.get("water_leak") is True, "flood sensor water_leak -> water_leak capability"
+
 
 # --- command_to_mqtt: canonical -> z2m set payload --------------------------
 def test_command_to_mqtt():

@@ -205,6 +205,7 @@ class CapabilityKind(StrEnum):
     MOTION = "motion"
     OCCUPANCY = "occupancy"
     SMOKE = "smoke"  # smoke detector alarm (true = smoke detected)
+    WATER_LEAK = "water_leak"  # flood sensor alarm (true = water detected)
     CONNECTIVITY = "connectivity"  # link/internet up (true) — e.g. WAN gateway online
     SCHEDULE_ACTIVE = "schedule_active"  # a user-defined calendar/season window is
     # currently active (true) — driven by the calendar adapter. A `cron` schedule
@@ -640,6 +641,9 @@ CAPABILITIES: dict[CapabilityKind, CapabilitySpec] = {
     ),
     CapabilityKind.SMOKE: CapabilitySpec(
         CapabilityKind.SMOKE, ValueType.BOOL, Access.READ,
+    ),
+    CapabilityKind.WATER_LEAK: CapabilitySpec(
+        CapabilityKind.WATER_LEAK, ValueType.BOOL, Access.READ,
     ),
     CapabilityKind.CONNECTIVITY: CapabilitySpec(
         CapabilityKind.CONNECTIVITY, ValueType.BOOL, Access.READ,

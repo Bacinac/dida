@@ -142,6 +142,23 @@ async def test_the_INITIATOR_is_propagated_not_the_relay():
     assert sent.capability == "media_transport" and sent.command == "play_media"
     assert sent.args["uri"].startswith("https://translate.google.com/")
     assert "hi" in sent.args["uri"]
+    assert sent.args["announce"] is True, "a speaker that can gives the music back after it"
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_that_would_take_what_plays_is_not_offered():
+    class StubBroker:
+        async def call(self, op, **kw):
+            return [{"entity_id": e, "friendly": n} for e, n in (
+                ("cast:kitchen", "Kitchen"), ("heos:marantz", "Marantz"),
+                ("opus:dac", "iFi"), ("opus:tv", "OPUS TV"))]
+
+    a = AnnounceAdapter()
+    a.broker = StubBroker()
+    a._explicit = {}
+    found = {speaker: aid for aid, speaker, _f in await a._discover_speakers()}
+    assert found == {"cast:kitchen": "announce:kitchen", "opus:dac": "announce:ifi"}, \
+        "HEOS switches the amplifier off what feeds it; OPUS's television would lose its programme"
 
 
 @pytest.mark.asyncio

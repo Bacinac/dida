@@ -36,6 +36,7 @@ log = logging.getLogger("dida.adapter.opus")
 
 TOKEN_HEADER = "X-OPUS-Token"
 POLL_SECONDS = 2
+ANNOUNCEMENT_MAX = 4 << 20
 _UNITS = {"media_position": "s", "media_duration": "s"}
 
 
@@ -173,6 +174,24 @@ class OpusAdapter:
                 said = (await resp.text())[:200]
                 raise RuntimeError(f"OPUS · Player answered {resp.status} to {path}: {said}")
 
+    async def _announce(self, url: str, token: str, out: _Output, args: dict) -> None:
+        """The sentence's sound, not its address: OPUS hands an amplifier only what
+        it fetched itself or was given."""
+        if out.entity != DAC:
+            raise CommandRejected(f"{out.entity} does not speak announcements")
+        async with self._session.get(str(args.get("uri") or "")) as resp:  # type: ignore[union-attr]
+            if resp.status >= 400:
+                raise RuntimeError(f"the announcement's sound answered {resp.status}")
+            audio = await resp.content.read(ANNOUNCEMENT_MAX + 1)
+        if not audio or len(audio) > ANNOUNCEMENT_MAX:
+            raise CommandRejected("the announcement's sound is empty or not a sentence")
+        async with self._session.post(  # type: ignore[union-attr]
+                f"{url}{out.base}/announce", data=audio,
+                headers={TOKEN_HEADER: token, "Content-Type": str(args.get("mime") or "audio/mpeg")}) as resp:
+            if resp.status >= 400:
+                said = (await resp.text())[:200]
+                raise RuntimeError(f"OPUS · Player answered {resp.status} to {out.base}/announce: {said}")
+
     async def handle_command(self, command: Command) -> None:
         out = self._outputs.get(command.entity_id)
         if out is None or command.capability != "media_transport":
@@ -187,6 +206,8 @@ class OpusAdapter:
             if order is None:
                 raise CommandRejected(f"play_queue carried nothing {out.entity} can play")
             await self._post(url, token, f"{out.base}/play", order)
+        elif command.command == "play_media" and command.args.get("announce"):
+            await self._announce(url, token, out, dict(command.args))
         elif command.command == "play_media" and str(command.args.get("uri") or "").startswith("opus:"):
             asked = order_from_address(dict(command.args)) if out.entity == TV else None
             if asked is None:

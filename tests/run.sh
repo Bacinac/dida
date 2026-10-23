@@ -462,7 +462,7 @@ adapter_test volumio tests/test_volumio_lifecycle.py
 adapter_test roidmi
 adapter_test dreame
 adapter_test samsungtv
-adapter_test opus
+adapter_test opus tests/test_opus_announce.py
 adapter_test baba tests/test_baba_light.py
 adapter_test panasonic
 # unifi maps people to controller CLIENTS, not to device state, so its suite is

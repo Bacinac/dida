@@ -62,9 +62,11 @@ BUS_CLIENTS = CLIENTS | {"netmgr"}
 # Whose devices a client may command ("*" = anyone's). Every other client commands
 # nothing: a command reaches an adapter, it never sends one. announce speaks through
 # the speakers that play a URL, denon presses the projector's IR and switches the
-# Harmony activity, the Matter bridge does what a voice assistant asks.
+# Harmony activity, the Matter bridge does what a voice assistant asks. Not through
+# HEOS: it plays by switching its amplifier's input, taking the amplifier from
+# whatever feeds it, and the music behind that input never comes back.
 COMMANDS: dict[str, frozenset[str]] = {
-    "announce": frozenset({"cast", "dlna", "heos", "volumio"}),
+    "announce": frozenset({"cast", "dlna", "opus", "volumio"}),
     "denon": frozenset({"broadlink", "harmony"}),
     "matter-bridge": frozenset({"*"}),
 }

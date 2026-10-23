@@ -27,6 +27,9 @@ NAMESPACE = "announce"
 # so offering it would be a dead "Test" button. The bus lets announce command these
 # and no others, so the list lives with the bus permissions.
 _SPEAKER_ADAPTERS = COMMANDS[NAMESPACE]
+# OPUS's television plays what it is handed as its programme: a sentence would
+# replace what is on, and nothing there gives it back.
+_NOT_SPEAKERS = frozenset({"opus:tv"})
 # Google Translate's TTS endpoint (client=tw-ob = the long-standing "translate
 # widget" client HA's google_translate platform uses). One short phrase per call.
 _TTS_URL = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl={lang}&q={q}"
@@ -117,7 +120,7 @@ class AnnounceAdapter:
         out: list[tuple[str, str, str]] = []  # (announce_id, speaker_id, friendly)
         for r in rows:
             speaker = r["entity_id"]
-            if speaker.split(":", 1)[0] not in _SPEAKER_ADAPTERS:
+            if speaker.split(":", 1)[0] not in _SPEAKER_ADAPTERS or speaker in _NOT_SPEAKERS:
                 continue  # its adapter can't play a URL → a dead announce target
             if speaker in aliased:
                 continue
@@ -232,12 +235,13 @@ class AnnounceAdapter:
         log.info("announce -> %s [%s] (%d chunk(s)): %r", ", ".join(speakers), lang, len(chunks), text[:60])
 
     async def _play(self, speaker: str, lang: str, chunk: str, source: str) -> None:
-        # Route to the Cast adapter, which already plays media URLs. Propagate the
-        # incoming source — the audit trail keeps the initiator, not the relay.
+        # Propagate the incoming source — the audit trail keeps the initiator, not
+        # the relay. `announce` says it is a sentence over what plays rather than a
+        # new programme, so a player that can gives the music back after it.
         url = _TTS_URL.format(lang=quote(lang), q=quote(chunk))
         await self._bus.publish_command(Command(
             entity_id=speaker, capability="media_transport", command="play_media",
-            ts_ns=time.time_ns(), args={"uri": url, "mime": "audio/mpeg"},
+            ts_ns=time.time_ns(), args={"uri": url, "mime": "audio/mpeg", "announce": True},
             source=source,
         ))
 

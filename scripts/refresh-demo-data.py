@@ -572,6 +572,15 @@ def anonymise() -> None:
         "to_jsonb(jsonb_set((value #>> '{}')::jsonb, '{name}', '\"Guest\"')::text) "
         f"WHERE capability = 'parked_vehicle' AND {name} NOT IN ('', 'Resident', 'Child', 'child');")
 
+    # 3c. A birthday digest ("0=Name:52;1=Name:24") names address-book contacts:
+    # people outside the household, so no list can know them all. Every name in
+    # that shape becomes a guest, whoever it is.
+    digest = r"^\d+=[^:;]+:\d+(;\d+=[^:;]+:\d+)*$"
+    stmts.append(
+        "UPDATE current_state SET value = "  # noqa: S608
+        "to_jsonb(regexp_replace(value #>> '{}', '=[^:;]+:', '=Guest:', 'g')) "
+        f"WHERE jsonb_typeof(value) = 'string' AND value #>> '{{}}' ~ '{digest}';")
+
     # 4. places, hostnames and camera site labels.
     # These live inside DOUBLE-ENCODED values: the jsonb holds a *string* whose
     # content is itself a JSON document, with ć written as the six characters

@@ -26,6 +26,7 @@ from dida_adapter_mqtt.mapping import (
     build_generic_updates,
     build_state_updates,
     command_to_mqtt,
+    declared_caps,
     device_type_from_exposes,
     facet_category,
     facet_meta,
@@ -185,6 +186,18 @@ def test_parse_exposes():
     assert out["sensitivity"].values == ("low", "high")
     assert out["brightness"].vmin == 0 and out["brightness"].vmax == 254
     assert parse_exposes("notalist") == {}, "non-list exposes -> empty"
+
+
+def test_declared_caps_name_a_silent_alarm_sensor():
+    # a TS0205 smoke detector that never went off reports only battery — its
+    # definition is the one place that says it is a smoke detector
+    smoke = parse_exposes([{"property": "smoke", "type": "binary", "access": 1},
+                           {"property": "battery", "type": "numeric", "access": 1}])
+    assert declared_caps(smoke) == {"smoke"}, "smoke declared, battery left to the reports"
+    flood = parse_exposes([{"property": "water_leak", "type": "binary", "access": 1}])
+    assert declared_caps(flood) == {"water_leak"}
+    light = parse_exposes([{"type": "light", "features": [{"property": "state", "type": "binary", "access": 7}]}])
+    assert declared_caps(light) == set(), "only alarm caps are declared"
 
 
 def test_device_type_from_exposes():

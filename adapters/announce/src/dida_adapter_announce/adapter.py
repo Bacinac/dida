@@ -31,6 +31,9 @@ _SPEAKER_ADAPTERS = COMMANDS[NAMESPACE]
 # widget" client HA's google_translate platform uses). One short phrase per call.
 _TTS_URL = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl={lang}&q={q}"
 _TTS_LIMIT = 180  # translate_tts rejects a q longer than ~200 chars with HTTP 400
+# announce:all speaks on every target at once — the alarm channel's broadcast,
+# the sibling of notify:all.
+ALL_ENTITY = f"{NAMESPACE}:all"
 
 
 def _tts_chunks(text: str) -> list[str]:
@@ -139,8 +142,11 @@ class AnnounceAdapter:
         for aid, speaker in self._explicit.items():  # aliases win
             merged[aid] = speaker
             names.setdefault(aid, aid.split(":", 1)[1].replace("_", " ").title())
-        self._names = names
-        for eid in set(merged) - set(self._targets):
+        self._names = names | {ALL_ENTITY: "All speakers"}
+        fresh = set(merged) - set(self._targets)
+        if merged and not self._targets:
+            fresh.add(ALL_ENTITY)
+        for eid in fresh:
             await self._publish_state(eid, "")
         self._targets = merged
         if self._targets:
@@ -173,7 +179,7 @@ class AnnounceAdapter:
         for _ in range(6):
             if self._spoken:
                 return
-            for eid in self._targets:
+            for eid in [*self._targets, ALL_ENTITY] if self._targets else []:
                 await self._publish_state(eid, "")
             await asyncio.sleep(3)
 
@@ -189,8 +195,11 @@ class AnnounceAdapter:
         )
 
     async def handle_command(self, command: Command) -> None:
-        speaker = self._targets.get(command.entity_id)
-        if speaker is None or self._bus is None:
+        if command.entity_id == ALL_ENTITY:
+            speakers = list(dict.fromkeys(self._targets.values()))
+        else:
+            speakers = [s] if (s := self._targets.get(command.entity_id)) else []
+        if not speakers or self._bus is None:
             # Ours but unroutable — a typo'd automation otherwise loses the
             # notification with zero trace (worst case for an announce channel).
             raise CommandRejected(
@@ -213,13 +222,14 @@ class AnnounceAdapter:
         # task so the handler returns promptly.
         chunks = _tts_chunks(text)
         if len(chunks) == 1:
-            await self._play(speaker, lang, chunks[0], command.source)
+            await asyncio.gather(*(self._play(s, lang, chunks[0], command.source) for s in speakers))
         else:
-            spawn(self._play_sequence(speaker, lang, chunks, command.source),
-                  log=log, name=f"announce sequence -> {speaker}")
+            for speaker in speakers:
+                spawn(self._play_sequence(speaker, lang, chunks, command.source),
+                      log=log, name=f"announce sequence -> {speaker}")
         self._spoken = True
         await self._publish_state(command.entity_id, text)
-        log.info("announce -> %s [%s] (%d chunk(s)): %r", speaker, lang, len(chunks), text[:60])
+        log.info("announce -> %s [%s] (%d chunk(s)): %r", ", ".join(speakers), lang, len(chunks), text[:60])
 
     async def _play(self, speaker: str, lang: str, chunk: str, source: str) -> None:
         # Route to the Cast adapter, which already plays media URLs. Propagate the

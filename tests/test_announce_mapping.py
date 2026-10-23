@@ -158,6 +158,16 @@ async def test_a_long_announcement_plays_its_clips_IN_ORDER():
     assert spoken == text, "nothing is dropped between the clips"
 
 
+@pytest.mark.asyncio
+async def test_all_speaks_on_every_speaker_once():
+    a = _adapter({"announce:kitchen": "cast:kitchen", "announce:bedroom": "cast:bedroom",
+                  "announce:alias": "cast:kitchen"})
+    await a.handle_command(cmd("announce:all", text="Dim u kuhinji"))
+    assert sorted(s for s, _l, _c, _src in a.played) == ["cast:bedroom", "cast:kitchen"], \
+        "every distinct speaker hears it, a speaker behind two names only once"
+    assert a.states == [("announce:all", "Dim u kuhinji")]
+
+
 # --- the failures that must stay LOUD or harmless ------------------------------
 
 @pytest.mark.asyncio
@@ -166,6 +176,13 @@ async def test_an_unroutable_announcement_is_rejected_not_swallowed():
     with pytest.raises(CommandRejected, match="no target"):
         await a.handle_command(cmd("announce:ghost", text="nobody hears this"))
     assert a.played == []
+
+
+@pytest.mark.asyncio
+async def test_all_with_no_speakers_is_rejected_not_swallowed():
+    a = _adapter({})
+    with pytest.raises(CommandRejected):
+        await a.handle_command(cmd("announce:all", text="Dim"))
 
 
 @pytest.mark.asyncio

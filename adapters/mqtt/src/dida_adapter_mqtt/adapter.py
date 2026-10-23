@@ -29,6 +29,7 @@ from dida_adapter_mqtt.mapping import (
     build_generic_updates,
     build_state_updates,
     command_to_mqtt,
+    declared_caps,
     device_type_from_exposes,
     facet_meta,
     generic_command,
@@ -247,7 +248,12 @@ class MqttAdapter:
             self._dev_type[ds] = device_type_from_exposes(definition.get("exposes"))
             # If this device already reported state (primary entity announced) but
             # z2m's device list only now tells us its type, re-announce with it.
-            if self._dev_type[ds] is not None and ds in self._dev_caps and ds not in self._typed:
+            declared = declared_caps(exposes)
+            cap_key = tuple(sorted(set(self._dev_caps.get(ds, ())) | declared))
+            if declared and cap_key != self._dev_caps.get(ds):
+                self._dev_caps[ds] = cap_key
+                await self._announce_main(ds, cap_key)
+            elif self._dev_type[ds] is not None and ds in self._dev_caps and ds not in self._typed:
                 await self._announce_main(ds, self._dev_caps[ds])
             for field, expose in exposes.items():
                 meta = facet_meta(field, expose)

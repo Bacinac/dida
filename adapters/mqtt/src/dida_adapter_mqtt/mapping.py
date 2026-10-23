@@ -134,6 +134,19 @@ DIAGNOSTIC_CAPS: frozenset[str] = frozenset(
 )
 
 
+# Alarm sensors publish their alarm field only when it changes: a smoke detector
+# that has never gone off has no `smoke` in its state at all, so a cap set grown
+# from reports alone would leave it a bare battery until the day of the fire.
+# These are declared from the device definition instead.
+_DECLARED_CAPS: frozenset[CapabilityKind] = frozenset({CapabilityKind.SMOKE, CapabilityKind.WATER_LEAK})
+
+
+def declared_caps(exposes: dict[str, Expose]) -> set[str]:
+    """The alarm capabilities a device's z2m definition says it has."""
+    return {kind.value for field, (kind, _conv) in _FIELD_MAP.items()
+            if field in exposes and kind in _DECLARED_CAPS}
+
+
 def build_state_updates(payload: dict) -> list[tuple[str, Value, str | None]]:
     """Map a z2m device payload to (capability, value, unit) tuples."""
     out: list[tuple[str, Value, str | None]] = []

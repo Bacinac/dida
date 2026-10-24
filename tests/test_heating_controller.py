@@ -191,7 +191,7 @@ async def test_cold_room_gets_its_setpoint_and_fires_the_boiler():
     assert [c.command for c in setpoint] == ["set_temperature"]
     assert setpoint[0].args["value"] == 21.0
     assert [c.command for c in commands(bus, BOILER)] == ["turn_on"]
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     assert published(bus, "heating:room:7", "binary") is True
     assert ctrl._rooms[0].demand is True
 
@@ -244,7 +244,7 @@ async def test_a_room_with_a_thermometer_ignores_the_valves_guess():
     """The valve reads the air at the radiator; the room has a better witness, and
     two answers to one question is how a house ends up arguing with itself."""
     _, bus = await run(house({(f"{VALVE}:window_open", "binary"): (True, 30)}))
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
 
 async def test_our_own_detection_pauses_a_room_that_cools_too_fast():
@@ -252,7 +252,7 @@ async def test_our_own_detection_pauses_a_room_that_cools_too_fast():
     tick is not weather."""
     pool = house()
     ctrl, bus = await run(pool)
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     pool.state[(SENSOR, "temperature")] = (17.0, 30)   # someone opened the window
     await ctrl.tick()
     assert published(bus, "heating:room:7", "text") == H.ST_WINDOW
@@ -261,7 +261,7 @@ async def test_our_own_detection_pauses_a_room_that_cools_too_fast():
 
     pool.state[(SENSOR, "temperature")] = (17.4, 30)   # …and shut it again
     await ctrl.tick()
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING, "recovery ends the pause"
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING, "recovery ends the pause"
 
 
 async def test_our_own_detection_gives_up_rather_than_freeze_the_house():
@@ -273,7 +273,7 @@ async def test_our_own_detection_gives_up_rather_than_freeze_the_house():
     assert published(bus, "heating:room:7", "text") == H.ST_WINDOW
     ctrl._window_since[7] = time.time() - 120   # the cap has passed
     await ctrl.tick()
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
     # …and it must STAY heating. The samples that opened the pause are still the
     # room's recent history, so leaving them in the trace makes the next tick see
@@ -281,7 +281,7 @@ async def test_our_own_detection_gives_up_rather_than_freeze_the_house():
     # in a cold snap (exactly what it exists for) would never be heated at all.
     for _ in range(3):
         await ctrl.tick()
-        assert published(bus, "heating:room:7", "text") == H.ST_HEATING, \
+        assert published(bus, "heating:room:7", "text") == H.ST_WAITING, \
             "the cap must not be defeated by re-detecting the same drop"
 
     # A genuinely NEW drop, measured after the pause, still pauses the room again.
@@ -335,7 +335,7 @@ async def test_a_valve_that_never_echoes_is_reported_faulty():
     takes the command and does nothing. It must show as broken, not as heating."""
     pool = house()
     ctrl, bus = await run(pool)
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     # …the write is now older than the window a slow battery TRV is given
     ctrl._written[VALVE] = (21.0, time.monotonic() - H.VERIFY_S - 1)
     bus.commands.clear()
@@ -437,7 +437,7 @@ async def test_a_room_nobody_is_in_runs_eco():
 async def test_a_room_someone_might_be_in_stays_comfortable(presence):
     _, bus = await run(empty_room(presence))
     assert commands(bus, VALVE)[0].args["value"] == 22.0
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
 
 async def test_a_presence_sensor_that_dropped_off_cannot_vouch_for_an_empty_room():
@@ -495,6 +495,15 @@ async def test_a_room_that_may_not_start_the_boiler_does_not_keep_it_burning():
     _, bus = await run(house(room_over={"can_call_boiler": False}, boiler_on=True))
     assert published(bus, "heating:room:7", "binary") is True, "the room still wants heat"
     assert [c.command for c in commands(bus, BOILER)] == ["turn_off"]
+
+
+async def test_heating_means_the_boiler_is_running():
+    """A room that calls while the boiler is off is waiting for it, not heating — the
+    card read "Heating" over a cold radiator in a room barred from firing it."""
+    _, bus = await run(house(boiler_on=True))
+    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    _, bus = await run(house(room_over={"can_call_boiler": False}))
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
 
 async def test_the_boiler_waits_for_a_quorum():
@@ -602,7 +611,7 @@ async def test_a_pinned_mode_is_not_second_guessed_by_preheat():
     sched = [{"days": [0, 1, 2, 3, 4, 5, 6], "at": "06:30", "profile": "comfort"}]
     pool = house(settings_over={"mode": "comfort", "schedule": sched})
     ctrl, _ = await run(pool)
-    assert ctrl._rooms[0].status == H.ST_HEATING
+    assert ctrl._rooms[0].status == H.ST_WAITING
 
 
 async def test_the_frost_floor_rises_with_the_weather():
@@ -621,7 +630,7 @@ async def test_a_window_contact_that_dropped_off_while_open_does_not_hold_the_ro
     open_window = {("mqtt:windowbedroom", "contact"): (True, 30)}
     with_contact = [*ENTITIES, ("mqtt:windowbedroom", 7, ["contact", "battery"])]
     _, bus = await run(house(open_window, entities=with_contact), unreachable=["mqtt:windowbedroom"])
-    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     _, bus = await run(house(open_window, entities=with_contact))
     assert published(bus, "heating:room:7", "text") == H.ST_WINDOW
 

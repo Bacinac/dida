@@ -30,7 +30,7 @@ export const BOOST_MINUTES = 60;
 
 // The room's live view, as published by the controller.
 export interface RoomLive {
-  status: string;          // heating | preheat | idle | vacant | window | summer | stale | no_sensor | valve_error | off
+  status: string;          // heating | waiting | preheat | idle | vacant | window | summer | stale | no_sensor | valve_error | off
   demand: boolean;
   temperature: number | null;
   target: number | null;

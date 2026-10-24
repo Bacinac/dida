@@ -1509,6 +1509,7 @@ export const hr = {
 	'heating.profile.night': 'Noć',
 	'heating.profile.away': 'Odsutnost',
 	'heating.status.heating': 'Grije',
+	'heating.status.waiting': 'Čeka kotao',
 	'heating.status.preheat': 'Zagrijava unaprijed',
 	'heating.status.idle': 'Miruje',
 	'heating.status.vacant': 'Prazna soba',

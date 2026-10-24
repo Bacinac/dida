@@ -1509,6 +1509,7 @@ export const en = {
 	'heating.profile.night': 'Night',
 	'heating.profile.away': 'Away',
 	'heating.status.heating': 'Heating',
+	'heating.status.waiting': 'Waiting for the boiler',
 	'heating.status.preheat': 'Warming up early',
 	'heating.status.idle': 'Idle',
 	'heating.status.vacant': 'Room empty',

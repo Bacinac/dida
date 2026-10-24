@@ -74,6 +74,7 @@ ST_STALE = "stale"        # no fresh room reading — refusing to heat blind
 ST_NO_SENSOR = "no_sensor"
 ST_VALVE_ERROR = "valve_error"  # a valve won't take (or won't report) its setpoint
 ST_HEATING = "heating"
+ST_WAITING = "waiting"    # calls for heat, but the boiler is not running (resting, no quorum, or not its call)
 ST_PREHEAT = "preheat"    # climbing early so it ARRIVES at the scheduled temperature
 ST_VACANT = "vacant"      # nobody has been in it, so comfort is running as eco
 ST_IDLE = "idle"
@@ -215,6 +216,11 @@ class HeatingController:
             sum(1 for r in self._rooms if r.demand and r.cfg.can_call_boiler), is_on, self._settings,
         )
         await self._drive_boiler(want, state, now)
+        # "Heating" is a claim about hot water reaching the radiator, so it is read off
+        # the relay, not off the call — the next tick catches up with a start.
+        for room in self._rooms:
+            if room.status == ST_HEATING and not is_on:
+                room.status = ST_WAITING
         await self._publish(state)
 
     # --- decisions -------------------------------------------------------------

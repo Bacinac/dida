@@ -54,6 +54,7 @@
   const STATUS_TONE: Record<string, TagTone> = {
     heating: "warn",
     preheat: "warn",
+    waiting: "quiet",
     idle: "quiet",
     vacant: "quiet",
     window: "busy",

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type RetentionClass, type RetentionOverride } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { adapterLabel, capLabel, CAP_GROUPS, capGroupIndex, classColor } from "$lib/capabilities";
-  import { devices } from "$lib/store.svelte";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
-  import { Button, Card, PageActions, SaveButton, formatNumber, toasts } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
+  import { api, type RetentionClass, type RetentionOverride } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { adapterLabel, capLabel, CAP_GROUPS, capGroupIndex, classColor } from "#lib/capabilities.js";
+  import { devices } from "#lib/store.svelte.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
+  import { Button, Card, PageActions, SaveButton, formatNumber, toasts } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
 
   let classes = $state<RetentionClass[]>([]);
   let caps = $state<Record<string, string>>({});

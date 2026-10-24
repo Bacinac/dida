@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import { devices } from "$lib/store.svelte";
-  import { api } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { Button, toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { persons, presenceStatus, presenceToneClass, type Person, type LastZone } from "$lib/presence";
-  import PresenceMap from "$lib/PresenceMap.svelte";
+  import { SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { api } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { Button, toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { persons, presenceStatus, presenceToneClass, type Person, type LastZone } from "#lib/presence.js";
+  import PresenceMap from "#lib/PresenceMap.svelte";
 
   // Outer spacing/width is the caller's call — the Devices page keeps its bottom
   // margin (default), the floorplan aligns the track under the plan (max-w-2xl).

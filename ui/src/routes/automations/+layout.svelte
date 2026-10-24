@@ -1,7 +1,7 @@
 <script lang="ts">
   // Automations chrome: the rules and their calendar/beat schedules, as two tabs.
   import { page } from "$app/state";
-  import { t } from "$lib/i18n";
+  import { t } from "#lib/i18n/index.js";
 
   let { children } = $props();
 

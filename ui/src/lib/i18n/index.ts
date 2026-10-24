@@ -1,4 +1,4 @@
-import { registerModule, type Word } from "$lib/kit";
+import { registerModule, type Word } from "#lib/kit/index.js";
 import { hr } from "./hr";
 import { en } from "./en";
 

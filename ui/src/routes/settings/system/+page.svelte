@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { api, type ActiveAlert, type OrphansData, type SystemStats } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { errMsg } from "$lib/errors";
-  import { Button, Card, Notice, Stats, Tag, formatNumber, type TagTone } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { shortDateTime } from "$lib/dt";
-  import { Page, Section } from "$lib/ui";
+  import { api, type ActiveAlert, type OrphansData, type SystemStats } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Card, Notice, Stats, Tag, formatNumber, type TagTone } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { shortDateTime } from "#lib/dt.js";
+  import { Page, Section } from "#lib/ui/index.js";
 
   let stats = $state<SystemStats | null>(null);
   let alerts = $state<ActiveAlert[]>([]);

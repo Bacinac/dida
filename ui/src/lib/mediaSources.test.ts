@@ -5,12 +5,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = { sendCommand: vi.fn() };
-vi.mock("$lib/api", () => ({ api, stateWs: vi.fn(), Unauthorized: class Unauthorized extends Error {} }));
-vi.mock("$lib/auth.svelte", () => ({ auth: { user: null } }));
-vi.mock("$lib/translations.svelte", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
+vi.mock("#lib/api.js", () => ({ api, stateWs: vi.fn(), Unauthorized: class Unauthorized extends Error {} }));
+vi.mock("#lib/auth.svelte.js", () => ({ auth: { user: null } }));
+vi.mock("#lib/translations.svelte.js", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
 
-const { devices } = await import("$lib/store.svelte");
-const { resolvedSources, selectSource } = await import("$lib/mediaSources");
+const { devices } = await import("#lib/store.svelte.js");
+const { resolvedSources, selectSource } = await import("#lib/mediaSources.js");
 
 const ZEN = {
   key: "zen", label: "MUSIC", kind: "player", remote: "harmony:hub", activity: "ZEN",

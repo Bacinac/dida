@@ -4,11 +4,11 @@
 // frame. Everything derived from `devices` — markers, glows, room labels, the
 // night overlay — then shows the house as it stood, with no changes of its own.
 
-import { api, type ReplayBundle, type Scalar } from "$lib/api";
-import { devices } from "$lib/store.svelte";
-import { auth } from "$lib/auth.svelte";
-import { errMsg } from "$lib/errors";
-import { t } from "$lib/i18n";
+import { api, type ReplayBundle, type Scalar } from "#lib/api.js";
+import { devices } from "#lib/store.svelte.js";
+import { auth } from "#lib/auth.svelte.js";
+import { errMsg } from "#lib/errors.js";
+import { t } from "#lib/i18n/index.js";
 
 // Sampled step tracks carry momentary events: a vision zone goes occupied and
 // clear inside one second. At a day-wide window a cursor step spans minutes, so

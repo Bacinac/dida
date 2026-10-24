@@ -5,20 +5,20 @@
   // thing this page writes. Rooms are not "added": a room with a thermostatic valve
   // in it IS a heated room, and the server says which those are.
   import { onMount } from "svelte";
-  import { api, type HeatingSettings, type HeatingView } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { errMsg } from "$lib/errors";
-  import { Button, Card, Field, Notice, SaveButton, Toggle, formatNumber } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
+  import { api, type HeatingSettings, type HeatingView } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Card, Field, Notice, SaveButton, Toggle, formatNumber } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
   import {
     DEFAULT_TARGETS, MODES, PROFILES, STEP, TARGET_MAX, TARGET_MIN,
     boilerRunning, roomsCalling,
-  } from "$lib/heating";
-  import HeatingSchedule from "$lib/HeatingSchedule.svelte";
-  import HeatingRoomCard from "$lib/HeatingRoomCard.svelte";
-  import { devices } from "$lib/store.svelte";
-  import { Section } from "$lib/ui";
+  } from "#lib/heating.js";
+  import HeatingSchedule from "#lib/HeatingSchedule.svelte";
+  import HeatingRoomCard from "#lib/HeatingRoomCard.svelte";
+  import { devices } from "#lib/store.svelte.js";
+  import { Section } from "#lib/ui/index.js";
 
   let view = $state<HeatingView | null>(null);
   let draft = $state<HeatingSettings | null>(null);

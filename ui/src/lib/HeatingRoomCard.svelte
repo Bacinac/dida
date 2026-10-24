@@ -3,18 +3,18 @@
   // for an hour, and — folded away — the little that is actually worth setting.
   // The room's thermometer and valves are NOT asked for: they are whatever is
   // assigned to the room, which the server derives and this only displays.
-  import { api, type HeatingRoom, type RoomHeatingConfig } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { errMsg } from "$lib/errors";
-  import { Button, Card, Field, SaveButton, Tag, Toggle, formatNumber, type TagTone } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { clock } from "$lib/dt";
+  import { api, type HeatingRoom, type RoomHeatingConfig } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Card, Field, SaveButton, Tag, Toggle, formatNumber, type TagTone } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { clock } from "#lib/dt.js";
   import {
     BOOST_MINUTES, DEFAULT_TARGETS, MAX_OFFSET, PROFILES, STEP, TARGET_MAX, TARGET_MIN,
     boost, clearBoost, effectiveTarget, emptyRoom, roomLive, valveLive,
-  } from "$lib/heating";
-  import HeatingSchedule from "$lib/HeatingSchedule.svelte";
-  import { devices } from "$lib/store.svelte";
+  } from "#lib/heating.js";
+  import HeatingSchedule from "#lib/HeatingSchedule.svelte";
+  import { devices } from "#lib/store.svelte.js";
 
   let { room, house, onchange }: {
     room: HeatingRoom;

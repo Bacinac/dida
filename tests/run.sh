@@ -552,7 +552,7 @@ docker run --rm $NODE_AS_ME -v "$ROOT/ui:/w" -w /w node:24-slim sh -c \
 echo ""
 echo "== ui (svelte-check) =="
 docker run --rm $NODE_AS_ME -v "$ROOT/ui:/w" -w /w node:24-slim sh -c \
-  "$NPM_FRESH; npx svelte-kit sync && npx svelte-check --tsconfig ./tsconfig.json --output human" \
+  "$NPM_FRESH; npx svelte-kit sync && npx svelte-check --tsconfig ./tsconfig.json --output human && npx tsc -p src/service-worker" \
   || { echo "FAILED: ui types" >&2; exit 1; }
 
 # --- UI (words) — a key built at runtime compiles whatever it names. Six kinds of

@@ -6,10 +6,10 @@
   // pass explicit `format` fns — Croatian dates/times on x, formatNumber on y.
   import { Chart, Svg, Axis, Spline, Highlight } from "layerchart";
   import { curveStepAfter } from "d3-shape";
-  import type { HistorySeries, HistoryNumPoint } from "$lib/api";
-  import { formatNumber, i18n } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { clock, dayDate, shortDate } from "$lib/dt";
+  import type { HistorySeries, HistoryNumPoint } from "#lib/api.js";
+  import { formatNumber, i18n } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { clock, dayDate, shortDate } from "#lib/dt.js";
 
   let {
     series,

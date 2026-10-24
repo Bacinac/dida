@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type User, type ControlRule, type AccessSetup } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { Button, Card, Notice, dialog, i18n } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { CONSUMER_PAGES } from "$lib/pages";
-  import { auth } from "$lib/auth.svelte";
-  import { devices } from "$lib/store.svelte";
-  import { adapterLabel, capLabel } from "$lib/capabilities";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
+  import { api, type User, type ControlRule, type AccessSetup } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Card, Notice, dialog, i18n } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { CONSUMER_PAGES } from "#lib/pages.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { adapterLabel, capLabel } from "#lib/capabilities.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
 
   // Consumer pages come from the single source of truth (ui/src/lib/pages.ts,
   // mirroring PAGE_ORDER in dida_api/users.py — the server authority). A user row

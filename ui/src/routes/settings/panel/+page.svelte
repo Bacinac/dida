@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Picks, SaveButton } from "$lib/kit";
-  import { api, type PanelConfig } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, Picks, SaveButton } from "#lib/kit/index.js";
+  import { api, type PanelConfig } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   // The wall panel is headless — no one edits it in front of the Hub. Its display
   // behaviour is configured here and read by /panel at boot (and on self-reload).

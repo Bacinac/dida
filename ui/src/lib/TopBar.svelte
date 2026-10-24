@@ -8,12 +8,12 @@
   // the one case for flipping it often — so a permanent copy in the chrome was
   // duplication that had to be kept in sync, on every screen, for a yearly action.
   import { onMount } from "svelte";
-  import { devices } from "$lib/store.svelte";
-  import { api } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { ui } from "$lib/shell.svelte";
-  import { t } from "$lib/i18n";
-  import { Tag, narrow, type TagTone } from "$lib/kit";
+  import { devices } from "#lib/store.svelte.js";
+  import { api } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { ui } from "#lib/shell.svelte.js";
+  import { t } from "#lib/i18n/index.js";
+  import { Tag, narrow, type TagTone } from "#lib/kit/index.js";
 
   const conn = $derived(devices.conn);
   const connLabel = $derived(

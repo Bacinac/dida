@@ -6,13 +6,13 @@
   //
   // Labels render through tr(): the stored label is the ENGLISH source; a Croatian
   // session localises via the translations dictionary (Settings → Prijevodi).
-  import { errMsg } from "$lib/errors";
-  import { toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { mediaCmd, mediaMuted, mediaVolume } from "$lib/media";
-  import type { Device } from "$lib/store.svelte";
-  import { tr } from "$lib/translations.svelte";
-  import { volume, volumeColor } from "$lib/volume.svelte";
+  import { errMsg } from "#lib/errors.js";
+  import { toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { mediaCmd, mediaMuted, mediaVolume } from "#lib/media.js";
+  import type { Device } from "#lib/store.svelte.js";
+  import { tr } from "#lib/translations.svelte.js";
+  import { volume, volumeColor } from "#lib/volume.svelte.js";
 
   let { device, readOnly = false }: { device: Device; readOnly?: boolean } = $props();
 

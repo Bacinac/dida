@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import "leaflet/dist/leaflet.css";
-  import { t } from "$lib/i18n";
-  import type { Zone } from "$lib/api";
+  import { t } from "#lib/i18n/index.js";
+  import type { Zone } from "#lib/api.js";
 
   type Person = { name: string; lat: number; lon: number; location: string; stale?: boolean };
 

@@ -8,10 +8,10 @@
   //
   // Only what DIFFERS from the book is sent. A row nobody touched costs nothing.
   import { onMount } from "svelte";
-  import { Button, Card, Notice, Picks, Tag, dialog } from "$lib/kit";
-  import { api } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
+  import { Button, Card, Notice, Picks, Tag, dialog } from "#lib/kit/index.js";
+  import { api } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
 
   type Loaded = Awaited<ReturnType<typeof api.upkeepProposals>>;
   type Row = Loaded["people"][number];

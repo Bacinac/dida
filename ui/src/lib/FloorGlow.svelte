@@ -3,7 +3,7 @@
   // shape — a radial gradient (radius override) or a filled room polygon — tinted
   // by the light's colour, opacity by its brightness. `mix-blend-mode: screen`
   // makes the shapes glow over the plan and add up where they overlap.
-  import type { GlowSpec } from "$lib/floorGeometry";
+  import type { GlowSpec } from "#lib/floorGeometry.js";
   let { glows }: { glows: GlowSpec[] } = $props();
   const gid = (id: string): string => "fpg-" + id.replace(/[^a-zA-Z0-9_-]/g, "-");
 </script>

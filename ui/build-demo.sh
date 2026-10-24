@@ -25,7 +25,7 @@ cd "$UI"
 cp "$FIXTURES" static/demo-fixtures.json
 
 # Inject the shim into the placeholder app.html carries for exactly this purpose,
-# writing a SEPARATE template (svelte.config.js points the demo build at it) —
+# writing a SEPARATE template (vite.config.ts points the demo build at it) —
 # app.html itself is tracked, and a run that dies between edit and restore left
 # the shim in the production source.
 trap 'rm -f src/app.demo.html static/demo-fixtures.json' EXIT

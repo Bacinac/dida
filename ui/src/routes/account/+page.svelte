@@ -1,17 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { geo } from "$lib/geolocation.svelte";
-  import { push } from "$lib/push.svelte";
-  import { Button, Notice, i18n, theme, toasts, type Locale, type Theme } from "$lib/kit";
-  import { errMsg } from "$lib/errors";
-  import { nativeBridge } from "$lib/native";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { clock } from "$lib/dt";
+  import { api } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { geo } from "#lib/geolocation.svelte.js";
+  import { push } from "#lib/push.svelte.js";
+  import { Button, Notice, i18n, theme, toasts, type Locale, type Theme } from "#lib/kit/index.js";
+  import { errMsg } from "#lib/errors.js";
+  import { nativeBridge } from "#lib/native.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { clock } from "#lib/dt.js";
 
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
-  import { version } from "$lib/version.svelte";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { version } from "#lib/version.svelte.js";
 
   // The native app's own version (which APK is installed), read from the bridge —
   // distinct from the server version below. Only present inside the app.

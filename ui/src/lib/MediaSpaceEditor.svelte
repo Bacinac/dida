@@ -5,15 +5,15 @@
   // is a dropdown fed from the LIVE device list, so the mapping can't be mistyped.
   // Opened from the MediaHub by an admin; not a standalone settings page.
   import { untrack } from "svelte";
-  import { Button, SaveButton } from "$lib/kit";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { ICONS } from "$lib/deviceIcons";
-  import { isAvrZone, sourceOptions } from "$lib/media";
-  import { deriveSources } from "$lib/mediaSources";
-  import { devices, type Device } from "$lib/store.svelte";
-  import VolumePresetEditor from "$lib/VolumePresetEditor.svelte";
-  import type { MediaSource } from "$lib/api";
+  import { Button, SaveButton } from "#lib/kit/index.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { ICONS } from "#lib/deviceIcons.js";
+  import { isAvrZone, sourceOptions } from "#lib/media.js";
+  import { deriveSources } from "#lib/mediaSources.js";
+  import { devices, type Device } from "#lib/store.svelte.js";
+  import VolumePresetEditor from "#lib/VolumePresetEditor.svelte";
+  import type { MediaSource } from "#lib/api.js";
 
   let { initialArea, onclose }: { initialArea: number | null; onclose: () => void } = $props();
 

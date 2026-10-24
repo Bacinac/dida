@@ -1,8 +1,8 @@
 // That every key is said in both languages is words.mjs's to check; these hold
 // what the schedule page does with the words once it has them.
 import { describe, expect, it } from "vitest";
-import { hr } from "$lib/i18n/hr";
-import { en } from "$lib/i18n/en";
+import { hr } from "#lib/i18n/hr.js";
+import { en } from "#lib/i18n/en.js";
 
 describe("schedules vocabulary", () => {
   it("keeps the {param} placeholders the page interpolates", () => {

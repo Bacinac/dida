@@ -4,23 +4,23 @@
   // sections — HERO controls (actuators / climate / media), a compact READINGS
   // strip (live sensors), and a collapsed DIAGNOSTICS block (technical fields the
   // user opted back in). One shared shell; the hero adapts to the device type.
-  import CapabilityControl from "$lib/CapabilityControl.svelte";
-  import MediaPlayer from "$lib/MediaPlayer.svelte";
-  import ClimateCard from "$lib/ClimateCard.svelte";
-  import Remote from "$lib/Remote.svelte";
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import Sparkline from "$lib/Sparkline.svelte";
-  import { capRank, capLabel, capMeta, isActuator, deviceType, formatValue, OPTION_CAPS, type DeviceType } from "$lib/capabilities";
-  import { isMediaPlayer, MEDIA_CAPS } from "$lib/media";
-  import { isRemote, remoteButtonIds } from "$lib/remote";
-  import { isClimate, CLIMATE_CAPS } from "$lib/climate";
-  import { t } from "$lib/i18n";
-  import { Button, Tag } from "$lib/kit";
-  import { clock } from "$lib/dt";
-  import { devices, type CapState, type Device } from "$lib/store.svelte";
-  import { areaExempt } from "$lib/devices";
-  import { auth } from "$lib/auth.svelte";
-  import type { Area } from "$lib/api";
+  import CapabilityControl from "#lib/CapabilityControl.svelte";
+  import MediaPlayer from "#lib/MediaPlayer.svelte";
+  import ClimateCard from "#lib/ClimateCard.svelte";
+  import Remote from "#lib/Remote.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import Sparkline from "#lib/Sparkline.svelte";
+  import { capRank, capLabel, capMeta, isActuator, deviceType, formatValue, OPTION_CAPS, type DeviceType } from "#lib/capabilities.js";
+  import { isMediaPlayer, MEDIA_CAPS } from "#lib/media.js";
+  import { isRemote, remoteButtonIds } from "#lib/remote.js";
+  import { isClimate, CLIMATE_CAPS } from "#lib/climate.js";
+  import { t } from "#lib/i18n/index.js";
+  import { Button, Tag } from "#lib/kit/index.js";
+  import { clock } from "#lib/dt.js";
+  import { devices, type CapState, type Device } from "#lib/store.svelte.js";
+  import { areaExempt } from "#lib/devices.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import type { Area } from "#lib/api.js";
 
   let { members, name, deviceKey, areas = [], onassign, ondetail, oncollapse, spark, type: unitType }: {
     members: Device[];

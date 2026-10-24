@@ -1,3 +1,6 @@
+import nodeAdapter from "@sveltejs/adapter-node";
+import staticAdapter from "@sveltejs/adapter-static";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
@@ -6,14 +9,33 @@ const publicHosts = [process.env.DIDA_APP_URL ?? "", ...(process.env.DIDA_CORS_O
   .map((origin) => URL.parse(origin.trim())?.hostname)
   .filter((host): host is string => !!host);
 
+// DIDA_DEMO=1 builds the public, backend-less demo: the same app, emitted as a
+// static SPA (every route falls back to index.html and boots client-side) with
+// the demo network shim injected. Normal builds are untouched — adapter-node,
+// no shim.
+const demo = process.env.DIDA_DEMO === "1";
+
 // The browser always talks to SvelteKit; /api/* is proxied to the FastAPI
 // service (dev) so there is no CORS dance and the WebSocket upgrade works.
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
-  // No custom resolve.extensions (matches BABA): runes modules are imported with
-  // an explicit `.svelte` (resolved to *.svelte.ts via the default .ts), and the
-  // i18n dir has a plain index.ts. Adding `.svelte.ts` here would shadow any
-  // directory on a bare `$lib/X` import — a footgun that broke the ui/ barrel.
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      preprocess: vitePreprocess(),
+      adapter: demo ? staticAdapter({ fallback: "index.html", strict: false }) : nodeAdapter(),
+      // The demo builds from a GENERATED template (build-demo.sh writes it from
+      // app.html with the shim filled in). Editing app.html in place instead means
+      // that a build which dies — or two deploys overlapping on one checkout —
+      // leaves the shim in a tracked source file, where the next commit would ship
+      // it to production.
+      files: { appTemplate: demo ? "src/app.demo.html" : "src/app.html" },
+      // push.svelte.ts is the one registrar. Kit's own registration is type
+      // module while ours is classic in production, and two registrations of one
+      // script with different types replace each other on every load — the
+      // worker's activate then reloads every open tab, forever.
+      serviceWorker: { register: false },
+    }),
+  ],
   server: {
     host: "0.0.0.0",
     port: 5173,

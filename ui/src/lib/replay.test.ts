@@ -7,12 +7,12 @@ const api = {
 const auth = { user: { id: "a" } as { id: string } | null, revision: 0 };
 class Unauthorized extends Error {}
 const ws = { readyState: 1, close: vi.fn(), send: vi.fn(), onmessage: null as ((event: { data: string }) => void) | null };
-vi.mock("$lib/api", () => ({ api, Unauthorized, stateWs: () => ws }));
-vi.mock("$lib/auth.svelte", () => ({ auth }));
-vi.mock("$lib/i18n", () => ({ t: (key: string) => key }));
-vi.mock("$lib/translations.svelte", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
-const { replay } = await import("$lib/replay.svelte");
-const { devices } = await import("$lib/store.svelte");
+vi.mock("#lib/api.js", () => ({ api, Unauthorized, stateWs: () => ws }));
+vi.mock("#lib/auth.svelte.js", () => ({ auth }));
+vi.mock("#lib/i18n/index.js", () => ({ t: (key: string) => key }));
+vi.mock("#lib/translations.svelte.js", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
+const { replay } = await import("#lib/replay.svelte.js");
+const { devices } = await import("#lib/store.svelte.js");
 
 const ID = "test:sensor";
 function deferred<T = unknown>() {

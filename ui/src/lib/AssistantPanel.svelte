@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Notice, Tag } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { devices } from "$lib/store.svelte";
-  import { cmdLabel } from "$lib/capabilities";
-  import { speech } from "$lib/speech.svelte";
-  import { assistant } from "$lib/assistant.svelte";
+  import { Button, Notice, Tag } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { cmdLabel } from "#lib/capabilities.js";
+  import { speech } from "#lib/speech.svelte.js";
+  import { assistant } from "#lib/assistant.svelte.js";
 
   const exampleKeys: MessageKey[] = ["assistant.ex1", "assistant.ex2", "assistant.ex3", "assistant.ex4"];
 

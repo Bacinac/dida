@@ -3,11 +3,11 @@
   // basic remote ALWAYS visible below (not an overlay). The remote drives the box
   // directly over ADB — its own nav press-buttons + this device as the transport /
   // volume target — so it's reliable regardless of the Harmony activity.
-  import { t } from "$lib/i18n";
-  import { Tag } from "$lib/kit";
-  import { mediaArt, mediaTitle } from "$lib/media";
-  import Remote from "$lib/Remote.svelte";
-  import { devices, type Device } from "$lib/store.svelte";
+  import { t } from "#lib/i18n/index.js";
+  import { Tag } from "#lib/kit/index.js";
+  import { mediaArt, mediaTitle } from "#lib/media.js";
+  import Remote from "#lib/Remote.svelte";
+  import { devices, type Device } from "#lib/store.svelte.js";
 
   // `channelLabel` = the live-TV channel DIDA last tuned (DRM apps like Xplore black
   // out the screencap, so the channel name is the only feedback we can show).

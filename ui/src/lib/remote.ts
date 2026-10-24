@@ -5,8 +5,8 @@
 // core stays generic. A device with `media_transport` is a full media player and
 // is rendered by MediaPlayer instead — never here.
 
-import { api } from "$lib/api";
-import type { Device } from "$lib/store.svelte";
+import { api } from "#lib/api.js";
+import type { Device } from "#lib/store.svelte.js";
 
 // Canonical remote key suffixes — mirrored from the adapter's mapping.py
 // REMOTE_KEYS. The button entity id is `<head>_<suffix>`; a suffix the device

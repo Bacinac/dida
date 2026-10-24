@@ -8,7 +8,7 @@ import {
   fmtTime, gradient, isActive, isAvrZone, isMediaPlayer, isPlaying, mediaDuration,
   mediaMuted, mediaQueue, mediaVolume, positionBase, sourceOptions, sourceValue,
   transport,
-} from "$lib/media";
+} from "#lib/media.js";
 
 const cap = (v: unknown, updatedAt = 1) => ({ value: v, unit: null, updatedAt });
 const dev = (caps: Record<string, unknown>, updatedAt = 1) =>

@@ -3,18 +3,18 @@
   // adjustments (an LED strip → brightness + colour), no Power toggle (the tap
   // handles on/off and long-press already turned it on), no area/seen/badge.
   import { onDestroy } from "svelte";
-  import { Button } from "$lib/kit";
-  import CapabilityControl from "$lib/CapabilityControl.svelte";
-  import ClimateCard from "$lib/ClimateCard.svelte";
-  import MediaPlayer from "$lib/MediaPlayer.svelte";
-  import Remote from "$lib/Remote.svelte";
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import { capMeta, capRank } from "$lib/capabilities";
-  import { t } from "$lib/i18n";
-  import { isMediaPlayer, MEDIA_CAPS } from "$lib/media";
-  import { isRemote, remoteButtonIds } from "$lib/remote";
-  import { isClimate, CLIMATE_CAPS } from "$lib/climate";
-  import type { CapState, Device } from "$lib/store.svelte";
+  import { Button } from "#lib/kit/index.js";
+  import CapabilityControl from "#lib/CapabilityControl.svelte";
+  import ClimateCard from "#lib/ClimateCard.svelte";
+  import MediaPlayer from "#lib/MediaPlayer.svelte";
+  import Remote from "#lib/Remote.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import { capMeta, capRank } from "#lib/capabilities.js";
+  import { t } from "#lib/i18n/index.js";
+  import { isMediaPlayer, MEDIA_CAPS } from "#lib/media.js";
+  import { isRemote, remoteButtonIds } from "#lib/remote.js";
+  import { isClimate, CLIMATE_CAPS } from "#lib/climate.js";
+  import type { CapState, Device } from "#lib/store.svelte.js";
 
   let { members, name, icon, showToggle = false, onHistory, ondetail }: {
     members: Device[]; name: string; icon: string; showToggle?: boolean;

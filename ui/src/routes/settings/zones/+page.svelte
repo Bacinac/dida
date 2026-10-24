@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Zone } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { persons } from "$lib/presence";
-  import { Button, Card, SaveButton, Tag, dialog, formatNumber } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
-  import ZoneMap from "$lib/ZoneMap.svelte";
+  import { api, type Zone } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { persons } from "#lib/presence.js";
+  import { Button, Card, SaveButton, Tag, dialog, formatNumber } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import ZoneMap from "#lib/ZoneMap.svelte";
 
   let zones = $state<Zone[]>([]);
   let nzName = $state("");

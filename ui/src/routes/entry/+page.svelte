@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { t } from "$lib/i18n";
-  import EntryPanel from "$lib/EntryPanel.svelte";
+  import { t } from "#lib/i18n/index.js";
+  import EntryPanel from "#lib/EntryPanel.svelte";
 </script>
 
 <svelte:head><title>{t("nav.entry")}</title></svelte:head>

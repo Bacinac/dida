@@ -4,14 +4,14 @@
   // picker, reusing the same TimeChart as /history. A reading can be backed by
   // several sensors (a two-thermometer room): we plot the room MEAN over time,
   // bucket-aligned across those sensors (one sensor → its own series, exactly).
-  import { Button, Picks } from "$lib/kit";
-  import { api, type HistorySeries, type HistoryNumPoint, type HistoryStrPoint } from "$lib/api";
+  import { Button, Picks } from "#lib/kit/index.js";
+  import { api, type HistorySeries, type HistoryNumPoint, type HistoryStrPoint } from "#lib/api.js";
   import {
     MOWER_STATE_ORDER, capLabel, capMeta, mowerStateLabel, parkedVehicleLane, parkedVehicleLaneLabel,
-  } from "$lib/capabilities";
-  import { errMsg } from "$lib/errors";
-  import { t, type MessageKey } from "$lib/i18n";
-  import TimeChart from "$lib/TimeChart.svelte";
+  } from "#lib/capabilities.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import TimeChart from "#lib/TimeChart.svelte";
 
   let { readings, cap, name, ondetail }: {
   readings: { entityId: string; cap: string }[]; cap: string; name: string;

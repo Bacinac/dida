@@ -18,7 +18,7 @@
 // Opt-in is per-device (localStorage), default OFF — location sharing is never
 // silent. The watch is throttled (don't spam the bus when stationary).
 
-import { api } from "$lib/api";
+import { api } from "#lib/api.js";
 
 const STORAGE_KEY = "dida.shareLocation";
 const MIN_INTERVAL_MS = 90_000; // don't report more often than this…

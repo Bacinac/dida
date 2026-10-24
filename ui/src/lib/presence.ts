@@ -7,10 +7,10 @@
 // "away" — surfacing the last real place from history + its age. See
 // presenceStatus.
 
-import { t } from "$lib/i18n";
+import { t } from "#lib/i18n/index.js";
 
-import { clock, shortDateTime } from "$lib/dt";
-import type { Device } from "$lib/store.svelte";
+import { clock, shortDateTime } from "#lib/dt.js";
+import type { Device } from "#lib/store.svelte.js";
 
 // A zone is LATCHED, not sampled: OwnTracks (significant-change + pushed zone
 // waypoints) fires an event-driven region ENTER/LEAVE, so a person stays at

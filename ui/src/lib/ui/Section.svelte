@@ -1,6 +1,6 @@
 <script lang="ts">
   // A titled section of a page — uppercase muted title, content below.
-  import { SECTION_TITLE_CLASS } from "$lib/ui/tokens";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/tokens.js";
   type Props = { title?: string; children: import("svelte").Snippet };
   let { title, children }: Props = $props();
 </script>

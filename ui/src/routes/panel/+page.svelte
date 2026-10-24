@@ -1,6 +1,6 @@
 <script module lang="ts">
   import { page } from "$app/state";
-  import { version } from "$lib/version.svelte";
+  import { version } from "#lib/version.svelte.js";
 
   // The kit's reload would land on bare /panel, where the cast token is already
   // stripped from the URL; the panel reloads itself through the cast URL instead.
@@ -21,18 +21,18 @@
   // logged server-side via /panel/event, so the Hub's behaviour — including
   // whether DashCast delivers touch at all — is verifiable from the api logs.
   import { onMount, onDestroy } from "svelte";
-  import { clock, longDate, longDay } from "$lib/dt";
-  import { t } from "$lib/i18n";
-  import { i18n } from "$lib/kit";
-  import { replaceState } from "$app/navigation";
-  import { auth } from "$lib/auth.svelte";
-  import { api, Unauthorized, type Floor, type PanelConfig, type SlideshowPhoto } from "$lib/api";
-  import { devices, type CapState } from "$lib/store.svelte";
-  import { capMeta, formatValue } from "$lib/capabilities";
-  import Brand from "$lib/Brand.svelte";
-  import CameraSnap from "$lib/CameraSnap.svelte";
-  import LiveVideo from "$lib/LiveVideo.svelte";
-  import FloorplanView from "$lib/FloorplanView.svelte";
+  import { clock, longDate, longDay } from "#lib/dt.js";
+  import { t } from "#lib/i18n/index.js";
+  import { i18n } from "#lib/kit/index.js";
+  import { goto } from "$app/navigation";
+  import { auth } from "#lib/auth.svelte.js";
+  import { api, Unauthorized, type Floor, type PanelConfig, type SlideshowPhoto } from "#lib/api.js";
+  import { devices, type CapState } from "#lib/store.svelte.js";
+  import { capMeta, formatValue } from "#lib/capabilities.js";
+  import Brand from "#lib/Brand.svelte";
+  import CameraSnap from "#lib/CameraSnap.svelte";
+  import LiveVideo from "#lib/LiveVideo.svelte";
+  import FloorplanView from "#lib/FloorplanView.svelte";
 
   const CAM_ROTATE_S = 8;    // rotating pane: next camera
   const SNAP_S = 2;          // rotating pane: snapshot poll
@@ -61,15 +61,13 @@
         await api.panelAuth(k);
         // Drop the token from the visible URL — cosmetic only, and on a slow
         // device (the Hub's aged Chromium) the auth roundtrip can finish BEFORE
-        // SvelteKit's router is initialized, making replaceState throw. That
-        // must never take the panel down: proven on the Hub, where the page
+        // SvelteKit's router is initialized, making the shallow navigation fail.
+        // That must never take the panel down: proven on the Hub, where the page
         // authenticated and then sat on "denied" while a desktop browser
         // running the same build booted fine.
-        try {
-          replaceState("/panel", {});
-        } catch {
+        await goto("/panel", { shallow: true, replace: true }).catch(() => {
           /* router not ready yet — the token stays in a URL bar nobody sees */
-        }
+        });
       }
       await auth.load(); // populate auth.user (from the fresh cookie, or an existing one)
       status = auth.user ? "ready" : "denied";

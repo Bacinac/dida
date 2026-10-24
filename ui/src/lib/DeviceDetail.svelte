@@ -5,16 +5,16 @@
   // four surfaces: Devices for the registry row, the live card for values, nothing
   // at all for the other entities on the same physical device, Automations for the
   // rules and Settings → Commands for the audit. This is that, in one panel.
-  import { api, type EntityDetail, type EntityStats } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { Dialog, Tabs, Tag, formatNumber, type TagTone } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { dayTime } from "$lib/dt";
-  import { capLabel, OPTION_CAPS } from "$lib/capabilities";
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import FloorHistory from "$lib/FloorHistory.svelte";
-  import { capMeta } from "$lib/capabilities";
-  import { devices } from "$lib/store.svelte";
+  import { api, type EntityDetail, type EntityStats } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Dialog, Tabs, Tag, formatNumber, type TagTone } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { dayTime } from "#lib/dt.js";
+  import { capLabel, OPTION_CAPS } from "#lib/capabilities.js";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import FloorHistory from "#lib/FloorHistory.svelte";
+  import { capMeta } from "#lib/capabilities.js";
+  import { devices } from "#lib/store.svelte.js";
 
   let { entityId, onclose }: { entityId: string | null; onclose: () => void } = $props();
 

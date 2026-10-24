@@ -3,12 +3,13 @@
 // /floorplan page (view + edit) and the read-only wall-panel plan (/panel), so
 // a marker can never exist on one surface and be missing on the other.
 
-import { devices, type Device } from "$lib/store.svelte";
-import { derivedKey } from "$lib/devices";
-import { capMeta, entityType, PLAN_HIDDEN_READINGS, type DeviceType } from "$lib/capabilities";
-import { hasRoomReadings, roomAggregate, roomEligible, type RoomCap } from "$lib/roomSensors";
-import { pointInPolygon, polygonCentroid, toPoints, type GlowSpec } from "$lib/floorGeometry";
-import type { Area, FloorPoly } from "$lib/api";
+import { devices, type Device } from "#lib/store.svelte.js";
+import { derivedKey } from "#lib/devices.js";
+import { capMeta, entityType, PLAN_HIDDEN_READINGS, type DeviceType } from "#lib/capabilities.js";
+import { hasRoomReadings, roomAggregate, roomEligible, type RoomCap } from "#lib/roomSensors.js";
+import { pointInPolygon, polygonCentroid, toPoints, type GlowSpec } from "#lib/floorGeometry.js";
+import { roomHeating } from "#lib/heating.js";
+import type { Area, FloorPoly } from "#lib/api.js";
 
 const NON_PHYSICAL = new Set(["astro", "announce", "calendar", "presence"]);
 // `mower` is an actuator (start/pause/dock commands): without it here the mower
@@ -263,7 +264,7 @@ export const opensControls = (it: PlaceItem): boolean =>
 // ── ROOM sensor labels: one aggregated label per area on a floor. Its sensors
 //    are the entities assigned to the area that report a numeric reading; per
 //    capability we show the mean. Anchored at the area's fp_x/fp_y. ──
-export interface RoomLabelItem { area: Area; sensors: Device[]; caps: RoomCap[]; x: number; y: number; off: boolean }
+export interface RoomLabelItem { area: Area; sensors: Device[]; caps: RoomCap[]; x: number; y: number; off: boolean; heating: boolean }
 
 /** The devices feeding each area's room label, by area id. */
 export function roomSensorsByArea(): Map<number, Device[]> {
@@ -299,7 +300,7 @@ export function buildRoomLabels(floor: string): RoomLabelItem[] {
     const pos = a.fp_x != null && a.fp_y != null ? { x: a.fp_x, y: a.fp_y }
               : a.fp_poly ? polygonCentroid(a.fp_poly) : null;
     if (!pos) continue;
-    out.push({ area: a, sensors, caps, x: pos.x, y: pos.y, off: roomLabelOff(a) });
+    out.push({ area: a, sensors, caps, x: pos.x, y: pos.y, off: roomLabelOff(a), heating: roomHeating(devices.byId, a.id) });
   }
   return out.sort((p, q) => devices.roomLabel(p.area).localeCompare(devices.roomLabel(q.area), "hr"));
 }

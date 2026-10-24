@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Card, Picks, SaveButton, Tag, dialog } from "$lib/kit";
-  import { api, type Automation, type Condition, type ComputedHelper, type Scalar, type VirtualEntity } from "$lib/api";
-  import { devices } from "$lib/store.svelte";
-  import { capLabel as deviceCapLabel } from "$lib/capabilities";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { LABEL_CLASS } from "$lib/ui";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, Card, Picks, SaveButton, Tag, dialog } from "#lib/kit/index.js";
+  import { api, type Automation, type Condition, type ComputedHelper, type Scalar, type VirtualEntity } from "#lib/api.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { capLabel as deviceCapLabel } from "#lib/capabilities.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { LABEL_CLASS } from "#lib/ui/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   const BADGE = "inline-block rounded px-1.5 py-0.5 text-s";
   const cmp = (a: string, b: string) => a.localeCompare(b, "hr");

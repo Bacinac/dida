@@ -3,14 +3,14 @@
   // consumption drawn UP, solar production DOWN, on an hourly axis, with a date
   // picker. Per-device series live on the device itself (floor-plan click), never
   // here — this is the whole-house view. Data: GET /history/energy/hourly.
-  import { api, type EnergyHourly, type EnergyConfig } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { auth } from "$lib/auth.svelte";
-  import { Button, PageActions, SaveButton, Tag, formatNumber } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { isoDate } from "$lib/dt";
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
+  import { api, type EnergyHourly, type EnergyConfig } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { Button, PageActions, SaveButton, Tag, formatNumber } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { isoDate } from "#lib/dt.js";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
 
   const todayISO = (): string => isoDate(new Date());
 

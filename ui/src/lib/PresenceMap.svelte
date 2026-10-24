@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Dialog } from "$lib/kit";
-  import { api, type Zone } from "$lib/api";
-  import { t } from "$lib/i18n";
-  import { presenceStatus, presenceToneClass, type Person, type LastZone } from "$lib/presence";
-  import ZoneMap from "$lib/ZoneMap.svelte";
+  import { Dialog } from "#lib/kit/index.js";
+  import { api, type Zone } from "#lib/api.js";
+  import { t } from "#lib/i18n/index.js";
+  import { presenceStatus, presenceToneClass, type Person, type LastZone } from "#lib/presence.js";
+  import ZoneMap from "#lib/ZoneMap.svelte";
 
   // A focused, read-only map for ONE person: their point + the zone circles for
   // context. Live GPS coords win; without them we fall back to the last-known

@@ -7,13 +7,13 @@
   // lock — behind a one-tap Recall nobody could inspect first. Picking devices is
   // now the normal path, and a saved scene can be opened and edited row by row.
   import { onMount } from "svelte";
-  import { api, type Scene, type SceneState } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { capLabel, valueKind } from "$lib/capabilities";
-  import { Button, Card, Notice, SaveButton, Toggle, dialog, toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
+  import { api, type Scene, type SceneState } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { capLabel, valueKind } from "#lib/capabilities.js";
+  import { Button, Card, Notice, SaveButton, Toggle, dialog, toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
 
   // A row carries the value as a STRING while being edited (one input type per
   // kind); it is coerced back on save, so a half-typed "-" never reaches the API.

@@ -2,11 +2,11 @@
   // The stations OPUS keeps, in its order, put on the player the host passes in.
   // Nothing is edited here — a station is added, renamed or removed in OPUS.
   import { onMount } from "svelte";
-  import { api, type OpusStation } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { gradient } from "$lib/media";
-  import type { Device } from "$lib/store.svelte";
+  import { api, type OpusStation } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { gradient } from "#lib/media.js";
+  import type { Device } from "#lib/store.svelte.js";
 
   let { player, onplayed }: { player: Device | null; onplayed?: () => void } = $props();
 

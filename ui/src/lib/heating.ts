@@ -4,8 +4,8 @@
 // implementation in the browser would drift from the one that drives the boiler,
 // and the page would show a house that doesn't exist.
 
-import { api, type HeatingRoom, type RoomHeatingConfig } from "$lib/api";
-import type { Device } from "$lib/store.svelte";
+import { api, type HeatingRoom, type RoomHeatingConfig } from "#lib/api.js";
+import type { Device } from "#lib/store.svelte.js";
 
 export const PROFILES = ["comfort", "eco", "night", "away"] as const;
 export type Profile = (typeof PROFILES)[number];
@@ -54,6 +54,10 @@ export function roomLive(byId: Record<string, Device>, areaId: number): RoomLive
 
 export function boilerRunning(byId: Record<string, Device>): boolean {
   return byId["heating:system"]?.caps["binary"]?.value === true;
+}
+
+export function roomHeating(byId: Record<string, Device>, areaId: number): boolean {
+  return roomLive(byId, areaId).demand && boilerRunning(byId);
 }
 
 export function roomsCalling(byId: Record<string, Device>): number {

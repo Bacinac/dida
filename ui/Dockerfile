@@ -40,7 +40,7 @@ RUN npm run build
 
 # --- prod: thin runtime serving the baked build + /api proxy (server.js) -------
 # Reuses the same node_modules that built it (guaranteed runtime parity; the
-# adapter-node output externalises `dependencies`, and server.js needs http-proxy).
+# adapter-node output externalises `dependencies`, and server.js needs http-proxy-3).
 FROM node:24-bookworm-slim AS prod
 ENV NODE_ENV=production
 WORKDIR /app

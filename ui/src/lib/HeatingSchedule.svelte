@@ -3,10 +3,10 @@
   // run this profile — until the next step. A list rather than a 7×24 grid because
   // that is how heating is actually reasoned about ("warm at 06:30, back down at
   // 09:00"), and because it stays usable on a phone.
-  import type { HeatingSlot } from "$lib/api";
-  import { Button, Field, Picks } from "$lib/kit";
-  import { SCHEDULE_PROFILES } from "$lib/heating";
-  import { t, type MessageKey } from "$lib/i18n";
+  import type { HeatingSlot } from "#lib/api.js";
+  import { Button, Field, Picks } from "#lib/kit/index.js";
+  import { SCHEDULE_PROFILES } from "#lib/heating.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
 
   // `inheritLabel` marks a schedule that may be left empty because something else
   // supplies it (a room falls back to the house schedule). Absent = this IS the

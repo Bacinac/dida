@@ -3,25 +3,25 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { Button, Dialogs, Frame, NewVersion, Toasts, i18n, theme, type Section } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
-  import { devices } from "$lib/store.svelte";
-  import { replay } from "$lib/replay.svelte";
-  import { translations } from "$lib/translations.svelte";
-  import { geo } from "$lib/geolocation.svelte";
-  import { push } from "$lib/push.svelte";
-  import { ui } from "$lib/shell.svelte";
-  import { CONSUMER_PAGES, PHONE_TAB_ORDER } from "$lib/pages";
-  import { SETTINGS_GROUPS } from "$lib/settingsNav";
-  import Brand from "$lib/Brand.svelte";
-  import TopBar from "$lib/TopBar.svelte";
-  import AssistantPanel from "$lib/AssistantPanel.svelte";
-  import { version } from "$lib/version.svelte";
-  import { help } from "$lib/help";
-  import { nativeBridge } from "$lib/native";
-  import { errMsg } from "$lib/errors";
-  import { toasts } from "$lib/kit";
+  import { Button, Dialogs, Frame, NewVersion, Toasts, i18n, theme, type Section } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { replay } from "#lib/replay.svelte.js";
+  import { translations } from "#lib/translations.svelte.js";
+  import { geo } from "#lib/geolocation.svelte.js";
+  import { push } from "#lib/push.svelte.js";
+  import { ui } from "#lib/shell.svelte.js";
+  import { CONSUMER_PAGES, PHONE_TAB_ORDER } from "#lib/pages.js";
+  import { SETTINGS_GROUPS } from "#lib/settingsNav.js";
+  import Brand from "#lib/Brand.svelte";
+  import TopBar from "#lib/TopBar.svelte";
+  import AssistantPanel from "#lib/AssistantPanel.svelte";
+  import { version } from "#lib/version.svelte.js";
+  import { help } from "#lib/help.js";
+  import { nativeBridge } from "#lib/native.js";
+  import { errMsg } from "#lib/errors.js";
+  import { toasts } from "#lib/kit/index.js";
 
   let { children } = $props();
 
@@ -205,7 +205,7 @@
 
   async function logout() {
     await auth.logout();
-    goto("/login", { replaceState: true });
+    goto("/login", { replace: true });
   }
 
   // The wall panel (/panel), phone onboarding (/onboard) and /login render bare —

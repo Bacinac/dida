@@ -4,12 +4,12 @@ const api = { askAssistant: vi.fn() };
 const speech = {
   listening: false, stop: vi.fn(), silence: vi.fn(), say: vi.fn(), start: vi.fn(),
 };
-vi.mock("$lib/api", () => ({ api, Unauthorized: class Unauthorized extends Error {} }));
-vi.mock("$lib/speech.svelte", () => ({ speech }));
+vi.mock("#lib/api.js", () => ({ api, Unauthorized: class Unauthorized extends Error {} }));
+vi.mock("#lib/speech.svelte.js", () => ({ speech }));
 
-const { assistant } = await import("$lib/assistant.svelte");
-const { ui } = await import("$lib/shell.svelte");
-const { auth } = await import("$lib/auth.svelte");
+const { assistant } = await import("#lib/assistant.svelte.js");
+const { ui } = await import("#lib/shell.svelte.js");
+const { auth } = await import("#lib/auth.svelte.js");
 
 const USER_A = { id: "user-a", username: "same-name", role: "admin" };
 const USER_B = { id: "user-b", username: "same-name", role: "user" };

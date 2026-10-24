@@ -3,8 +3,8 @@
 // one temperature). Pure, live-derivable from the store; the config decides which caps
 // show and which sensor readings are excluded from a mean.
 
-import type { SensorConfig } from "$lib/api";
-import type { Device } from "$lib/store.svelte";
+import type { SensorConfig } from "#lib/api.js";
+import type { Device } from "#lib/store.svelte.js";
 
 // Default order for a ROOM label: comfort first (temperature, humidity), then air
 // quality, then weather — illuminance last (a light level, not a comfort headline).

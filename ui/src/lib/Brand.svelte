@@ -1,5 +1,5 @@
 <script lang="ts">
-  import logo from "$lib/dida-logo.svg";
+  import logo from "#lib/dida-logo.svg";
 
   // Without a size the logo takes its height from where it stands: the kit's frame
   // and about page size every product's mark alike. `md` is BABA's 168 matched by

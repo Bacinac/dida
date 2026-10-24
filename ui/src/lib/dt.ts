@@ -1,7 +1,7 @@
 // Every date and time the UI shows goes through here: one shape per kind of moment,
 // in the active language, 24-hour in both. `toLocale*String` / `Intl.DateTimeFormat`
 // anywhere else is a test failure (dt.test.ts).
-import { i18n, type Locale } from "$lib/kit";
+import { i18n, type Locale } from "#lib/kit/index.js";
 
 type When = Date | number | string;
 

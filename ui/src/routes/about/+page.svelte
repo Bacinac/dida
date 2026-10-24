@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { About } from "$lib/kit";
-  import Brand from "$lib/Brand.svelte";
-  import { t } from "$lib/i18n";
-  import { version } from "$lib/version.svelte";
+  import { About } from "#lib/kit/index.js";
+  import Brand from "#lib/Brand.svelte";
+  import { t } from "#lib/i18n/index.js";
+  import { version } from "#lib/version.svelte.js";
 </script>
 
 <svelte:head><title>DIDA</title></svelte:head>

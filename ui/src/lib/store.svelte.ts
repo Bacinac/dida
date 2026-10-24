@@ -4,12 +4,12 @@
 // thin client-side projection — the same "current state = projection of events"
 // shape the engine uses server-side.
 
-import { api, stateWs, Unauthorized, type Area, type Entity, type FloorPoly, type GlowShape, type MarkerStyle, type MediaConfig, type Scalar, type LiveEvent, type SensorConfig, type StateEvent } from "$lib/api";
-import { auth } from "$lib/auth.svelte";
-import { toasts } from "$lib/kit";
-import { t, type MessageKey } from "$lib/i18n";
-import { errMsg } from "$lib/errors";
-import { tr } from "$lib/translations.svelte";
+import { api, stateWs, Unauthorized, type Area, type Entity, type FloorPoly, type GlowShape, type MarkerStyle, type MediaConfig, type Scalar, type LiveEvent, type SensorConfig, type StateEvent } from "#lib/api.js";
+import { auth } from "#lib/auth.svelte.js";
+import { toasts } from "#lib/kit/index.js";
+import { t, type MessageKey } from "#lib/i18n/index.js";
+import { errMsg } from "#lib/errors.js";
+import { tr } from "#lib/translations.svelte.js";
 
 export type Conn = "connecting" | "live" | "offline";
 

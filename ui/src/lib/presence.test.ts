@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   LAST_ZONE_MAX_MS, PRESENCE_STALE_MS, lastKnownColor, locationLabel, persons,
   presenceStatus,
-} from "$lib/presence";
+} from "#lib/presence.js";
 
 const NOW = new Date("2026-08-08T14:00:00").getTime();
 

@@ -2,11 +2,11 @@
   // Admin editor for the GLOBAL volume presets (Quiet/Normal/Loud …) shown on every
   // zone's volume row. Rendered at the top of the media source editor. Edits a local
   // draft; saves on demand (the server sorts ascending, so buttons read low→high).
-  import { errMsg } from "$lib/errors";
-  import { Button, SaveButton } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { volume, volumeColor } from "$lib/volume.svelte";
-  import type { VolumePreset } from "$lib/api";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, SaveButton } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { volume, volumeColor } from "#lib/volume.svelte.js";
+  import type { VolumePreset } from "#lib/api.js";
 
   const clone = (ps: VolumePreset[]): VolumePreset[] => ps.map((p) => ({ label: p.label, value: p.value }));
 

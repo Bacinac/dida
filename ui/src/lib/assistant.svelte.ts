@@ -1,8 +1,8 @@
-import { api, Unauthorized, type AssistantTurn } from "$lib/api";
-import { errMsg } from "$lib/errors";
-import { t, type MessageKey } from "$lib/i18n";
-import { ui } from "$lib/shell.svelte";
-import { speech } from "$lib/speech.svelte";
+import { api, Unauthorized, type AssistantTurn } from "#lib/api.js";
+import { errMsg } from "#lib/errors.js";
+import { t, type MessageKey } from "#lib/i18n/index.js";
+import { ui } from "#lib/shell.svelte.js";
+import { speech } from "#lib/speech.svelte.js";
 
 type Message = { role: "user" | "assistant"; content: string; actions?: { type: string }[] };
 

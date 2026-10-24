@@ -6,7 +6,7 @@
 // `page` = a CONSUMER_PAGES key gated by allowed_pages (devices/adapters). A group
 // is shown when ANY of its tabs is visible; its landing is the first visible tab.
 
-import type { MessageKey } from "$lib/i18n";
+import type { MessageKey } from "#lib/i18n/index.js";
 
 export type SettingsTab = { href: string; key: MessageKey; admin?: boolean; page?: string };
 export type SettingsGroup = { key: MessageKey; tabs: SettingsTab[] };

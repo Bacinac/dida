@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { AiProviderCard, Notice, type AiRole } from "$lib/kit";
-  import { api, type AiSettings } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
+  import { AiProviderCard, Notice, type AiRole } from "#lib/kit/index.js";
+  import { api, type AiSettings } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   const ROLE_WORDS: Record<string, [MessageKey, MessageKey]> = {
     chat: ["settings.aiChat", "settings.aiChatHint"],

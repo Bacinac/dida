@@ -4,9 +4,9 @@
   // can't see (admin-only / not in allowed_pages) are filtered out; a group with a
   // single visible tab shows no bar.
   import { page } from "$app/state";
-  import { auth } from "$lib/auth.svelte";
-  import { t } from "$lib/i18n";
-  import { SETTINGS_GROUPS, type SettingsTab } from "$lib/settingsNav";
+  import { auth } from "#lib/auth.svelte.js";
+  import { t } from "#lib/i18n/index.js";
+  import { SETTINGS_GROUPS, type SettingsTab } from "#lib/settingsNav.js";
 
   let { children } = $props();
 

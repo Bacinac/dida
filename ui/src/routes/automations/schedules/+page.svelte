@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Schedule } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { Button, Card, PageActions, Picks, SaveButton, dialog, formatNumber, i18n } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { isoDate } from "$lib/dt";
-  import { auth } from "$lib/auth.svelte";
+  import { api, type Schedule } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Card, PageActions, Picks, SaveButton, dialog, formatNumber, i18n } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { isoDate } from "#lib/dt.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   let beats = $state<Schedule[]>([]);
   let msg = $state<string | null>(null);

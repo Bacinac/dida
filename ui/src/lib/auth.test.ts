@@ -7,11 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = { me: vi.fn(), login: vi.fn(), logout: vi.fn() };
 const assistant = { setIdentity: vi.fn() };
 class Unauthorized extends Error {}
-vi.mock("$lib/api", () => ({ api, Unauthorized }));
-vi.mock("$lib/kit", () => ({ theme: { setTheme: vi.fn() }, i18n: { set: vi.fn() } }));
-vi.mock("$lib/assistant.svelte", () => ({ assistant }));
+vi.mock("#lib/api.js", () => ({ api, Unauthorized }));
+vi.mock("#lib/kit/index.js", () => ({ theme: { setTheme: vi.fn() }, i18n: { set: vi.fn() } }));
+vi.mock("#lib/assistant.svelte.js", () => ({ assistant }));
 
-const { auth } = await import("$lib/auth.svelte");
+const { auth } = await import("#lib/auth.svelte.js");
 
 const ME = { id: "user-a", username: "marko", role: "admin", allowed_pages: null, can_control: true };
 

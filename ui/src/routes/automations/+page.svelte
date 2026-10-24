@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Automation, type AutomationDef, type AutomationRun, type Condition, type Scalar, type Trigger } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { capBadge, capLabel, capMeta, capRank, cmdLabel, commandsFor, entityType, isActuator, typeLabel, valueKind, optionLabel } from "$lib/capabilities";
-  import { Button, Notice, PageActions, Picks, SaveButton, Toggle, dialog, formatNumber } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { SECTION_TITLE_CLASS, SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import EntityPicker, { pickerItem, type PickerItem } from "$lib/EntityPicker.svelte";
+  import { api, type Automation, type AutomationDef, type AutomationRun, type Condition, type Scalar, type Trigger } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { capBadge, capLabel, capMeta, capRank, cmdLabel, commandsFor, entityType, isActuator, typeLabel, valueKind, optionLabel } from "#lib/capabilities.js";
+  import { Button, Notice, PageActions, Picks, SaveButton, Toggle, dialog, formatNumber } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { SECTION_TITLE_CLASS, SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import EntityPicker, { pickerItem, type PickerItem } from "#lib/EntityPicker.svelte";
 
   const OPERATORS = ["==", "!=", "<", "<=", ">", ">="];
 

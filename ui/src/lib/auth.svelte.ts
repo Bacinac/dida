@@ -1,9 +1,9 @@
 // Auth state. One /auth/me probe on load decides authenticated-or-not; the
 // layout guard reacts to `user`. Cookie is HttpOnly so JS never sees the token.
 
-import { api, Unauthorized, type Me } from "$lib/api";
-import { i18n, theme, type Locale, type Theme } from "$lib/kit";
-import { assistant } from "$lib/assistant.svelte";
+import { api, Unauthorized, type Me } from "#lib/api.js";
+import { i18n, theme, type Locale, type Theme } from "#lib/kit/index.js";
+import { assistant } from "#lib/assistant.svelte.js";
 
 class AuthStore {
   #user = $state<Me | null>(null);

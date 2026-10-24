@@ -9,7 +9,7 @@
 // being manually pickable — `button` is exactly that, a canonical device type the
 // picker does not list.
 import { describe, expect, it } from "vitest";
-import { ICONS, ICON_LIST } from "$lib/deviceIcons";
+import { ICONS, ICON_LIST } from "#lib/deviceIcons.js";
 
 describe("the icon set", () => {
   it("every icon the picker offers has an SVG", () => {

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button, Picks, formatNumber } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { typeLabel, adapterLabel } from "$lib/capabilities";
-  import { devices } from "$lib/store.svelte";
+  import { Button, Picks, formatNumber } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { typeLabel, adapterLabel } from "#lib/capabilities.js";
+  import { devices } from "#lib/store.svelte.js";
 
   let {
     q = $bindable(),

@@ -21,7 +21,7 @@ PW = os.environ.get("DIDA_DEMO_PASS", "")
 OUT = Path(os.environ.get("DIDA_DEMO_OUT", "/out"))
 
 ROUTES = [
-    "/floorplan", "/cameras", "/media", "/media/spotify", "/heating", "/automations",
+    "/floorplan", "/cameras", "/media", "/heating", "/automations",
     "/automations/schedules", "/history", "/panel", "/entry", "/about", "/account",
     "/settings/adapters", "/settings/alerts", "/settings/areas", "/settings/backup",
     "/settings/commands", "/settings/contacts", "/settings/devices", "/settings/floors",

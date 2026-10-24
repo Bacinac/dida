@@ -6,8 +6,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TARGETS, MAX_OFFSET, TARGET_MAX, TARGET_MIN,
-  boilerRunning, effectiveTarget, hasOverride, roomLive, roomsCalling, valveLive,
-} from "$lib/heating";
+  boilerRunning, effectiveTarget, hasOverride, roomHeating, roomLive, roomsCalling, valveLive,
+} from "#lib/heating.js";
 
 const cap = (v: unknown) => ({ value: v, unit: null, updatedAt: 1 });
 const dev = (entityId: string, caps: Record<string, unknown>) =>
@@ -81,6 +81,15 @@ describe("reading the live entities", () => {
     expect(boilerRunning(byId(dev("heating:system", { binary: true })))).toBe(true);
     expect(boilerRunning(byId(dev("heating:system", { binary: false })))).toBe(false);
     expect(boilerRunning(byId())).toBe(false);
+  });
+
+  it("a room is heated only while it calls AND the boiler runs", () => {
+    const calling = dev("heating:room:7", { binary: true });
+    expect(roomHeating(byId(calling, dev("heating:system", { binary: true })), 7)).toBe(true);
+    expect(roomHeating(byId(calling, dev("heating:system", { binary: false })), 7)).toBe(false);
+    expect(roomHeating(byId(dev("heating:room:7", { binary: false }), dev("heating:system", { binary: true })), 7))
+      .toBe(false);
+    expect(roomHeating(byId(calling, dev("heating:system", { binary: true })), 8)).toBe(false);
   });
 
   it("rooms calling for heat is a count, and absent means none", () => {

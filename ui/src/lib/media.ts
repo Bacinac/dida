@@ -3,9 +3,9 @@
 // caps into a friendly now-playing shape and wraps the command calls. The UI
 // recomposes the scalar caps into a single player — the core stays generic.
 
-import { api } from "$lib/api";
-import { t, type MessageKey } from "$lib/i18n";
-import type { Device } from "$lib/store.svelte";
+import { api } from "#lib/api.js";
+import { t, type MessageKey } from "#lib/i18n/index.js";
+import type { Device } from "#lib/store.svelte.js";
 
 // Caps that belong to the media group — DeviceCard renders these via the
 // MediaPlayer component instead of the generic capability list.

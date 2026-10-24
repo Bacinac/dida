@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { auth } from "$lib/auth.svelte";
-  import { Button, formatNumber } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import type { Device } from "$lib/store.svelte";
+  import { auth } from "#lib/auth.svelte.js";
+  import { Button, formatNumber } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import type { Device } from "#lib/store.svelte.js";
   import {
     HVAC_MODES, FAN_MODES, TEMP_MIN, TEMP_MAX,
     hvacMode, fanMode, targetTemp, currentTemp, isOff,
     setHvacMode, setFanMode, setTargetTemp,
-  } from "$lib/climate";
+  } from "#lib/climate.js";
 
   let { device, onHistory }: { device: Device; onHistory?: (entityId: string, cap: string) => void } = $props();
   const readOnly = $derived(!auth.canControl); // view-only user: no actuation

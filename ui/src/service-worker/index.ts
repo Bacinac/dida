@@ -22,7 +22,6 @@ sw.addEventListener("activate", (event) => {
     (async () => {
       await sw.clients.claim();
       for (const c of await sw.clients.matchAll({ type: "window" })) {
-        // @ts-expect-error navigate() exists on WindowClient
         c.navigate(c.url).catch(() => {});
       }
     })(),

@@ -1,11 +1,11 @@
-// Numbers and dates are shaped in one place each (formatNumber, $lib/dt): a
+// Numbers and dates are shaped in one place each (formatNumber, #lib/dt): a
 // hand-rolled `toFixed` shows 2.5 to a Croatian reader, and every inline
 // `toLocaleString` picked its own locale, order and clock.
 import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { clock, dateTime, dayTime, isoDate, longDate, shortDateTime } from "$lib/dt";
-import { formatNumber, i18n } from "$lib/kit";
+import { clock, dateTime, dayTime, isoDate, longDate, shortDateTime } from "#lib/dt.js";
+import { formatNumber, i18n } from "#lib/kit/index.js";
 
 const HOME = { "src/lib/dt.ts": true, "src/lib/kit/i18n.svelte.ts": true } as Record<string, boolean>;
 const RAW = /\.toFixed\(|\.toLocale(?:Date|Time)?String\(|Intl\.(?:DateTimeFormat|NumberFormat)\(/;

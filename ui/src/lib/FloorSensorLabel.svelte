@@ -6,9 +6,9 @@
   // (invisible when empty). Each value is tappable → its history inline.
   // (Outdoor vs indoor weather sensors are split into separate markers upstream,
   // so one label is always one location.)
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import { capMeta, capRank, formatValue, hasPresenceCap, presenceOccupied, PLAN_HIDDEN_READINGS, stateColor } from "$lib/capabilities";
-  import type { CapState, Device } from "$lib/store.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import { capMeta, capRank, formatValue, hasPresenceCap, presenceOccupied, PLAN_HIDDEN_READINGS, stateColor } from "#lib/capabilities.js";
+  import type { CapState, Device } from "#lib/store.svelte.js";
 
   // `show` scopes what this label renders: "readings" = the value label only (no
   // presence), "motion" = the bare presence dot only (no readings). A sensor that

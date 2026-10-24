@@ -7,8 +7,8 @@
 // Identity is always entity_id/device_key — this is a pure display dictionary
 // keyed on the source string, so translating never affects a reference.
 
-import { api } from "$lib/api";
-import { i18n } from "$lib/kit";
+import { api } from "#lib/api.js";
+import { i18n } from "#lib/kit/index.js";
 
 class Translations {
   // key (English descriptor) -> localised value, for the ACTIVE language.

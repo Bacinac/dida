@@ -1,30 +1,30 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import { devices, type Device } from "$lib/store.svelte";
-  import { errMsg } from "$lib/errors";
-  import { api, type VacuumLive, type VacuumMap, type VacuumMapEntry, type VacuumPlacement, type FloorPoly, type Floor, type Area, type Border, type SensorConfig } from "$lib/api";
-  import { capLabel, capMeta, formatValue, stateColor, optionLabel } from "$lib/capabilities";
-  import { primaryCap, readingDefaultIn, type RoomCap, type RoomReading } from "$lib/roomSensors";
-  import { ICON_LIST } from "$lib/deviceIcons";
-  import { pointInPolygon, polygonCentroid, toPoints } from "$lib/floorGeometry";
-  import { buildGlows, buildPlanItems, buildRoomLabels, DEFAULT_R, isPlacedAny, isPlug, isSensorLabel, itemPosOn, opensControls, planCandidates, type PlaceItem, type RoomLabelItem } from "$lib/floorplanItems";
-  import FloorControl from "$lib/FloorControl.svelte";
-  import DeviceDetail from "$lib/DeviceDetail.svelte";
-  import FloorGlow from "$lib/FloorGlow.svelte";
-  import FloorplanPlaceholder from "$lib/FloorplanPlaceholder.svelte";
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import FloorMarker from "$lib/FloorMarker.svelte";
-  import FloorSensorLabel from "$lib/FloorSensorLabel.svelte";
-  import RoomSensorLabel from "$lib/RoomSensorLabel.svelte";
-  import FloorHistory from "$lib/FloorHistory.svelte";
-  import FloorReplay from "$lib/FloorReplay.svelte";
-  import { replay } from "$lib/replay.svelte";
-  import PresencePanel from "$lib/PresencePanel.svelte";
-  import { Button, PageActions, Picks, SaveButton, formatNumber, toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
-  import { ui } from "$lib/shell.svelte";
+  import { SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { devices, type Device } from "#lib/store.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { api, type VacuumLive, type VacuumMap, type VacuumMapEntry, type VacuumPlacement, type FloorPoly, type Floor, type Area, type Border, type SensorConfig } from "#lib/api.js";
+  import { capLabel, capMeta, formatValue, stateColor, optionLabel } from "#lib/capabilities.js";
+  import { primaryCap, readingDefaultIn, type RoomCap, type RoomReading } from "#lib/roomSensors.js";
+  import { ICON_LIST } from "#lib/deviceIcons.js";
+  import { pointInPolygon, polygonCentroid, toPoints } from "#lib/floorGeometry.js";
+  import { buildGlows, buildPlanItems, buildRoomLabels, DEFAULT_R, isPlacedAny, isPlug, isSensorLabel, itemPosOn, opensControls, planCandidates, type PlaceItem, type RoomLabelItem } from "#lib/floorplanItems.js";
+  import FloorControl from "#lib/FloorControl.svelte";
+  import DeviceDetail from "#lib/DeviceDetail.svelte";
+  import FloorGlow from "#lib/FloorGlow.svelte";
+  import FloorplanPlaceholder from "#lib/FloorplanPlaceholder.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import FloorMarker from "#lib/FloorMarker.svelte";
+  import FloorSensorLabel from "#lib/FloorSensorLabel.svelte";
+  import RoomSensorLabel from "#lib/RoomSensorLabel.svelte";
+  import FloorHistory from "#lib/FloorHistory.svelte";
+  import FloorReplay from "#lib/FloorReplay.svelte";
+  import { replay } from "#lib/replay.svelte.js";
+  import PresencePanel from "#lib/PresencePanel.svelte";
+  import { Button, PageActions, Picks, SaveButton, formatNumber, toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { ui } from "#lib/shell.svelte.js";
 
   let floors = $state<Floor[]>([]);
   let floorsLoaded = $state(false); // gates the sample-plan placeholder (no flash before the real scaffold)
@@ -105,7 +105,7 @@
   // overlay over the floor, below the markers so devices stay legible.
   const isNight = $derived(devices.byId["helper:daynight"]?.caps?.text?.value === "night");
 
-  // Item derivation (grouping, labels, glows) lives in $lib/floorplanItems —
+  // Item derivation (grouping, labels, glows) lives in #lib/floorplanItems —
   // shared with the wall panel's read-only plan so both surfaces agree.
   const candidates = $derived(planCandidates());
   const items = $derived.by<PlaceItem[]>(() => buildPlanItems(candidates));
@@ -1582,7 +1582,7 @@
         onpointerdown={(e) => onRoomDown(e, rl)} onpointermove={(e) => onRoomMove(e, rl)} onpointerup={(e) => onRoomUp(e, rl)}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); roomOpen = roomOpen?.area.id === rl.area.id ? null : rl; } }}
         role="button" tabindex="0" aria-label={devices.roomLabel(rl.area)}>
-        <RoomSensorLabel caps={rl.caps} />
+        <RoomSensorLabel caps={rl.caps} heating={rl.heating} />
       </div>
     {/each}
 

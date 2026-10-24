@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type AlertHistoryRow, type AlertRecipients, type AlertRule } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { Card, Notice, SaveButton, Tag, formatNumber } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
+  import { api, type AlertHistoryRow, type AlertRecipients, type AlertRule } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Card, Notice, SaveButton, Tag, formatNumber } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
 
   let rules = $state<AlertRule[]>([]);
   let history = $state<AlertHistoryRow[]>([]);

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Card, dialog } from "$lib/kit";
-  import { api, type Floor } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, Card, dialog } from "#lib/kit/index.js";
+  import { api, type Floor } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   let floors = $state<Floor[]>([]);
   let newName = $state("");

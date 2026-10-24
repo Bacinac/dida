@@ -15,17 +15,17 @@
   // resizes any tile by width/height in edit mode; the arrangement (order + spans)
   // is shared and persisted.
   import { onMount, onDestroy } from "svelte";
-  import { devices } from "$lib/store.svelte";
-  import { tr } from "$lib/translations.svelte";
-  import { auth } from "$lib/auth.svelte";
-  import { api, type CameraEvent } from "$lib/api";
-  import { Button, PageActions, Tag, toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { sceneLit } from "$lib/capabilities";
-  import { errMsg } from "$lib/errors";
-  import CameraSnap from "$lib/CameraSnap.svelte";
-  import LiveVideo from "$lib/LiveVideo.svelte";
+  import { devices } from "#lib/store.svelte.js";
+  import { tr } from "#lib/translations.svelte.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { api, type CameraEvent } from "#lib/api.js";
+  import { Button, PageActions, Tag, toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { sceneLit } from "#lib/capabilities.js";
+  import { errMsg } from "#lib/errors.js";
+  import CameraSnap from "#lib/CameraSnap.svelte";
+  import LiveVideo from "#lib/LiveVideo.svelte";
 
   // The sister NVR's address is deployment-specific — hardcoding one owner's
   // hostname shipped it to every install, and put a live link to a private

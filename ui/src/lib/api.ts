@@ -1,9 +1,9 @@
 // Thin typed client for the DIDA API. The browser always goes through
 // SvelteKit, which proxies /api/* to the FastAPI service (see vite.config.ts).
 
-import { tr } from "$lib/translations.svelte";
-import { ApiError, refusal, send, TRANSFER_MS, type AiSetting, type Locale, type Sending, type Theme } from "$lib/kit";
-import { t } from "$lib/i18n";
+import { tr } from "#lib/translations.svelte.js";
+import { ApiError, refusal, send, TRANSFER_MS, type AiSetting, type Locale, type Sending, type Theme } from "#lib/kit/index.js";
+import { t } from "#lib/i18n/index.js";
 
 const API = "/api";
 

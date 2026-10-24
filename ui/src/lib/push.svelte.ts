@@ -9,8 +9,8 @@
 // one left by another user reads "foreign", not "active". Requires a secure
 // context (HTTPS / localhost); on iOS the app must be installed to the home screen.
 
-import { dev } from "$app/environment";
-import { api } from "$lib/api";
+import { dev } from "$app/env";
+import { api } from "#lib/api.js";
 
 export type PushStatus =
   | "off" | "pending" | "active" | "foreign" | "denied" | "insecure" | "unsupported" | "error";
@@ -37,7 +37,7 @@ class PushOptIn {
       this.status = "insecure"; // plain-HTTP LAN access — no SW, no push
       return;
     }
-    if (!("serviceWorker" in navigator) || !("Notification" in window)) {
+    if (!("serviceWorker" in navigator)) {
       this.status = "unsupported";
       return;
     }
@@ -46,7 +46,7 @@ class PushOptIn {
       this.#reg = await navigator.serviceWorker.register("/service-worker.js", {
         type: dev ? "module" : "classic",
       });
-      if (!this.#reg.pushManager) {
+      if (!("Notification" in window) || !this.#reg.pushManager) {
         this.status = "unsupported"; // e.g. iOS Safari tab (not installed as PWA)
         return;
       }

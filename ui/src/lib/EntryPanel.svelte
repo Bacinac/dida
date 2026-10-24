@@ -8,16 +8,16 @@
   // state source (the door's Zigbee contact, a gate's BABA occupancy zone).
   // Admins get an inline editor to pick the backing devices.
   import { onMount } from "svelte";
-  import { Button, Notice, SaveButton, Tag, dialog } from "$lib/kit";
-  import { api, type EntryConfig, type EntrySlot } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { devices } from "$lib/store.svelte";
-  import { t } from "$lib/i18n";
-  import { tr } from "$lib/translations.svelte";
-  import { errMsg } from "$lib/errors";
-  import { LABEL_CLASS, SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import EntityPicker, { pickerItem, type PickerItem } from "$lib/EntityPicker.svelte";
+  import { Button, Notice, SaveButton, Tag, dialog } from "#lib/kit/index.js";
+  import { api, type EntryConfig, type EntrySlot } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { t } from "#lib/i18n/index.js";
+  import { tr } from "#lib/translations.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { LABEL_CLASS, SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import EntityPicker, { pickerItem, type PickerItem } from "#lib/EntityPicker.svelte";
 
   let cfg = $state<EntryConfig | null>(null);
   let err = $state<string | null>(null);

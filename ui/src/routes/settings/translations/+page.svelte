@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Card, Notice } from "$lib/kit";
-  import { api } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
-  import { translations } from "$lib/translations.svelte";
+  import { Button, Card, Notice } from "#lib/kit/index.js";
+  import { api } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { translations } from "#lib/translations.svelte.js";
 
   // Every distinct display descriptor exposed on the UI (entity facet names +
   // device headers). English IS the key; we curate the Croatian (and any future

@@ -4,14 +4,14 @@
   // like a physical remote — the thumb goes where the arrow is) and equally usable
   // with a mouse. Drives a device's `press` button siblings via the Remote lib;
   // only keys the device actually exposes are shown.
-  import { api } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { errMsg } from "$lib/errors";
-  import { toasts } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { mediaCmd, nextTrack, prevTrack, setSource, sourceOptions, sourceValue } from "$lib/media";
-  import { pressKey, remoteButtons, remoteHead, type RemoteKey } from "$lib/remote";
-  import type { Device } from "$lib/store.svelte";
+  import { api } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { toasts } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { mediaCmd, nextTrack, prevTrack, setSource, sourceOptions, sourceValue } from "#lib/media.js";
+  import { pressKey, remoteButtons, remoteHead, type RemoteKey } from "#lib/remote.js";
+  import type { Device } from "#lib/store.svelte.js";
 
   // `showSource` hides the built-in activity picker when a parent (the MediaHub)
   // already owns the source selection. `layout` = "split" puts the D-pad on the

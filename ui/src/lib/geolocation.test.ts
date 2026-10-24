@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = { reportPresence: vi.fn() };
-vi.mock("$lib/api", () => ({ api }));
-const { geo } = await import("$lib/geolocation.svelte");
+vi.mock("#lib/api.js", () => ({ api }));
+const { geo } = await import("#lib/geolocation.svelte.js");
 
 let watch: PositionCallback;
 let visibility: () => void;

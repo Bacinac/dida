@@ -6,8 +6,8 @@
   // stream at all (a Frigate without go2rtc), or one in a codec this browser cannot
   // decode (HEVC outside Safari and hardware Chrome), gets its frame once a second —
   // the latter says so, since a picture that only looks live is the worse failure.
-  import { t } from "$lib/i18n";
-  import CameraSnap from "$lib/CameraSnap.svelte";
+  import { t } from "#lib/i18n/index.js";
+  import CameraSnap from "#lib/CameraSnap.svelte";
 
   let { entityId, alt = "", class: klass = "" }: { entityId: string; alt?: string; class?: string } = $props();
 

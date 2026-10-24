@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, SaveButton, dialog, formatRuntime } from "$lib/kit";
-  import { api, type Settings, type SettingCheck } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, SaveButton, dialog, formatRuntime } from "#lib/kit/index.js";
+  import { api, type Settings, type SettingCheck } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   // The OwnTracks payload key. Its Test reads the freshest received location —
   // the only honest end-to-end signal a symmetric key has. AI keys live on

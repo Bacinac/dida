@@ -9,7 +9,7 @@
 // set in this order. Adding/removing a page = edit this array AND that tuple
 // (two runtimes, one list — codegen isn't worth it for a handful of pages).
 
-import type { MessageKey } from "$lib/i18n";
+import type { MessageKey } from "#lib/i18n/index.js";
 
 export type ConsumerPage = {
   /** Stable id persisted in users.allowed_pages; matches a PAGE_ORDER entry. */

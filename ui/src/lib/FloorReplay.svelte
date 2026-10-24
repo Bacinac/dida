@@ -3,10 +3,10 @@
   // itself needs no replay code — it renders whatever the device store holds,
   // and while this is open the store holds a past instant.
 
-  import { replay, SPEEDS } from "$lib/replay.svelte";
-  import { Button } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { dayTime } from "$lib/dt";
+  import { replay, SPEEDS } from "#lib/replay.svelte.js";
+  import { Button } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { dayTime } from "#lib/dt.js";
 
   let { onclose }: { onclose: () => void } = $props();
 

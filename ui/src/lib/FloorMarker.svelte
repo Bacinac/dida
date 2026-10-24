@@ -2,11 +2,11 @@
   // One live marker on the floor plan (HA-floorplan style): a state-aware icon
   // that glows when on, plus a glanceable value badge for covers / climate /
   // sensors. Takes the placement item's member entities + resolved type/name.
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import { glance, hasPresenceCap, presenceOccupied, sceneLit } from "$lib/capabilities";
-  import { t } from "$lib/i18n";
-  import { clock } from "$lib/dt";
-  import type { CapState, Device } from "$lib/store.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import { glance, hasPresenceCap, presenceOccupied, sceneLit } from "#lib/capabilities.js";
+  import { t } from "#lib/i18n/index.js";
+  import { clock } from "#lib/dt.js";
+  import type { CapState, Device } from "#lib/store.svelte.js";
 
   let { members, icon, name, selected = false, plug = false, tint = null }: {
     members: Device[]; icon: string; name: string; selected?: boolean; plug?: boolean;

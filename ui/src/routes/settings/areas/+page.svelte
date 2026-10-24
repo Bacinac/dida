@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Card, dialog } from "$lib/kit";
-  import { api, type Area } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { t, type MessageKey } from "$lib/i18n";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, Card, dialog } from "#lib/kit/index.js";
+  import { api, type Area } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   // A room's kind drives its fallback name and floor-plan icon.
   const KINDS = [

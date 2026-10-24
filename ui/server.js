@@ -13,7 +13,7 @@
 // API, so it needs no special handling here). Mirrors vite.config.ts:server.proxy.
 import http from "node:http";
 import { readFileSync } from "node:fs";
-import httpProxy from "http-proxy";
+import { createProxyServer } from "http-proxy-3";
 import { handler } from "./build/handler.js";
 
 // Android App Links verification (the companion app claims our https URLs, so
@@ -30,7 +30,7 @@ const PORT = Number(process.env.PORT) || 5173;
 
 // xfwd:true forwards X-Forwarded-For so the API's per-IP login rate limiter
 // buckets each real client, not this proxy's address (same reason vite sets it).
-const proxy = httpProxy.createProxyServer({
+const proxy = createProxyServer({
   target: API_TARGET,
   changeOrigin: true,
   xfwd: true,
@@ -75,9 +75,6 @@ const server = http.createServer((req, res) => {
 server.on("upgrade", (req, socket, head) => {
   if (req.url === "/api" || req.url.startsWith("/api/")) {
     req.url = stripApi(req.url);
-    // changeOrigin rewrites Host, and http-proxy forwards the browser's only on plain
-    // requests; the API checks the socket's Origin against it (vite.config.ts too).
-    req.headers["x-forwarded-host"] = req.headers.host;
     proxy.ws(req, socket, head);
   } else {
     socket.destroy();

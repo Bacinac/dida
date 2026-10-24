@@ -2,11 +2,11 @@
   // Audio signal-path — the chain the now-playing audio passes through, source
   // → speaker, with a live measurement (and bit-perfect proof) at every stage
   // DIDA can see. Data is fetched from /media/pipeline; this owns presentation.
-  import { api, type Pipeline, type PipeNode } from "$lib/api";
-  import { SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { Tag } from "$lib/kit";
+  import { api, type Pipeline, type PipeNode } from "#lib/api.js";
+  import { SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { Tag } from "#lib/kit/index.js";
 
   let { entityId, trackKey }: { entityId: string; trackKey: string } = $props();
 

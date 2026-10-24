@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { api } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { capBadge, capLabel, capMeta, formatDuration, formatValue, mowerErrorLabel, mowerStateLabel, optionLabel, type ParkedVehicle, parkedFor, parkedSince, parkedVehicle, sceneLit } from "$lib/capabilities";
-  import { clock } from "$lib/clock.svelte";
-  import { tr } from "$lib/translations.svelte";
-  import { errMsg } from "$lib/errors";
-  import { Button, Dialog, Tag, Toggle, formatNumber } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import LiveVideo from "$lib/LiveVideo.svelte";
-  import type { CapState } from "$lib/store.svelte";
+  import { api } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { capBadge, capLabel, capMeta, formatDuration, formatValue, mowerErrorLabel, mowerStateLabel, optionLabel, type ParkedVehicle, parkedFor, parkedSince, parkedVehicle, sceneLit } from "#lib/capabilities.js";
+  import { clock } from "#lib/clock.svelte.js";
+  import { tr } from "#lib/translations.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Dialog, Tag, Toggle, formatNumber } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import LiveVideo from "#lib/LiveVideo.svelte";
+  import type { CapState } from "#lib/store.svelte.js";
 
   let { entityId, capability, cs, options = [], range, compact = false, name, sinceIso }: {
     entityId: string;

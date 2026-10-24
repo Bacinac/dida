@@ -1,22 +1,22 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
-  import { devices } from "$lib/store.svelte";
-  import { api } from "$lib/api";
-  import { Button, Card, Notice, i18n, keep, recall } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { auth } from "$lib/auth.svelte";
-  import type { Area, Floor, RemovedDevice } from "$lib/api";
-  import { DEVICE_TYPES, typeLabel, adapterLabel, capMeta, capRank, formatValue, hasPresenceCap, presenceOccupied, stateColor } from "$lib/capabilities";
-  import { groupDevices, areaRequired, areaExempt, type DeviceUnit } from "$lib/devices";
-  import DeviceCard from "$lib/DeviceCard.svelte";
-  import DeviceRow from "$lib/DeviceRow.svelte";
-  import { roomLabelOff, roomSensorsByArea } from "$lib/floorplanItems";
-  import { primaryCap, roomAggregate } from "$lib/roomSensors";
-  import DeviceDetail from "$lib/DeviceDetail.svelte";
-  import DeviceFilters from "$lib/DeviceFilters.svelte";
-  import PresencePanel from "$lib/PresencePanel.svelte";
-  import { SECTION_TITLE_CLASS } from "$lib/ui";
+  import { browser } from "$app/env";
+  import { devices } from "#lib/store.svelte.js";
+  import { api } from "#lib/api.js";
+  import { Button, Card, Notice, i18n, keep, recall } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import type { Area, Floor, RemovedDevice } from "#lib/api.js";
+  import { DEVICE_TYPES, typeLabel, adapterLabel, capMeta, capRank, formatValue, hasPresenceCap, presenceOccupied, stateColor } from "#lib/capabilities.js";
+  import { groupDevices, areaRequired, areaExempt, type DeviceUnit } from "#lib/devices.js";
+  import DeviceCard from "#lib/DeviceCard.svelte";
+  import DeviceRow from "#lib/DeviceRow.svelte";
+  import { roomLabelOff, roomSensorsByArea } from "#lib/floorplanItems.js";
+  import { primaryCap, roomAggregate } from "#lib/roomSensors.js";
+  import DeviceDetail from "#lib/DeviceDetail.svelte";
+  import DeviceFilters from "#lib/DeviceFilters.svelte";
+  import PresencePanel from "#lib/PresencePanel.svelte";
+  import { SECTION_TITLE_CLASS } from "#lib/ui/index.js";
 
   const list = $derived(devices.list);
   let detailId = $state<string | null>(null);   // device-detail panel target

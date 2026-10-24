@@ -8,24 +8,24 @@
   //
   // No `areaId` → every configured space (the media page). An `areaId` → just that
   // space (a floorplan room). Admins curate the sources inline (no settings page).
-  import { api, type OpusTvItem, type OpusTvLink } from "$lib/api";
-  import { auth } from "$lib/auth.svelte";
-  import { ICONS } from "$lib/deviceIcons";
-  import { errMsg } from "$lib/errors";
-  import { Button, Dialog, Picks, i18n, toasts } from "$lib/kit";
-  import { t, type MessageKey } from "$lib/i18n";
-  import Library from "$lib/Library.svelte";
-  import { mediaSource, mediaTitle, setSource, sourceOptions, sourceValue, transport } from "$lib/media";
-  import { mediaSpaces, resolvedSources, selectSource, sourceIcon, type ResolvedSource } from "$lib/mediaSources";
-  import MediaPlayer from "$lib/MediaPlayer.svelte";
-  import MediaSpaceEditor from "$lib/MediaSpaceEditor.svelte";
-  import VolumeBar from "$lib/VolumeBar.svelte";
-  import RadioBrowse from "$lib/RadioBrowse.svelte";
-  import Remote from "$lib/Remote.svelte";
-  import { remoteButtons } from "$lib/remote";
-  import TvScreen from "$lib/TvScreen.svelte";
-  import { volume, volumeColor } from "$lib/volume.svelte";
-  import { devices } from "$lib/store.svelte";
+  import { api, type OpusTvItem, type OpusTvLink } from "#lib/api.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { ICONS } from "#lib/deviceIcons.js";
+  import { errMsg } from "#lib/errors.js";
+  import { Button, Dialog, Picks, i18n, toasts } from "#lib/kit/index.js";
+  import { t, type MessageKey } from "#lib/i18n/index.js";
+  import Library from "#lib/Library.svelte";
+  import { mediaSource, mediaTitle, setSource, sourceOptions, sourceValue, transport } from "#lib/media.js";
+  import { mediaSpaces, resolvedSources, selectSource, sourceIcon, type ResolvedSource } from "#lib/mediaSources.js";
+  import MediaPlayer from "#lib/MediaPlayer.svelte";
+  import MediaSpaceEditor from "#lib/MediaSpaceEditor.svelte";
+  import VolumeBar from "#lib/VolumeBar.svelte";
+  import RadioBrowse from "#lib/RadioBrowse.svelte";
+  import Remote from "#lib/Remote.svelte";
+  import { remoteButtons } from "#lib/remote.js";
+  import TvScreen from "#lib/TvScreen.svelte";
+  import { volume, volumeColor } from "#lib/volume.svelte.js";
+  import { devices } from "#lib/store.svelte.js";
 
   let { areaId }: { areaId?: number } = $props();
 

@@ -1,6 +1,6 @@
 // Small 2D helpers for the floor plan. All coordinates are in % of the plan
 // container (0–100), matching how markers and polygons are stored.
-import type { FloorPoly } from "$lib/api";
+import type { FloorPoly } from "#lib/api.js";
 
 // One light's contribution to the floor-plan glow overlay (see FloorGlow.svelte).
 export interface GlowSpec {

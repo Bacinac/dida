@@ -8,9 +8,9 @@
 // the "select this source" action through the permission-gated /command path — the
 // registry (areas.media_config) stays the single source of truth for the mapping.
 
-import { api, type MediaSource } from "$lib/api";
-import { isActive } from "$lib/media";
-import { devices, type Device } from "$lib/store.svelte";
+import { api, type MediaSource } from "#lib/api.js";
+import { isActive } from "#lib/media.js";
+import { devices, type Device } from "#lib/store.svelte.js";
 
 /** A registry source resolved against live devices, ready for the widget. */
 export interface ResolvedSource {

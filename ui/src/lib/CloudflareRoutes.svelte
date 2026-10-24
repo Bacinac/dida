@@ -5,11 +5,11 @@
   // ingress actually does, not what was merely stored. A rejected change is rolled
   // back on the host side. Routes are grouped by the origin host, alpha within.
   import { onMount } from "svelte";
-  import { Button, Card, Field, Notice, SaveButton, Toggle, dialog } from "$lib/kit";
-  import { api, type CfTunnelState, type CloudflareApply, type CloudflareRoute, type CloudflareRouteEdit } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { Section } from "$lib/ui";
+  import { Button, Card, Field, Notice, SaveButton, Toggle, dialog } from "#lib/kit/index.js";
+  import { api, type CfTunnelState, type CloudflareApply, type CloudflareRoute, type CloudflareRouteEdit } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { Section } from "#lib/ui/index.js";
 
   const blank = (): CloudflareRouteEdit =>
     ({ hostname: "", service: "", serve: "both", opts: [], section: null, icon: null });

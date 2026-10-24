@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasRoomReadings, isAmbientSensor, numericCaps, primaryCap,
   readingDefaultIn, roomAggregate, roomEligible,
-} from "$lib/roomSensors";
+} from "#lib/roomSensors.js";
 
 const cap = (v: unknown) => ({ value: v, unit: null, updatedAt: 1 });
 function dev(entityId: string, caps: Record<string, unknown>, hiddenCaps: string[] = []) {

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { Button, Notice } from "$lib/kit";
+  import { Button, Notice } from "#lib/kit/index.js";
   import { page } from "$app/state";
-  import { auth } from "$lib/auth.svelte";
-  import { Unauthorized } from "$lib/api";
-  import { t } from "$lib/i18n";
-  import Brand from "$lib/Brand.svelte";
+  import { auth } from "#lib/auth.svelte.js";
+  import { Unauthorized } from "#lib/api.js";
+  import { t } from "#lib/i18n/index.js";
+  import Brand from "#lib/Brand.svelte";
 
   let username = $state("");
   let password = $state("");
@@ -22,7 +22,7 @@
       // Lets the companion app's onboarding send someone through login and back
       // (/login?next=/onboard) instead of stranding them on the floorplan.
       const next = page.url.searchParams.get("next");
-      goto(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
+      await goto(next && next.startsWith("/") && !next.startsWith("//") ? next : "/").catch(() => goto("/"));
     } catch (e) {
       err = e instanceof Unauthorized
         ? t("login.invalid")

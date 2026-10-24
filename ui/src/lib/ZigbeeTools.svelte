@@ -3,12 +3,12 @@
   // every other adapter's special UI has (HomeKit pairing, Tuya cloud pull,
   // ESPHome nodes), so Zigbee is not a page of its own.
   import { onDestroy, onMount } from "svelte";
-  import { Button, Notice, Tag, dialog } from "$lib/kit";
-  import { api, type ZigbeeMap, type ZigbeeNode } from "$lib/api";
-  import { devices } from "$lib/store.svelte";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
+  import { Button, Notice, Tag, dialog } from "#lib/kit/index.js";
+  import { api, type ZigbeeMap, type ZigbeeNode } from "#lib/api.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
 
   let data = $state<ZigbeeMap | null>(null);
   let loadErr = $state<string | null>(null);

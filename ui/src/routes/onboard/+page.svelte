@@ -13,15 +13,15 @@
   //    was consumed by THIS browser session), PWA + OwnTracks as fallbacks;
   //  * iPhone: PWA + OwnTracks one-tap import (no companion app on iOS).
   import { onMount } from "svelte";
-  import { Button, formatNumber } from "$lib/kit";
+  import { Button, formatNumber } from "#lib/kit/index.js";
   import { goto } from "$app/navigation";
-  import { auth } from "$lib/auth.svelte";
-  import { api } from "$lib/api";
-  import { t } from "$lib/i18n";
-  import Brand from "$lib/Brand.svelte";
-  import { nativeBridge, nativeMatches, type NativeStatus } from "$lib/native";
-  import { errMsg } from "$lib/errors";
-  import { toasts } from "$lib/kit";
+  import { auth } from "#lib/auth.svelte.js";
+  import { api } from "#lib/api.js";
+  import { t } from "#lib/i18n/index.js";
+  import Brand from "#lib/Brand.svelte";
+  import { nativeBridge, nativeMatches, type NativeStatus } from "#lib/native.js";
+  import { errMsg } from "#lib/errors.js";
+  import { toasts } from "#lib/kit/index.js";
 
   let ready = $state(false);
   let importUrl = $state<string | null>(null); // owntracks:///config?inline=…

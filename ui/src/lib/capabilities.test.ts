@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAP_META, capMeta, capRank, formatDuration, hasPresenceCap, parkedFor,
   parkedSince, parkedVehicle, parkedVehicleLane, presenceOccupied, sceneLit,
-} from "$lib/capabilities";
+} from "#lib/capabilities.js";
 
 const cap = (v: unknown) => ({ value: v, unit: null, updatedAt: 1 });
 

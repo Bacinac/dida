@@ -1,15 +1,15 @@
 <script lang="ts">
   // Read-only floor plan — the same markers, room labels and light glows as
-  // /floorplan (shared derivation in $lib/floorplanItems), with zero
+  // /floorplan (shared derivation in #lib/floorplanItems), with zero
   // interactivity: no popovers, no editing, nothing tappable. Built for the
   // wall panel, usable anywhere a passive live plan is wanted.
-  import { devices } from "$lib/store.svelte";
-  import type { Floor } from "$lib/api";
-  import { buildGlows, buildPlanItems, buildRoomLabels, isPlug, isSensorLabel, itemPosOn, planCandidates } from "$lib/floorplanItems";
-  import FloorGlow from "$lib/FloorGlow.svelte";
-  import FloorMarker from "$lib/FloorMarker.svelte";
-  import FloorSensorLabel from "$lib/FloorSensorLabel.svelte";
-  import RoomSensorLabel from "$lib/RoomSensorLabel.svelte";
+  import { devices } from "#lib/store.svelte.js";
+  import type { Floor } from "#lib/api.js";
+  import { buildGlows, buildPlanItems, buildRoomLabels, isPlug, isSensorLabel, itemPosOn, planCandidates } from "#lib/floorplanItems.js";
+  import FloorGlow from "#lib/FloorGlow.svelte";
+  import FloorMarker from "#lib/FloorMarker.svelte";
+  import FloorSensorLabel from "#lib/FloorSensorLabel.svelte";
+  import RoomSensorLabel from "#lib/RoomSensorLabel.svelte";
 
   let { floor, markerScale = 1, class: klass = "" }: {
     floor: Floor;
@@ -58,7 +58,7 @@
   {#each roomLabels as rl (rl.area.id)}
     <div style="left:{rl.x}%; top:{rl.y}%; transform: translate(-50%,-50%) scale(calc({markerScale} * var(--fp-mark, 1)))"
       class="pointer-events-none absolute z-[28]">
-      <RoomSensorLabel caps={rl.caps} />
+      <RoomSensorLabel caps={rl.caps} heating={rl.heating} />
     </div>
   {/each}
 </div>

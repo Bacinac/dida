@@ -2,7 +2,7 @@
 // The presets are one-tap buttons on each AVR zone's volume row; the colour maps a
 // level to a hue so a quiet zone reads green and a loud one red — on the buttons,
 // the current-level marker and the active space tab.
-import { api, type VolumePreset } from "$lib/api";
+import { api, type VolumePreset } from "#lib/api.js";
 
 /** Green (quiet) → red (loud). Hue 130° at 0 down to 0° at 100. */
 export function volumeColor(v: number, opts: { sat?: number; light?: number; alpha?: number } = {}): string {

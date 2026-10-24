@@ -4,12 +4,12 @@
 // from its capabilities.
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("$lib/api", () => ({ api: {}, stateWs: vi.fn(), Unauthorized: class Unauthorized extends Error {} }));
-vi.mock("$lib/auth.svelte", () => ({ auth: { user: null } }));
-vi.mock("$lib/translations.svelte", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
+vi.mock("#lib/api.js", () => ({ api: {}, stateWs: vi.fn(), Unauthorized: class Unauthorized extends Error {} }));
+vi.mock("#lib/auth.svelte.js", () => ({ auth: { user: null } }));
+vi.mock("#lib/translations.svelte.js", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
 
-const { devices } = await import("$lib/store.svelte");
-const { pickerItem } = await import("$lib/EntityPicker.svelte");
+const { devices } = await import("#lib/store.svelte.js");
+const { pickerItem } = await import("#lib/EntityPicker.svelte");
 
 function device(patch: Record<string, unknown>) {
   return {

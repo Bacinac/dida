@@ -1,8 +1,8 @@
 // Every API call ends, and ends in words a person can read: a hung connection hits
 // the deadline, a dead server says so, and a failed call never shows "HTTP 502".
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, Unauthorized } from "$lib/api";
-import { i18n } from "$lib/kit";
+import { api, Unauthorized } from "#lib/api.js";
+import { i18n } from "#lib/kit/index.js";
 
 function serve(status: number, body = "") {
   vi.stubGlobal("fetch", async () => new Response(body || null, { status }));

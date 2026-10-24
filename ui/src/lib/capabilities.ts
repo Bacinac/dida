@@ -3,11 +3,11 @@
 // decides which control to render. Labels are translated via i18n (cap.* / cmd.*);
 // this file only holds STRUCTURE (control kind, units, ranges, command ids).
 
-import { formatNumber } from "$lib/kit";
-import { t, type MessageKey } from "$lib/i18n";
+import { formatNumber } from "#lib/kit/index.js";
+import { t, type MessageKey } from "#lib/i18n/index.js";
 
-import { clock } from "$lib/dt";
-import { tr } from "$lib/translations.svelte";
+import { clock } from "#lib/dt.js";
+import { tr } from "#lib/translations.svelte.js";
 
 export type CapabilityKind =
   | "on_off" | "brightness" | "color_temp" | "color_rgb" | "effect" | "open_close" | "lock"

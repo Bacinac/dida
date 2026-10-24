@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Notice, PageHead, SaveButton, dialog, formatNumber } from "$lib/kit";
-  import { api, type AdapterCfg, type BabaSite, type EsphomeNode, type FrigateSite, type HomekitDevice, type RuntimeState, type TuyaCloudDevice } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { devices } from "$lib/store.svelte";
-  import { groupDevices } from "$lib/devices";
-  import CapabilityControl from "$lib/CapabilityControl.svelte";
-  import ZigbeeTools from "$lib/ZigbeeTools.svelte";
-  import CloudflareRoutes from "$lib/CloudflareRoutes.svelte";
-  import { capLabel, capRank, DEVICE_TYPES, typeLabel } from "$lib/capabilities";
-  import { SECTION_TITLE_CLASS, SUBSECTION_TITLE_CLASS } from "$lib/ui";
-  import { t } from "$lib/i18n";
-  import { dateTime } from "$lib/dt";
-  import { tr } from "$lib/translations.svelte";
-  import { auth } from "$lib/auth.svelte";
+  import { Button, Notice, PageHead, SaveButton, dialog, formatNumber } from "#lib/kit/index.js";
+  import { api, type AdapterCfg, type BabaSite, type EsphomeNode, type FrigateSite, type HomekitDevice, type RuntimeState, type TuyaCloudDevice } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { devices } from "#lib/store.svelte.js";
+  import { groupDevices } from "#lib/devices.js";
+  import CapabilityControl from "#lib/CapabilityControl.svelte";
+  import ZigbeeTools from "#lib/ZigbeeTools.svelte";
+  import CloudflareRoutes from "#lib/CloudflareRoutes.svelte";
+  import { capLabel, capRank, DEVICE_TYPES, typeLabel } from "#lib/capabilities.js";
+  import { SECTION_TITLE_CLASS, SUBSECTION_TITLE_CLASS } from "#lib/ui/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { dateTime } from "#lib/dt.js";
+  import { tr } from "#lib/translations.svelte.js";
+  import { auth } from "#lib/auth.svelte.js";
 
   let cfgs = $state<AdapterCfg[]>([]);
   let form = $state<Record<string, Record<string, string>>>({});
@@ -108,7 +108,7 @@
 
   // --- one global sweep across every discoverable adapter; results land in each
   //     adapter's card as "found, not added yet" (no per-adapter scan button) ---
-  let foundAll = $state<Record<string, import("$lib/api").DiscoveredDevice[]>>({});
+  let foundAll = $state<Record<string, import("#lib/api.js").DiscoveredDevice[]>>({});
   let scanningAll = $state(false);
   let scannedAll = $state(false);
   let scanAllMsg = $state("");
@@ -148,7 +148,7 @@
       rescanning = null;
     }
   }
-  async function addFound(adapter: string, d: import("$lib/api").DiscoveredDevice) {
+  async function addFound(adapter: string, d: import("#lib/api.js").DiscoveredDevice) {
     addingKey = adapter + d.label;
     try {
       await api.applyDiscovered(adapter, d); // server-side append — never clobbers earlier adds
@@ -870,7 +870,7 @@
   async function saveConn(n: EsphomeNode) {
     ceBusy = true;
     try {
-      const body: import("$lib/api").NodeEdit = { host: ceHost.trim() };
+      const body: import("#lib/api.js").NodeEdit = { host: ceHost.trim() };
       if (cePsk.trim()) body.noise_psk = cePsk.trim();   // blank = keep existing secret
       if (cePwd.trim()) body.password = cePwd.trim();
       await api.esphomeEditNode(n.key, body);

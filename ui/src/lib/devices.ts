@@ -7,8 +7,8 @@
 // fields group even before the backend backfills device_key). A 2-part id
 // (`adapter:entity`) is a device of one.
 
-import { deviceType, entityType, type DeviceType } from "$lib/capabilities";
-import { devices, prettify, type CapState, type Device } from "$lib/store.svelte";
+import { deviceType, entityType, type DeviceType } from "#lib/capabilities.js";
+import { devices, prettify, type CapState, type Device } from "#lib/store.svelte.js";
 
 export interface DeviceUnit {
   key: string;

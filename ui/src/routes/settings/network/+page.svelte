@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Card, Field, Notice, SaveButton } from "$lib/kit";
-  import { api, type LanStatus } from "$lib/api";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import { Section } from "$lib/ui";
-  import { auth } from "$lib/auth.svelte";
-  import { devices } from "$lib/store.svelte";
-  import EntityPicker, { pickerItem } from "$lib/EntityPicker.svelte";
+  import { Button, Card, Field, Notice, SaveButton } from "#lib/kit/index.js";
+  import { api, type LanStatus } from "#lib/api.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import { Section } from "#lib/ui/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { devices } from "#lib/store.svelte.js";
+  import EntityPicker, { pickerItem } from "#lib/EntityPicker.svelte";
 
   let loadErr = $state<string | null>(null);
 

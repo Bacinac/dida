@@ -2,13 +2,13 @@
   // A device folded to one line on the Devices page: what it is, its one glanceable
   // value (the same one its floor-plan marker shows) and, for a single switch, the
   // switch itself. The rest is one tap away, in the full card.
-  import DeviceIcon from "$lib/DeviceIcon.svelte";
-  import CapabilityControl from "$lib/CapabilityControl.svelte";
-  import { glance, hasPresenceCap, presenceOccupied, type DeviceType } from "$lib/capabilities";
-  import { Tag } from "$lib/kit";
-  import { t } from "$lib/i18n";
-  import { clock } from "$lib/dt";
-  import type { CapState, Device } from "$lib/store.svelte";
+  import DeviceIcon from "#lib/DeviceIcon.svelte";
+  import CapabilityControl from "#lib/CapabilityControl.svelte";
+  import { glance, hasPresenceCap, presenceOccupied, type DeviceType } from "#lib/capabilities.js";
+  import { Tag } from "#lib/kit/index.js";
+  import { t } from "#lib/i18n/index.js";
+  import { clock } from "#lib/dt.js";
+  import type { CapState, Device } from "#lib/store.svelte.js";
 
   let { members, name, type, onopen }: {
     members: Device[]; name: string; type: DeviceType; onopen: () => void;

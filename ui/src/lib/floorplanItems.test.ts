@@ -6,13 +6,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const pointInPolygon = vi.fn((x: number, y: number) => Math.hypot(x - 50, y - 50) < 40);
-vi.mock("$lib/floorGeometry", () => ({
+vi.mock("#lib/floorGeometry.js", () => ({
   pointInPolygon,
   polygonCentroid: () => ({ x: 0, y: 0 }),
   toPoints: () => "",
 }));
 
-const { buildGlows } = await import("$lib/floorplanItems");
+const { buildGlows } = await import("#lib/floorplanItems.js");
 
 function laserAt(x: number, y: number) {
   const dev = {

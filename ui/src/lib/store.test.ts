@@ -20,15 +20,15 @@ const api = {
 };
 const auth = { user: null as { id: string } | null, revision: 0 };
 class Unauthorized extends Error {}
-vi.mock("$lib/api", () => ({
+vi.mock("#lib/api.js", () => ({
   api,
   stateWs: vi.fn(),
   Unauthorized,
 }));
-vi.mock("$lib/auth.svelte", () => ({ auth }));
-vi.mock("$lib/translations.svelte", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
+vi.mock("#lib/auth.svelte.js", () => ({ auth }));
+vi.mock("#lib/translations.svelte.js", () => ({ tr: (s: string) => s, translations: { load: vi.fn() } }));
 
-const { devices, prettify } = await import("$lib/store.svelte");
+const { devices, prettify } = await import("#lib/store.svelte.js");
 
 function seed(entityId: string, patch: Record<string, unknown> = {}) {
   devices.byId[entityId] = {

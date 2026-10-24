@@ -3,8 +3,8 @@
 // wraps the command calls. DeviceCard recomposes them into a single climate
 // card — the core stays generic (same pattern as media.ts).
 
-import { api } from "$lib/api";
-import type { Device } from "$lib/store.svelte";
+import { api } from "#lib/api.js";
+import type { Device } from "#lib/store.svelte.js";
 
 // Caps rendered by the ClimateCard instead of the generic capability list.
 export const CLIMATE_CAPS = new Set([

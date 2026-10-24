@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { api } from "$lib/api";
-  import { Picks, Tag } from "$lib/kit";
-  import { auth } from "$lib/auth.svelte";
-  import { errMsg } from "$lib/errors";
-  import { t } from "$lib/i18n";
-  import SignalPath from "$lib/SignalPath.svelte";
-  import type { Device } from "$lib/store.svelte";
+  import { api } from "#lib/api.js";
+  import { Picks, Tag } from "#lib/kit/index.js";
+  import { auth } from "#lib/auth.svelte.js";
+  import { errMsg } from "#lib/errors.js";
+  import { t } from "#lib/i18n/index.js";
+  import SignalPath from "#lib/SignalPath.svelte";
+  import type { Device } from "#lib/store.svelte.js";
   import {
     fmtTime, gradient, isPlaying, mediaAlbum, mediaArt, mediaArtist, mediaCmd, mediaDuration,
     mediaMuted, mediaQuality, mediaQueue, mediaSource, mediaTitle, mediaVolume, nextTrack, positionBase,
     prevTrack, transport, transportLabel,
-  } from "$lib/media";
+  } from "#lib/media.js";
 
   let { device, compact = false, volumeDevice = null }: {
     device: Device;

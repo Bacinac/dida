@@ -198,14 +198,16 @@ class ShellyAdapter:
         self._live.add(dev_id)
         log.info("shelly %s connected: %s (%s)", ip, dev_name, info.get("model", "?"))
 
-        status = await self._rpc(ip, "Shelly.GetStatus")
-        self._emit(dev_id, status)
-
         # ws_connect takes ClientWSTimeout, NOT ClientTimeout — the wrong type
         # raised a DeprecationWarning on connect and a TypeError on the close path.
         async with self._session.ws_connect(  # type: ignore[union-attr]
             f"ws://{ip}/rpc", heartbeat=55, timeout=aiohttp.ClientWSTimeout(ws_close=10)
         ) as ws:
+            # The device pushes NotifyStatus only to a peer that has sent it a frame
+            # with a `src`; a silent socket receives nothing and every change waits
+            # for the reconcile below. Reading the initial status over this socket
+            # is that frame, and leaves no gap between the read and the subscription.
+            await ws.send_json({"id": 1, "src": f"dida-{NAMESPACE}", "method": "Shelly.GetStatus"})
             while True:
                 try:
                     msg = await asyncio.wait_for(ws.receive(), timeout=300)
@@ -220,6 +222,10 @@ class ShellyAdapter:
                         continue
                     if frame.get("method") in ("NotifyStatus", "NotifyFullStatus"):
                         self._emit(dev_id, frame.get("params") or {})
+                    elif frame.get("id") == 1:
+                        if "error" in frame:
+                            raise RuntimeError(f"Shelly.GetStatus: {frame['error']}")
+                        self._emit(dev_id, frame.get("result") or {})
                 elif msg.type in (
                     aiohttp.WSMsgType.CLOSED,
                     aiohttp.WSMsgType.CLOSING,

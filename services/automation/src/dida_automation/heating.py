@@ -471,6 +471,17 @@ class HeatingController:
             return
         self._boiler_unknown_logged = False
         is_on = reported is True
+        if self._boiler_on != is_on:
+            # Transitions are tracked HERE, not from current_state.updated_at: that
+            # column bumps on every report, so an unchanged re-announce would keep
+            # resetting the anti-cycling clock and defeat it entirely. The first
+            # observation after a restart is dated far enough back to be free to act
+            # — a deploy should not hold the boiler hostage for ten minutes. Tracked
+            # before the master gate too: a boiler idle for months must not owe a
+            # minimum rest the moment the master switch goes on.
+            back = max(settings.min_on_s, settings.min_off_s) if self._boiler_on is None else 0
+            self._boiler_on = is_on
+            self._boiler_since = now - back
         if not settings.enabled or not self._rooms:
             # Master off is "hands off" for the setpoints, but the boiler is the one
             # thing that must be actively driven off: returning early here leaves a
@@ -485,19 +496,8 @@ class HeatingController:
                 await self._command(settings.boiler, "on_off", "turn_off", {}, None)
             else:
                 self._master_off_logged = False
-            self._boiler_on = is_on
-            self._boiler_since = now
             return
         self._master_off_logged = False
-        if self._boiler_on != is_on:
-            # Transitions are tracked HERE, not from current_state.updated_at: that
-            # column bumps on every report, so an unchanged re-announce would keep
-            # resetting the anti-cycling clock and defeat it entirely. The first
-            # observation after a restart is dated far enough back to be free to act
-            # — a deploy should not hold the boiler hostage for ten minutes.
-            back = max(settings.min_on_s, settings.min_off_s) if self._boiler_on is None else 0
-            self._boiler_on = is_on
-            self._boiler_since = now - back
         if want and is_on and settings.require_open_valve and self._all_valves_shut(state):
             # Every valve confirmed shut while the boiler runs = pumping against a
             # closed circuit. Only ever a reason to STOP: an unknown position counts

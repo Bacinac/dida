@@ -372,6 +372,19 @@ async def test_a_restart_does_not_hold_the_boiler_hostage():
     assert [c.command for c in commands(bus, BOILER)] == ["turn_on"]
 
 
+async def test_switching_the_master_on_fires_an_idle_boiler_at_once():
+    """Ticks under master off do not touch the boiler, so they must not restart its
+    rest either — the house would wait out ten minutes it already waited months."""
+    pool = house(settings_over={"enabled": False})
+    ctrl, bus = await run(pool)
+    await ctrl.tick()
+    assert commands(bus, BOILER) == []
+    pool.settings["enabled"] = True
+    await ctrl.reload()
+    await ctrl.tick()
+    assert [c.command for c in commands(bus, BOILER)] == ["turn_on"]
+
+
 async def test_a_running_boiler_stops_when_every_valve_is_shut():
     """Demand with every valve confirmed closed means the pump is working against a
     dead circuit — the one case that overrides the room's own call for heat."""

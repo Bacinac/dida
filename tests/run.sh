@@ -449,7 +449,7 @@ adapter_test govee
 adapter_test announce
 adapter_test ecowitt
 adapter_test mqtt tests/test_mqtt_lifecycle.py tests/test_zigbee_onboarding.py
-adapter_test shelly
+adapter_test shelly tests/test_shelly_lifecycle.py
 adapter_test esphome tests/test_esphome_lifecycle.py
 adapter_test tuya tests/test_tuya_lifecycle.py
 echo "== presence report freshness =="

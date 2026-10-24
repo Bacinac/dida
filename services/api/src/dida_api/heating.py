@@ -89,7 +89,7 @@ async def get_heating(request: Request, user: AuthUser = Depends(current_user)) 
         here = contains.get(r["id"], RoomEntities([], [], [], []))
         if not here.valves and r["heating_config"] is None:
             continue
-        config = dict(r["heating_config"] or _room_dict(RoomHeating()))
+        config = _stored_room(r["heating_config"])
         if user.role != "admin" and not _keep(config.get("valves") or here.valves):
             continue
         config["valves"] = _keep(config.get("valves") or [])
@@ -208,6 +208,19 @@ async def _load_room(pool, area_id: int):
     except CapabilityError as exc:
         raise HTTPException(500, f"stored room config is invalid: {exc}") from exc
     return (room.valves or valves), _room_dict(room)
+
+
+def _stored_room(raw) -> dict:
+    """A room's config as the controller will run it: an older row missing a field
+    reads with that field's default, so a switch on the page can't show off while
+    the controller treats it as on. A row that no longer decodes is shown as stored,
+    for the user to fix."""
+    if raw is None:
+        return _room_dict(RoomHeating())
+    try:
+        return _room_dict(validate_room(raw))
+    except CapabilityError:
+        return dict(raw)
 
 
 def _room_dict(room) -> dict:

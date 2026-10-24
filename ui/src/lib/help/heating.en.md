@@ -1,4 +1,4 @@
-Heating is a control loop, not a rule. Each room's radiator valve gets a setpoint, and the boiler relay — a plain thermostat contact — fires while at least one room is short of its target.
+Heating is a control loop, not a rule. Each room's radiator valve gets a setpoint, and the boiler relay — a plain thermostat contact — fires while at least one room allowed to fire it is short of its target.
 
 ## Rooms
 
@@ -15,7 +15,7 @@ Heating is a control loop, not a rule. Each room's radiator valve gets a setpoin
 ## The boiler
 
 - A minimum burn and a minimum rest keep it from short-cycling.
-- A room may be barred from starting it at all, and the house can require several rooms to be calling before it fires.
+- A room may be barred from firing it: it then takes heat only while the boiler runs for others and never keeps it burning. The house can require several rooms to be calling before it fires.
 
 ## What it refuses to do
 

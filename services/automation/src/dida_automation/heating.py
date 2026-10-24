@@ -212,9 +212,7 @@ class HeatingController:
 
         is_on = state.value(self._settings.boiler, "on_off") is True if self._settings.boiler else False
         want = boiler_demand(
-            sum(1 for r in self._rooms if r.demand and r.cfg.can_call_boiler),
-            sum(1 for r in self._rooms if r.demand and not r.cfg.can_call_boiler),
-            is_on, self._settings,
+            sum(1 for r in self._rooms if r.demand and r.cfg.can_call_boiler), is_on, self._settings,
         )
         await self._drive_boiler(want, state, now)
         await self._publish(state)

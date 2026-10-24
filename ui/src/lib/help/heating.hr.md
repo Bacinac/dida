@@ -1,4 +1,4 @@
-Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prostoriji dobiva zadanu temperaturu, a relej kotla — običan termostatski kontakt — uključen je dok god je barem jednoj prostoriji hladnije od cilja.
+Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prostoriji dobiva zadanu temperaturu, a relej kotla — običan termostatski kontakt — uključen je dok god je barem jednoj prostoriji koja smije paliti kotao hladnije od cilja.
 
 ## Prostorije
 
@@ -15,7 +15,7 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 ## Kotao
 
 - Najkraće vrijeme rada i najkraći odmor sprječavaju prečesto paljenje i gašenje.
-- Prostoriji se može zabraniti da uopće pali kotao, a kuća može tražiti da nekoliko prostorija istodobno traži toplinu prije nego što se kotao upali.
+- Prostoriji se može zabraniti da pali kotao: tada uzima toplinu samo dok kotao radi za druge i ne drži ga upaljenim. Kuća može tražiti da nekoliko prostorija istodobno traži toplinu prije nego što se kotao upali.
 
 ## Što odbija raditi
 

@@ -92,6 +92,15 @@ async def test_heating_config_round_trip():
         assert here["config"]["enabled"] is True, "a room with a radiator is heated by default"
         assert ORPHAN_VALVE in body["orphan_valves"]
 
+        # A row saved before a field existed reads with that field's default — the
+        # page must show what the controller runs, not a missing key as "off".
+        await pool.execute("UPDATE areas SET heating_config = $2 WHERE id = $1",
+                           area_id, {"enabled": True, "targets": {}})
+        legacy = next(x for x in (await c.get("/heating")).json()["rooms"] if x["area_id"] == area_id)
+        assert legacy["config"]["can_call_boiler"] is True
+        assert "targets" not in legacy["config"], "a field the struct no longer has is not served"
+        await pool.execute("UPDATE areas SET heating_config = NULL WHERE id = $1", area_id)
+
         # Enabling without a relay is refused: it would drive nothing, silently.
         r = await c.put("/heating/settings", json={"enabled": True, "boiler": ""})
         assert r.status_code == 400, "enabled with no boiler"

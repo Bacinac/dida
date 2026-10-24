@@ -286,18 +286,10 @@ def test_the_boiler_needs_a_quorum_to_start_but_not_to_keep_going():
     """One cold small room shouldn't fire the burner; two rooms is a heating season.
     Stopping is not symmetric, or it would cycle around the threshold."""
     s = HeatingSettings(min_calling=2)
-    assert boiler_demand(1, 0, is_on=False, settings=s) is False
-    assert boiler_demand(2, 0, is_on=False, settings=s) is True
-    assert boiler_demand(1, 0, is_on=True, settings=s) is True, "one caller keeps it running"
-    assert boiler_demand(0, 0, is_on=True, settings=s) is False
-
-
-def test_a_room_that_may_not_start_the_boiler_still_takes_heat():
-    """A piggyback room never starts the burner, but while it runs for someone else
-    the room is not made to sit there cold."""
-    s = HeatingSettings(min_calling=1)
-    assert boiler_demand(0, 1, is_on=False, settings=s) is False, "it cannot start it"
-    assert boiler_demand(0, 1, is_on=True, settings=s) is True, "…but it keeps it going"
+    assert boiler_demand(1, is_on=False, settings=s) is False
+    assert boiler_demand(2, is_on=False, settings=s) is True
+    assert boiler_demand(1, is_on=True, settings=s) is True, "one caller keeps it running"
+    assert boiler_demand(0, is_on=True, settings=s) is False
 
 
 def test_demand_latches_across_the_setpoint():

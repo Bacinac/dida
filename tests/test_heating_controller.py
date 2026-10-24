@@ -488,6 +488,15 @@ async def test_a_room_that_may_not_start_the_boiler_does_not():
     assert commands(bus, VALVE)[0].args["value"] == 21.0, "…and its valve is still set"
 
 
+async def test_a_room_that_may_not_start_the_boiler_does_not_keep_it_burning():
+    """It takes heat while the boiler runs for someone else — once nobody else is
+    calling, a room still 2 °C short is no reason to keep burning (24.10.2026: two
+    such rooms held the house's boiler on for twenty minutes)."""
+    _, bus = await run(house(room_over={"can_call_boiler": False}, boiler_on=True))
+    assert published(bus, "heating:room:7", "binary") is True, "the room still wants heat"
+    assert [c.command for c in commands(bus, BOILER)] == ["turn_off"]
+
+
 async def test_the_boiler_waits_for_a_quorum():
     pool = house(settings_over={"min_calling": 2})
     _, bus = await run(pool)

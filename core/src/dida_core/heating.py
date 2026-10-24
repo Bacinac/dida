@@ -429,17 +429,19 @@ def setpoint_for(room: RoomHeating, settings: HeatingSettings, profile: str) -> 
     return min(TARGET_MAX, max(TARGET_MIN, house + room.offset))
 
 
-def boiler_demand(calling: int, piggyback: int, is_on: bool, settings: HeatingSettings) -> bool:
+def boiler_demand(calling: int, is_on: bool, settings: HeatingSettings) -> bool:
     """Should the burner be running, given how many rooms are calling for heat?
 
-    `calling` counts rooms allowed to start it; `piggyback` counts rooms that want
-    heat but may only take it while it already runs. Starting needs `min_calling`
-    real callers; STOPPING needs everyone satisfied. That asymmetry is deliberate —
-    a symmetric threshold would stop the boiler the moment the second room reached
-    its target and restart it a minute later, which is the cycling this exists to
-    prevent."""
+    `calling` counts only rooms allowed to fire it. A room that may not takes heat
+    while the boiler runs for someone else, and that is all: once every caller is
+    satisfied the burner stops, however cold that room still is — otherwise a room
+    barred from starting the boiler could keep it burning for hours on its own.
+    Starting needs `min_calling` callers; STOPPING needs all of them satisfied. That
+    asymmetry is deliberate — a symmetric threshold would stop the boiler the moment
+    the second room reached its target and restart it a minute later, which is the
+    cycling this exists to prevent."""
     if is_on:
-        return calling + piggyback > 0
+        return calling > 0
     return calling >= settings.min_calling
 
 

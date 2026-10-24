@@ -86,7 +86,7 @@ async def get_heating(request: Request, user: AuthUser = Depends(current_user)) 
     _keep = (lambda ids: [i for i in ids if i not in hidden]) if hidden else (lambda ids: list(ids))
     rooms = []
     for r in rows:
-        here = contains.get(r["id"], RoomEntities([], [], []))
+        here = contains.get(r["id"], RoomEntities([], [], [], []))
         if not here.valves and r["heating_config"] is None:
             continue
         config = dict(r["heating_config"] or _room_dict(RoomHeating()))
@@ -98,6 +98,7 @@ async def get_heating(request: Request, user: AuthUser = Depends(current_user)) 
         rooms.append({
             "area_id": r["id"], "name": r["name"], "kind": r["kind"],
             "sensors": _keep(here.sensors), "valves": _keep(here.valves),
+            "presence": _keep(here.presence),
             "config": config,
         })
     settings = await _settings(pool)
@@ -121,6 +122,8 @@ async def put_settings(body: dict, request: Request, _admin: AuthUser = Depends(
         raise HTTPException(400, str(exc)) from exc
     if cfg.boiler:
         await _require_capability(pool, cfg.boiler, "on_off")
+    if cfg.away_helper:
+        await _require_capability(pool, cfg.away_helper, "boolean")
     await set_app_setting(pool, SETTINGS_KEY, json.dumps(_as_dict(cfg)))
     return _as_dict(cfg)
 
@@ -196,7 +199,7 @@ async def _load_room(pool, area_id: int):
     if row is None:
         raise HTTPException(404, "room not found")
     contains, _ = await derive_rooms(pool)
-    valves = list(contains.get(area_id, RoomEntities([], [], [])).valves)
+    valves = list(contains.get(area_id, RoomEntities([], [], [], [])).valves)
     raw = row["heating_config"]
     if raw is None and not valves:
         raise HTTPException(404, "this room has no heating")
@@ -218,6 +221,7 @@ def _room_dict(room) -> dict:
         "schedule": [{"days": list(s.days), "at": s.at, "profile": s.profile} for s in room.schedule],
         "window_pause": room.window_pause,
         "can_call_boiler": room.can_call_boiler,
+        "eco_when_empty": room.eco_when_empty,
         "override_target": room.override_target,
         "override_until": room.override_until,
     }

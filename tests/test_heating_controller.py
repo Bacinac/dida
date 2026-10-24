@@ -33,7 +33,8 @@ class FakeBus:
 class FakePool:
     """Dispatches the controller's queries by shape. `entities` is what each room
     CONTAINS (entity_id, area_id, capabilities) — the same registry the derivation
-    reads; `state` is {(entity_id, capability): (value, age_seconds)}."""
+    reads; `state` is {(entity_id, capability): (value, age_seconds)}, or with a
+    third element when the value last CHANGED longer ago than it was last reported."""
 
     def __init__(self, settings: dict, rooms: list[tuple[int, str, dict]], state: dict,
                  entities: list[tuple[str, int | None, list[str]]]):
@@ -62,9 +63,9 @@ class FakePool:
         wanted = set(args[0])
         now = time.time()
         return [
-            Row(entity_id=eid, capability=cap, value=val,
-                updated_at=_Stamp(now - age))
-            for (eid, cap), (val, age) in self.state.items()
+            Row(entity_id=eid, capability=cap, value=val[0],
+                updated_at=_Stamp(now - val[1]), changed_at=_Stamp(now - val[-1]))
+            for (eid, cap), val in self.state.items()
             if eid in wanted
         ]
 
@@ -407,6 +408,48 @@ async def test_empty_house_uses_the_away_setpoint():
                                 "targets": {"comfort": 21.0, "away": 16.0}})
     _, bus = await run(pool)
     assert commands(bus, VALVE)[0].args["value"] == 16.0
+
+
+ROOM_PRESENCE = "esphome:study:occupancy"
+WITH_PRESENCE = [*ENTITIES, (ROOM_PRESENCE, 7, ["occupancy"])]
+
+
+def empty_room(presence, **room_over):
+    return house({(SENSOR, "temperature"): (21.5, 60), **presence},
+                 settings_over={"targets": {"comfort": 22.0, "eco": 19.0}},
+                 room_over={"eco_when_empty": True, **room_over}, entities=WITH_PRESENCE)
+
+
+async def test_a_room_nobody_is_in_runs_eco():
+    """Quiet for longer than the hold: comfort drops to eco, and the card says why
+    the target is lower rather than just showing a smaller number."""
+    _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)}))
+    assert commands(bus, VALVE)[0].args["value"] == 19.0
+    assert published(bus, "heating:room:7", "text") == H.ST_VACANT
+    assert not commands(bus, BOILER), "21.5 in an empty room is warm enough"
+
+
+@pytest.mark.parametrize("presence", [
+    {(ROOM_PRESENCE, "occupancy"): (True, 60, 3600)},     # someone is in
+    {(ROOM_PRESENCE, "occupancy"): (False, 60, 600)},     # just left
+    {},                                                   # never reported
+])
+async def test_a_room_someone_might_be_in_stays_comfortable(presence):
+    _, bus = await run(empty_room(presence))
+    assert commands(bus, VALVE)[0].args["value"] == 22.0
+    assert published(bus, "heating:room:7", "text") == H.ST_HEATING
+
+
+async def test_a_presence_sensor_that_dropped_off_cannot_vouch_for_an_empty_room():
+    _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)}),
+                       unreachable={ROOM_PRESENCE})
+    assert commands(bus, VALVE)[0].args["value"] == 22.0
+
+
+async def test_an_empty_room_stays_comfortable_unless_it_asked_for_eco():
+    _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)},
+                                  eco_when_empty=False))
+    assert commands(bus, VALVE)[0].args["value"] == 22.0
 
 
 async def test_unchanged_decisions_are_not_republished():

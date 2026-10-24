@@ -5,6 +5,7 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 - Svaka prostorija ima senzor temperature, svoje ventile, četiri zadane temperature (Komfor, Eko, Noć, Odsutnost) i tjedni raspored koji kaže koja kada vrijedi. Bez rasporeda prostorija stalno drži Komfor.
 - **±** na kartici prostorije drži je sat vremena na toj temperaturi, a zatim se vraća rasporedu.
 - Otvoren prozor pauzira prostoriju: prema kontaktnom senzoru ako ga ima, inače prema DIDA-inu vlastitom očitanju da temperatura pada brže nego što grijanje može objasniti.
+- **Eko kad nikoga nema** (prostorija sa senzorom prisutnosti ili pokreta): kad nijedan senzor u prostoriji nikoga ne vidi zadani broj minuta, Komfor ide na Eko; čim netko uđe, vraća se Komfor. Nedostupan senzor ili senzor koji se nikad nije javio drži prostoriju na Komforu.
 
 ## Kuća
 

@@ -5,6 +5,7 @@ Heating is a control loop, not a rule. Each room's radiator valve gets a setpoin
 - Each room has a temperature sensor, its valves, four setpoints (comfort, eco, night, away) and a weekly schedule that says which one is in force when. Without a schedule the room holds comfort.
 - **±** on a room card holds it at a temperature for an hour; then it returns to its schedule.
 - An open window pauses the room: from a contact sensor if it has one, otherwise from DIDA's own reading of the temperature falling faster than heating can explain.
+- **Eco while nobody is in** (a room with an occupancy or motion sensor): once every sensor in the room has seen no one for the configured minutes, comfort runs as eco; the first person seen brings comfort back. A sensor that is unreachable or has never reported keeps the room on comfort.
 
 ## The house
 

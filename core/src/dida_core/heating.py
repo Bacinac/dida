@@ -34,6 +34,8 @@ OFF = "off"
 SCHEDULE_PROFILES: tuple[str, ...] = (*PROFILES, OFF)
 # House mode: `auto` follows the schedule, the rest pin one step for every room.
 MODES: tuple[str, ...] = ("auto", *SCHEDULE_PROFILES)
+# The reason a comfort room runs its eco setpoint instead: nobody has been in it.
+VACANT = "vacant"
 
 DEFAULT_TARGETS: dict[str, float] = {"comfort": 21.0, "eco": 19.0, "night": 18.0, "away": 15.0}
 
@@ -58,6 +60,8 @@ _CONTROL_CAPS = frozenset({
 # Sub-entities every thermostatic head publishes. They are how a TRV is recognised
 # when its battery has died and it has stopped reporting a setpoint entirely.
 _VALVE_MARKERS = ("comfort_temperature", "eco_temperature", "valve_detection")
+# Someone is in the room: the same pair the floor plan lights a room's presence dot on.
+PRESENCE_CAPS = frozenset({"occupancy", "motion"})
 
 
 class RoomEntities(NamedTuple):
@@ -66,6 +70,7 @@ class RoomEntities(NamedTuple):
     valves: list[str]
     sensors: list[str]
     contacts: list[str]   # door/window sensors in the room (open = true)
+    presence: list[str]   # occupancy/motion sensors in the room (someone here = true)
 
 
 def valve_ids(rows) -> set[str]:
@@ -117,23 +122,27 @@ def classify_entities(rows, sensor_configs: dict[int, dict | None] | None = None
             continue
         eid, area, c = r["entity_id"], r["area_id"], caps[r["entity_id"]]
         valve, sensor, contact = eid in valves, is_sensor(c), "contact" in c
-        if not (valve or sensor or contact):
+        presence = bool(c & PRESENCE_CAPS)
+        if not (valve or sensor or contact or presence):
             continue
         if area is None:
             if valve:
                 orphans.append(eid)
             continue
-        entry = rooms.setdefault(area, RoomEntities([], [], []))
+        entry = rooms.setdefault(area, RoomEntities([], [], [], []))
         if valve:
             entry.valves.append(eid)
         elif sensor and _label_includes(sensor_configs, area, eid):
             entry.sensors.append(eid)
         if contact:
             entry.contacts.append(eid)
+        if presence:
+            entry.presence.append(eid)
     for entry in rooms.values():
         entry.valves.sort()
         entry.sensors.sort()
         entry.contacts.sort()
+        entry.presence.sort()
     return rooms, sorted(orphans)
 
 
@@ -186,6 +195,10 @@ class RoomHeating(msgspec.Struct, frozen=True):
     # room still opens its valve and takes heat whenever the boiler runs for someone
     # else, but never asks for it on its own.
     can_call_boiler: bool = True
+    # Comfort is for people: a room nobody has been in for `vacant_minutes` runs eco
+    # until someone walks back in. Off by default — a motion sensor that cannot see
+    # someone sitting still would cool them, and only the house knows which sensors can.
+    eco_when_empty: bool = False
     override_target: float | None = None
     override_until: float | None = None  # epoch seconds, UTC
 
@@ -218,6 +231,7 @@ class HeatingSettings(msgspec.Struct, frozen=True):
     outdoor: str = ""           # outdoor temperature entity
     summer_cutoff: float = 17.0 # outdoor °C above which no room may fire the boiler
     away_helper: str = ""       # boolean entity (helper:house_empty): true → away profile
+    vacant_minutes: int = 30    # a room's presence sensors all quiet this long = nobody there
     frost_target: float = 8.0   # setpoint written to a room that is off/paused (freeze guard)
     stale_after_s: int = 7200   # a room reading older than this is NOT heated on (fail loud)
     force_manual: bool = True   # hold TRVs in manual so their own weekly schedule can't fight us
@@ -257,6 +271,7 @@ _SETTING_RANGES: tuple[tuple[str, float, float, str], ...] = (
     ("window_drop", 0.2, 10, " °C"),
     ("window_recover", 0.1, 5, " °C"),
     ("window_minutes", 2, 60, ""),
+    ("vacant_minutes", 5, 240, " min"),
     ("preheat_rate", 1, 120, " min/°C"),
     ("preheat_cold_factor", 0, 1, ""),
     ("preheat_max_minutes", 0, 12 * 60, ""),
@@ -372,11 +387,12 @@ def _minutes(hhmm: str) -> int:
 
 
 def target_for(room: RoomHeating, settings: HeatingSettings, weekday: int, minutes: int,
-               *, away: bool, now: float) -> tuple[float, str]:
+               *, away: bool, vacant: bool, now: float) -> tuple[float, str]:
     """A room's setpoint right now, and the reason for it (the profile name, or
-    `override` / `away`). Precedence: an unexpired manual override beats everything,
-    then an empty house, then the house mode, then the schedule — the room's own if
-    it has one, otherwise the house's."""
+    `override` / `away` / `vacant`). Precedence: an unexpired manual override beats
+    everything, then an empty house, then the house mode, then the schedule — the
+    room's own if it has one, otherwise the house's. An empty room only ever trims
+    comfort down to eco: night, away and off are already set for nobody."""
     if room.override_target is not None and room.override_until is not None and now < room.override_until:
         return room.override_target, "override"
     if away:
@@ -388,7 +404,22 @@ def target_for(room: RoomHeating, settings: HeatingSettings, weekday: int, minut
     if profile == OFF:
         # Nothing to trim: a room that is off holds the freeze guard, not a setpoint.
         return settings.frost_target, OFF
-    return setpoint_for(room, settings, profile), profile
+    target = setpoint_for(room, settings, profile)
+    if profile == "comfort" and vacant and room.eco_when_empty:
+        eco = setpoint_for(room, settings, "eco")
+        if eco < target:
+            return eco, VACANT
+    return target, profile
+
+
+def room_vacant(presence: list[tuple[object, float]], now: float, settings: HeatingSettings) -> bool:
+    """Has nobody been in the room for `vacant_minutes`? `presence` is each of its
+    sensors' (value, when that value last changed). Every sensor must have read an
+    explicit false for the whole hold: one that is on, unknown or unreachable keeps
+    the room occupied, because a cold room with someone in it is the failure that
+    matters and a warm empty one only costs gas. A room without a sensor is never empty."""
+    hold = settings.vacant_minutes * 60
+    return bool(presence) and all(v is False and now - at >= hold for v, at in presence)
 
 
 def setpoint_for(room: RoomHeating, settings: HeatingSettings, profile: str) -> float:

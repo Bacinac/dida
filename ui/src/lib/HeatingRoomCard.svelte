@@ -16,9 +16,10 @@
   import HeatingSchedule from "#lib/HeatingSchedule.svelte";
   import { devices } from "#lib/store.svelte.js";
 
-  let { room, house, onchange }: {
+  let { room, house, vacantMinutes, onchange }: {
     room: HeatingRoom;
     house: Record<string, number>;   // the house setpoints this room is a variation on
+    vacantMinutes: number;
     onchange: () => Promise<void>;
   } = $props();
 
@@ -54,6 +55,7 @@
     heating: "warn",
     preheat: "warn",
     idle: "quiet",
+    vacant: "quiet",
     window: "busy",
     summer: "quiet",
     off: "quiet",
@@ -159,6 +161,20 @@
           <p class="text-xs text-dida-text-faint">{t("heating.canCallBoilerHint")}</p>
         </div>
       </div>
+
+      {#if room.presence.length}
+        <div class="flex items-start gap-2">
+          <Toggle size="small" checked={draft.eco_when_empty}
+            onclick={() => (draft.eco_when_empty = !draft.eco_when_empty)}
+            label={t("heating.ecoWhenEmpty")} />
+          <div>
+            <p class="text-m">{t("heating.ecoWhenEmpty")}</p>
+            <p class="text-xs text-dida-text-faint">
+              {t("heating.ecoWhenEmptyHint", { minutes: vacantMinutes, sensors: room.presence.map(name).join(", ") })}
+            </p>
+          </div>
+        </div>
+      {/if}
 
       <Field label={t("heating.offset")} hint={t("heating.offsetHint")}>
         <div class="flex flex-wrap items-center gap-3">

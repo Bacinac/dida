@@ -25,6 +25,8 @@ VALVE = "zztest:heat:valve"
 SENSOR = "zztest:heat:sensor"
 DEAD_VALVE = "zztest:heat:flatbattery"
 ORPHAN_VALVE = "zztest:heat:homeless"
+PRESENCE = "zztest:heat:occupancy"
+HOUSE_EMPTY = "zztest:heat:house_empty"
 
 
 async def _setup(pool):
@@ -48,6 +50,8 @@ async def _setup(pool):
         (DEAD_VALVE, ["temperature"], area_id),
         (f"{DEAD_VALVE}:comfort_temperature", ["number"], area_id),
         (ORPHAN_VALVE, ["target_temperature", "temperature"], None),
+        (PRESENCE, ["occupancy"], area_id),
+        (HOUSE_EMPTY, ["boolean"], None),
     ):
         await pool.execute(
             "INSERT INTO entities (entity_id, adapter, capabilities, area_id) "
@@ -84,6 +88,7 @@ async def test_heating_config_round_trip():
         here = next(x for x in body["rooms"] if x["area_id"] == area_id)
         assert here["valves"] == [DEAD_VALVE, VALVE], "both heads in the room, flat battery included"
         assert here["sensors"] == [SENSOR], "the relay's internal temperature is not the room's"
+        assert here["presence"] == [PRESENCE]
         assert here["config"]["enabled"] is True, "a room with a radiator is heated by default"
         assert ORPHAN_VALVE in body["orphan_valves"]
 
@@ -98,6 +103,12 @@ async def test_heating_config_round_trip():
         # A sensor is not a relay.
         r = await c.put("/heating/settings", json={"enabled": True, "boiler": SENSOR})
         assert r.status_code == 400, "boiler entity must expose on_off"
+
+        # The empty-house flag is a flag: a presence sensor would read a quiet room as an empty house.
+        r = await c.put("/heating/settings", json={"boiler": BOILER, "away_helper": PRESENCE})
+        assert r.status_code == 400, "away helper must be a boolean"
+        r = await c.put("/heating/settings", json={"boiler": BOILER, "away_helper": HOUSE_EMPTY})
+        assert r.status_code == 200
 
         # The house's own programme lives here, once, for every room.
         r = await c.put("/heating/settings", json={

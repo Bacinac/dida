@@ -36,6 +36,8 @@ import asyncpg
 from dida_core import AdapterConfig, Bus, StateUpdate, app_setting, prepare_command
 from dida_core.heating import (
     OFF,
+    PRESENCE_CAPS,
+    VACANT,
     HeatingSettings,
     RoomEntities,
     RoomHeating,
@@ -47,6 +49,7 @@ from dida_core.heating import (
     frost_for,
     next_step,
     preheat_minutes,
+    room_vacant,
     setpoint_for,
     target_for,
     validate_room,
@@ -72,6 +75,7 @@ ST_NO_SENSOR = "no_sensor"
 ST_VALVE_ERROR = "valve_error"  # a valve won't take (or won't report) its setpoint
 ST_HEATING = "heating"
 ST_PREHEAT = "preheat"    # climbing early so it ARRIVES at the scheduled temperature
+ST_VACANT = "vacant"      # nobody has been in it, so comfort is running as eco
 ST_IDLE = "idle"
 
 
@@ -81,7 +85,7 @@ class Room:
     `sensors`/`valves` are what the room actually contains (its assigned entities),
     overridden by the config only where the config says so."""
 
-    __slots__ = ("area_id", "cfg", "contacts", "demand", "name", "profile", "sensors",
+    __slots__ = ("area_id", "cfg", "contacts", "demand", "name", "presence", "profile", "sensors",
                  "status", "target", "temperature", "valves")
 
     def __init__(self, area_id: int, name: str, cfg: RoomHeating, contains: RoomEntities) -> None:
@@ -91,6 +95,7 @@ class Room:
         self.valves = cfg.valves or list(contains.valves)
         self.sensors = [cfg.sensor] if cfg.sensor else list(contains.sensors)
         self.contacts = list(contains.contacts)
+        self.presence = list(contains.presence) if cfg.eco_when_empty else []
         self.temperature: float | None = None
         self.target: float | None = None
         self.profile = ""
@@ -157,7 +162,7 @@ class HeatingController:
         rows = await self._pool.fetch("SELECT id, name, kind, heating_config FROM areas ORDER BY id")
         rooms: list[Room] = []
         for r in rows:
-            here = contains.get(r["id"], RoomEntities([], [], []))
+            here = contains.get(r["id"], RoomEntities([], [], [], []))
             raw = r["heating_config"]
             if raw is None and not here.valves:
                 continue
@@ -257,7 +262,7 @@ class HeatingController:
         self._track(room, now)  # the trace our own window detection reads, kept current
         room.target, room.profile = target_for(
             cfg, self._settings, local.weekday(), local.hour * 60 + local.minute,
-            away=away, now=now,
+            away=away, vacant=self._vacant(room, state, now), now=now,
         )
         if not self._settings.enabled:
             # Master off: hands off. The resolved target is still published (it is
@@ -298,7 +303,15 @@ class HeatingController:
             room.status = ST_PREHEAT if room.demand else ST_IDLE
             return
         room.demand = demands_heat(was_demanding, room.temperature, room.target, self._settings)
-        room.status = ST_HEATING if room.demand else ST_IDLE
+        room.status = ST_HEATING if room.demand else ST_VACANT if room.profile == VACANT else ST_IDLE
+
+    def _vacant(self, room: Room, state: _State, now: float) -> bool:
+        """Nobody in the room for the configured hold, by every presence sensor in
+        it. A sensor that never reported counts as one that cannot vouch for the room."""
+        readings: list[tuple[object, float]] = []
+        for eid in room.presence:
+            readings.extend(state.readings(eid, PRESENCE_CAPS) or [(None, 0.0)])
+        return room_vacant(readings, now, self._settings)
 
     def _preheat(self, room: Room, local: datetime, outdoor: float | None,
                  now: float, *, away: bool) -> float | None:
@@ -569,6 +582,7 @@ class HeatingController:
         for room in self._rooms:
             ids.update(room.sensors)
             ids.update(room.contacts)
+            ids.update(room.presence)
             for valve in room.valves:
                 ids.update((valve, f"{valve}:window_open", f"{valve}:preset",
                             f"{valve}:window_detection",
@@ -577,7 +591,8 @@ class HeatingController:
             if eid:
                 ids.add(eid)
         rows = await self._pool.fetch(
-            "SELECT entity_id, capability, value, updated_at FROM current_state WHERE entity_id = ANY($1)",
+            "SELECT entity_id, capability, value, updated_at, changed_at FROM current_state"
+            " WHERE entity_id = ANY($1)",
             list(ids),
         )
         return _State(rows, self._unreachable())
@@ -587,16 +602,18 @@ class _State:
     """A read-only snapshot with timestamps, keyed (entity_id, capability). An entity
     on an unreachable device reads as absent, however recent its last report."""
 
-    __slots__ = ("_at", "_down", "_val")
+    __slots__ = ("_at", "_changed", "_down", "_val")
 
     def __init__(self, rows, unreachable: frozenset[str]) -> None:
         self._down = unreachable
         self._val: dict[tuple[str, str], object] = {}
         self._at: dict[tuple[str, str], float] = {}
+        self._changed: dict[tuple[str, str], float] = {}
         for r in rows:
             key = (r["entity_id"], r["capability"])
             self._val[key] = r["value"]
             self._at[key] = r["updated_at"].timestamp()
+            self._changed[key] = r["changed_at"].timestamp()
 
     def value(self, entity_id: str, capability: str = "", *, max_age: float | None = None) -> object:
         """A value, or None when absent — or, with `max_age`, when it is too old to
@@ -619,6 +636,15 @@ class _State:
             return None
         return val
 
+    def readings(self, entity_id: str, capabilities) -> list[tuple[object, float]]:
+        """(value, when it last changed) for each of these capabilities the entity
+        reports — the value None when its device is unreachable. Since a value last
+        CHANGED, not last reported: a sensor repeating "nobody" has been empty since
+        the first time it said so."""
+        return [
+            (None if entity_id in self._down else self._val[key], self._changed[key])
+            for cap in capabilities if (key := (entity_id, cap)) in self._val
+        ]
 
     def unreachable(self, entity_id: str) -> bool:
         return entity_id in self._down

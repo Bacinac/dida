@@ -21,6 +21,7 @@ from dida_core.heating import (
     next_step,
     preheat_minutes,
     profile_at,
+    room_vacant,
     setpoint_for,
     target_for,
     validate_room,
@@ -70,8 +71,8 @@ def test_a_trv_with_a_flat_battery_is_still_a_valve():
 
 
 def test_a_valve_in_no_room_is_named_not_dropped():
-    _, orphans = classify_entities(_rows(("mqtt:trlara", None, ["target_temperature", "temperature"])))
-    assert orphans == ["mqtt:trlara"]
+    _, orphans = classify_entities(_rows(("mqtt:trstudy", None, ["target_temperature", "temperature"])))
+    assert orphans == ["mqtt:trstudy"]
 
 
 def test_the_controllers_own_output_is_not_mistaken_for_a_device():
@@ -115,6 +116,7 @@ def test_settings_defaults_are_inert():
     {"summer_cutoff": 999},
     {"frost_target": 25},              # "frost protection" at 25 °C heats the house
     {"stale_after_s": 5},
+    {"vacant_minutes": 1},             # a trip to the kitchen is not an empty room
     {"enabled": True},                 # enabled with no boiler drives nothing
 ])
 def test_settings_rejected(bad):
@@ -191,20 +193,68 @@ def test_target_precedence():
     settings = HeatingSettings(mode="auto", targets={"comfort": 21, "eco": 19, "night": 18, "away": 15})
     room = RoomHeating(schedule=SCHEDULE, override_target=23, override_until=1_000.0)
     # an unexpired override beats everything
-    assert target_for(room, settings, 0, 10 * 60, away=False, now=900.0) == (23, "override")
+    assert target_for(room, settings, 0, 10 * 60, away=False, vacant=False, now=900.0) == (23, "override")
     # once it expires, the schedule is back in charge
-    assert target_for(room, settings, 0, 10 * 60, away=False, now=1_001.0) == (19, "eco")
+    assert target_for(room, settings, 0, 10 * 60, away=False, vacant=False, now=1_001.0) == (19, "eco")
     # an empty house overrides the schedule
-    assert target_for(room, settings, 0, 10 * 60, away=True, now=1_001.0) == (15, "away")
+    assert target_for(room, settings, 0, 10 * 60, away=True, vacant=False, now=1_001.0) == (15, "away")
     # a pinned house mode overrides the schedule too
     pinned = msgspec.structs.replace(settings, mode="comfort")
-    assert target_for(room, pinned, 0, 10 * 60, away=False, now=1_001.0) == (21, "comfort")
+    assert target_for(room, pinned, 0, 10 * 60, away=False, vacant=False, now=1_001.0) == (21, "comfort")
+
+
+def test_a_room_knows_who_could_be_in_it():
+    """Any occupancy or motion sensor assigned to the room is a witness — the same
+    pair the floor plan lights its presence dot on."""
+    rooms, _ = classify_entities(_rows(
+        ("mqtt:trstudy", 11, ["open_close", "target_temperature", "temperature"]),
+        ("esphome:study:occupancy", 11, ["occupancy"]),
+        ("esphome:study:pir_sensor", 11, ["motion"]),
+        ("mqtt:mittoilet", 10, ["battery", "occupancy", "temperature"]),
+    ))
+    assert rooms[11].presence == ["esphome:study:occupancy", "esphome:study:pir_sensor"]
+    assert rooms[10].presence == rooms[10].sensors == ["mqtt:mittoilet"], \
+        "a thermometer that also sees people is both"
+
+
+def test_an_empty_room_trims_comfort_to_eco():
+    house = HeatingSettings(mode="auto", targets={"comfort": 22, "eco": 19, "night": 18})
+    room = RoomHeating(eco_when_empty=True, offset=0.5)
+    assert target_for(room, house, 0, 10 * 60, away=False, vacant=True, now=0) == (19.5, "vacant")
+    assert target_for(room, house, 0, 10 * 60, away=False, vacant=False, now=0) == (22.5, "comfort")
+    assert target_for(RoomHeating(), house, 0, 10 * 60, away=False, vacant=True, now=0) == (22, "comfort"), \
+        "only a room that asked for it"
+
+
+def test_an_empty_room_never_warms_up():
+    """Night, away and off are already set for nobody; and an eco setpoint above
+    comfort is a typo, not a reason to heat an empty room harder."""
+    room = RoomHeating(eco_when_empty=True)
+    night = HeatingSettings(mode="night", targets={"comfort": 22, "eco": 19, "night": 18})
+    assert target_for(room, night, 0, 0, away=False, vacant=True, now=0) == (18, "night")
+    inverted = HeatingSettings(mode="comfort", targets={"comfort": 19, "eco": 21})
+    assert target_for(room, inverted, 0, 0, away=False, vacant=True, now=0) == (19, "comfort")
+    boosted = RoomHeating(eco_when_empty=True, override_target=23, override_until=100.0)
+    assert target_for(boosted, night, 0, 0, away=False, vacant=True, now=50) == (23, "override"), \
+        "a hand on the dial outranks an empty room"
+
+
+@pytest.mark.parametrize("presence,vacant", [
+    ([], False),                                   # no sensor, no evidence
+    ([(False, 1800.0)], True),                     # quiet for the whole hold
+    ([(False, 1799.0)], False),                    # not quite
+    ([(False, 3600.0), (True, 5000.0)], False),    # one witness still sees someone
+    ([(False, 3600.0), (None, 5000.0)], False),    # one gone silent is not one saying nobody
+])
+def test_room_vacant(presence, vacant):
+    stamped = [(v, 10_000.0 - ago) for v, ago in presence]
+    assert room_vacant(stamped, 10_000.0, HeatingSettings(vacant_minutes=30)) is vacant
 
 
 def test_target_falls_back_to_the_default_setpoint():
     """A house that never had its setpoints filled in still resolves to something
     sane rather than to no target at all."""
-    target, profile = target_for(RoomHeating(), HeatingSettings(), 0, 12 * 60, away=False, now=0)
+    target, profile = target_for(RoomHeating(), HeatingSettings(), 0, 12 * 60, away=False, vacant=False, now=0)
     assert (target, profile) == (21.0, "comfort")
 
 
@@ -226,9 +276,9 @@ def test_an_offset_cannot_push_a_room_outside_the_legal_range():
 
 def test_a_room_without_a_schedule_follows_the_house():
     house = HeatingSettings(mode="auto", schedule=SCHEDULE, targets={"comfort": 21, "eco": 19})
-    assert target_for(RoomHeating(), house, 0, 10 * 60, away=False, now=0) == (19, "eco")
+    assert target_for(RoomHeating(), house, 0, 10 * 60, away=False, vacant=False, now=0) == (19, "eco")
     own = RoomHeating(schedule=[Slot(days=[0, 1, 2, 3, 4, 5, 6], at="00:00", profile="comfort")])
-    assert target_for(own, house, 0, 10 * 60, away=False, now=0) == (21, "comfort"), \
+    assert target_for(own, house, 0, 10 * 60, away=False, vacant=False, now=0) == (21, "comfort"), \
         "a room that disagrees keeps its own"
 
 
@@ -274,14 +324,14 @@ def test_a_schedule_can_say_off():
     house = HeatingSettings(mode="auto", frost_target=8.0, targets={"comfort": 21},
                             schedule=[Slot(days=[0], at="00:00", profile="comfort"),
                                       Slot(days=[0], at="09:00", profile="off")])
-    assert target_for(RoomHeating(), house, 0, 8 * 60, away=False, now=0) == (21, "comfort")
-    assert target_for(RoomHeating(), house, 0, 10 * 60, away=False, now=0) == (8.0, "off")
+    assert target_for(RoomHeating(), house, 0, 8 * 60, away=False, vacant=False, now=0) == (21, "comfort")
+    assert target_for(RoomHeating(), house, 0, 10 * 60, away=False, vacant=False, now=0) == (8.0, "off")
 
 
 def test_an_off_step_ignores_the_room_offset():
     """A room that runs 1.5° warmer does not get a warmer freeze guard."""
     house = HeatingSettings(mode="off", frost_target=8.0)
-    assert target_for(RoomHeating(offset=1.5), house, 0, 12 * 60, away=False, now=0) == (8.0, "off")
+    assert target_for(RoomHeating(offset=1.5), house, 0, 12 * 60, away=False, vacant=False, now=0) == (8.0, "off")
 
 
 def test_detect_window_reads_a_fall_no_heating_can_explain():

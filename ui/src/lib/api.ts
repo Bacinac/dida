@@ -198,6 +198,7 @@ export interface HeatingSettings {
   outdoor: string;
   summer_cutoff: number;
   away_helper: string;       // boolean entity: true → the away profile everywhere
+  vacant_minutes: number;    // presence sensors quiet this long = nobody in the room
   frost_target: number;
   stale_after_s: number;
   force_manual: boolean;     // hold TRVs off their own internal weekly programme
@@ -234,6 +235,7 @@ export interface RoomHeatingConfig {
   schedule: HeatingSlot[];
   window_pause: boolean;
   can_call_boiler: boolean;  // false → takes heat when the boiler runs, never starts it
+  eco_when_empty: boolean;   // comfort runs as eco while nobody is in the room
   override_target: number | null;
   override_until: number | null;  // epoch seconds
 }
@@ -246,6 +248,7 @@ export interface HeatingRoom {
   // Nothing to pick: the room already knows its thermometer and its valves.
   sensors: string[];
   valves: string[];
+  presence: string[];        // occupancy/motion sensors — what "nobody is in" is read from
   config: RoomHeatingConfig;
 }
 

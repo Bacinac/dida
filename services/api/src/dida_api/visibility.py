@@ -70,7 +70,7 @@ async def _heating_entity_ids(pool: asyncpg.Pool) -> set[str]:
     rooms, orphans = await derive_rooms(pool)
     allowed = set(orphans) | {"heating:system"}
     for row in await pool.fetch("SELECT id, heating_config FROM areas"):
-        here = rooms.get(row["id"], RoomEntities([], [], []))
+        here = rooms.get(row["id"], RoomEntities([], [], [], []))
         config = row["heating_config"] or {}
         if not here.valves and not config:
             continue

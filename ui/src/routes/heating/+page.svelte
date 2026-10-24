@@ -41,10 +41,12 @@
       .filter((d) => "temperature" in d.caps && !("on_off" in d.caps) && !("target_temperature" in d.caps))
       .map(pickerItem),
   );
-  const booleanItems = $derived(
+  // Only the house's own flags: a device binary offered buttons and the controller's
+  // own heating:* outputs. Flags are config entities, which the picker hides by default.
+  const flagItems = $derived(
     Object.values(devices.byId)
-      .filter((d) => "boolean" in d.caps || "binary" in d.caps)
-      .map(pickerItem),
+      .filter((d) => "boolean" in d.caps && /^(helper|virtual):/.test(d.entityId))
+      .map((d) => ({ ...pickerItem(d), category: "control" })),
   );
   const outdoorTemp = $derived(() => {
     const id = view?.settings.outdoor;
@@ -168,8 +170,11 @@
             <input type="number" step="600" bind:value={draft.stale_after_s} />
           </Field>
           <Field label={t("heating.awayHelper")} hint={t("heating.awayHelperHint")}>
-            <EntityPicker bind:value={draft.away_helper} items={booleanItems}
+            <EntityPicker bind:value={draft.away_helper} items={flagItems}
               placeholder={t("heating.pickHelper")} />
+          </Field>
+          <Field label={t("heating.vacantMinutes")} hint={t("heating.vacantMinutesHint")}>
+            <input type="number" step="5" min="5" max="240" bind:value={draft.vacant_minutes} />
           </Field>
           <Field label={t("heating.preheatRate")} hint={t("heating.preheatHint")}>
             <input type="number" step="1" min="1" max="120" bind:value={draft.preheat_rate}
@@ -218,7 +223,7 @@
   <Section title={t("heating.rooms")}>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {#each view.rooms as room (room.area_id)}
-        <HeatingRoomCard {room} house={draft.targets} onchange={load} />
+        <HeatingRoomCard {room} house={draft.targets} vacantMinutes={draft.vacant_minutes} onchange={load} />
       {:else}
         <Card><p class="text-m text-dida-text-faint">{t("heating.noRooms")}</p></Card>
       {/each}

@@ -153,7 +153,7 @@ async def test_reconstruct_holds_rearms_mid_countdown():
 
     class HeldPool(FakePool):
         async def fetchrow(self, *a, **k):
-            return {"value": False, "age": 100.0}  # value == to(False), 100s already elapsed
+            return {"value": False, "age": 100.0, "evaluated": False}  # value == to(False), 100s already elapsed
 
     eng = AutomationEngine(FakeBus(), HeldPool())
     eng._rules = [Rule(7, "lights-off", defn)]
@@ -166,12 +166,36 @@ async def test_reconstruct_holds_rearms_mid_countdown():
 
     class MovedAwayPool(FakePool):
         async def fetchrow(self, *a, **k):
-            return {"value": True, "age": 100.0}  # value != to → no longer qualifies
+            return {"value": True, "age": 100.0, "evaluated": False}  # value != to → no longer qualifies
 
     eng2 = AutomationEngine(FakeBus(), MovedAwayPool())
     eng2._rules = [Rule(8, "lights-off", defn)]
     await eng2.reconstruct_holds()
     assert eng2._pending.get((8, 0)) is None, "not re-armed once the value no longer qualifies"
+
+
+@pytest.mark.parametrize("evaluated,fires", [(True, False), (None, True)])
+async def test_a_boot_fires_an_expired_hold_only_if_no_run_evaluated_it(evaluated, fires):
+    # Expired before the restart: evaluated by the instance that was running — acted
+    # on or not — so a deploy leaves it be; expired while nothing ran, it fires now.
+    defn = AutomationDef(
+        triggers=[Trigger(entity_id="mqtt:pir", capability="occupancy", to=False, for_seconds=300)],
+        actions=[Action(entity_id="mqtt:light", capability="on_off", command="turn_off")],
+    )
+
+    class ExpiredPool(FakePool):
+        async def fetchrow(self, *a, **k):
+            return {"value": False, "age": 400.0, "evaluated": evaluated}
+
+        async def fetchval(self, *a, **k):
+            return False
+
+    bus = FakeBus()
+    eng = AutomationEngine(bus, ExpiredPool())
+    eng._rules = [Rule(9, "lights-off", defn)]
+    await eng.reconstruct_holds()
+    await asyncio.sleep(0.05)
+    assert len(bus.commands) == (1 if fires else 0)
 
 
 async def test_to_none_fires_only_on_change():

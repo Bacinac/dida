@@ -460,7 +460,7 @@ class AutomationEngine:
 
         So: at boot, for a schedule-class trigger (astro:/calendar:) whose entity is
         ALREADY sitting at the qualifying value, fire it if the transition happened
-        inside the recovery window and the rule hasn't already fired for it. The
+        inside the recovery window and the rule hasn't been evaluated since. The
         window is what keeps this honest — a deploy fires the step it interrupted,
         never a whole day's worth of missed schedule."""
         for rule in self._rules:
@@ -469,21 +469,11 @@ class AutomationEngine:
                     continue
                 if not trig.entity_id.startswith(SCHEDULE_NAMESPACES):
                     continue
-                row = await self._pool.fetchrow(
-                    "SELECT value, changed_at, EXTRACT(EPOCH FROM (now() - changed_at)) AS age "
-                    "FROM current_state WHERE entity_id = $1 AND capability = $2",
-                    trig.entity_id, trig.capability,
-                )
-                if row is None or row["value"] != trig.to:
+                row = await self._trigger_at_rest(rule, trig)
+                if row is None or row["value"] != trig.to or row["evaluated"]:
                     continue
                 if float(row["age"] or 0) > SCHEDULE_RECOVER_S:
                     continue  # too long ago to still be "the step we interrupted"
-                last_fired = await self._pool.fetchval(
-                    "SELECT last_triggered_at FROM automations WHERE id = $1", rule.id
-                )
-                if last_fired is not None and row["changed_at"] is not None \
-                        and last_fired >= row["changed_at"]:
-                    continue  # already ran for this transition
                 update = StateUpdate(
                     entity_id=trig.entity_id, capability=trig.capability,
                     value=trig.to, adapter="reconstruct", ts_ns=time.time_ns(),
@@ -499,28 +489,17 @@ class AutomationEngine:
         NOT the last report (updated_at bumps on unchanged re-reports, which would
         reset a running countdown to nearly full on every deploy). So a deploy
         mid-hold (motion ended, 300 s countdown running) doesn't leave lights on all
-        night. Skips a hold that ALREADY fired for this transition (its rule's
-        last_triggered_at is at or after the value settled), so a non-idempotent
-        action (toggle/notify/gate pulse) doesn't re-fire on every deploy while the
-        trigger entity simply rests in its qualifying state. Called once at boot,
-        after reload()+seed."""
+        night. Skips a hold that expired while an instance was running to evaluate it
+        (acted on or not), so a non-idempotent action (toggle/notify/gate pulse)
+        doesn't re-fire on every deploy while the trigger entity simply rests in its
+        qualifying state. Called once at boot, after reload()+seed."""
         for rule in self._rules:
             for tidx, trig in enumerate(rule.defn.triggers):
                 if not trig.for_seconds or trig.to is None:
                     continue
-                row = await self._pool.fetchrow(
-                    "SELECT value, changed_at, EXTRACT(EPOCH FROM (now() - changed_at)) AS age "
-                    "FROM current_state WHERE entity_id = $1 AND capability = $2",
-                    trig.entity_id, trig.capability,
-                )
-                if row is None or row["value"] != trig.to:
+                row = await self._trigger_at_rest(rule, trig)
+                if row is None or row["value"] != trig.to or row["evaluated"]:
                     continue
-                last_fired = await self._pool.fetchval(
-                    "SELECT last_triggered_at FROM automations WHERE id = $1", rule.id
-                )
-                if last_fired is not None and row["changed_at"] is not None \
-                        and last_fired >= row["changed_at"]:
-                    continue  # the hold already ran for this transition — don't re-fire
                 remaining = max(0.0, trig.for_seconds - float(row["age"]))
                 update = StateUpdate(
                     entity_id=trig.entity_id, capability=trig.capability,
@@ -531,6 +510,18 @@ class AutomationEngine:
                     log=log, name=f"hold {rule.name}",
                 )
                 log.info("reconstructed hold for %r (id=%s t=%d): %.0fs remaining", rule.name, rule.id, tidx, remaining)
+
+    async def _trigger_at_rest(self, rule: Rule, trig):
+        """The trigger entity's value, its age in that value, and whether the rule was
+        evaluated at or after the trigger's moment — the transition plus its hold, so
+        a hold still counting down can never read as evaluated."""
+        return await self._pool.fetchrow(
+            "SELECT cs.value, EXTRACT(EPOCH FROM (now() - cs.changed_at)) AS age, "
+            "a.last_evaluated_at >= cs.changed_at + make_interval(secs => $4) AS evaluated "
+            "FROM current_state cs, automations a "
+            "WHERE cs.entity_id = $1 AND cs.capability = $2 AND a.id = $3",
+            trig.entity_id, trig.capability, rule.id, float(trig.for_seconds or 0),
+        )
 
     async def _compile(self, rid: int, script: str):
         """Compile a Starlark script, cached by text. On a syntax error, record
@@ -686,6 +677,11 @@ class AutomationEngine:
     async def _fire(self, rule: Rule, trig, update: StateUpdate) -> None:
         if rule.disabled:
             return  # runaway guard already tripped — halt until the reload drops it (≤REFRESH_INTERVAL)
+        # Every fire that reaches the rule counts, whatever it then decides: a boot
+        # re-fires only a trigger moment that no running instance saw.
+        await self._pool.execute(
+            "UPDATE automations SET last_evaluated_at = now() WHERE id = $1", rule.id,
+        )
         if rule.id in self._firing:
             if rule.defn.run_mode == "queued":
                 pending = self._queued.setdefault(rule.id, {})

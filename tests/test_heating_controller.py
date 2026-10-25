@@ -111,7 +111,7 @@ def house(state_over=None, *, settings_over=None, room_over=None, boiler_on=Fals
           entities=None):
     state = {
         (SENSOR, "temperature"): (19.0, 60),
-        (VALVE, "target_temperature"): (10.0, 60),
+        (VALVE, "target_temperature"): (15.0, 60),
         (BOILER, "on_off"): (boiler_on, 60),
         ("eco:outdoor", "temperature"): (outdoor, 60),
     }
@@ -189,7 +189,8 @@ async def test_cold_room_gets_its_setpoint_and_fires_the_boiler():
     ctrl, bus = await run(house())
     setpoint = commands(bus, VALVE)
     assert [c.command for c in setpoint] == ["set_temperature"]
-    assert setpoint[0].args["value"] == 21.0
+    assert setpoint[0].args["value"] == H.OPEN_SETPOINT
+    assert published(bus, "heating:room:7", "target_temperature") == 21.0
     assert [c.command for c in commands(bus, BOILER)] == ["turn_on"]
     assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     assert published(bus, "heating:room:7", "binary") is True
@@ -319,9 +320,9 @@ async def test_a_room_with_no_thermometer_falls_back_to_the_valve():
 
 
 async def test_setpoint_is_not_rewritten_once_the_valve_agrees():
-    pool = house({(VALVE, "target_temperature"): (21.0, 60)})
+    pool = house({(VALVE, "target_temperature"): (H.OPEN_SETPOINT, 60)})
     _, bus = await run(pool)
-    assert commands(bus, VALVE) == [], "the valve already sits at the target"
+    assert commands(bus, VALVE) == [], "the valve is already open"
 
 
 async def test_setpoint_is_clamped_to_the_valve_limits():
@@ -337,7 +338,7 @@ async def test_a_valve_that_never_echoes_is_reported_faulty():
     ctrl, bus = await run(pool)
     assert published(bus, "heating:room:7", "text") == H.ST_WAITING
     # …the write is now older than the window a slow battery TRV is given
-    ctrl._written[VALVE] = (21.0, time.monotonic() - H.VERIFY_S - 1)
+    ctrl._written[VALVE] = (H.OPEN_SETPOINT, time.monotonic() - H.VERIFY_S - 1)
     bus.commands.clear()
     await ctrl.tick()
     assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
@@ -354,7 +355,7 @@ async def test_a_write_lost_on_the_way_is_sent_again():
     assert commands(bus, VALVE) == [], "too soon to tell a lost write from a slow echo"
     ctrl._sent[VALVE] = time.monotonic() - H.RESEND_S - 1
     await ctrl.tick()
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0]
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [H.OPEN_SETPOINT]
     assert published(bus, "heating:room:7", "text") == H.ST_WAITING, "not yet a faulty valve"
 
 
@@ -433,7 +434,7 @@ async def test_empty_house_uses_the_away_setpoint():
                  settings_over={"away_helper": "helper:house_empty",
                                 "targets": {"comfort": 21.0, "away": 16.0}})
     _, bus = await run(pool)
-    assert commands(bus, VALVE)[0].args["value"] == 16.0
+    assert published(bus, "heating:room:7", "target_temperature") == 16.0
 
 
 async def test_a_house_empty_for_a_moment_is_not_away():
@@ -442,64 +443,36 @@ async def test_a_house_empty_for_a_moment_is_not_away():
                  settings_over={"away_helper": "helper:house_empty",
                                 "targets": {"comfort": 21.0, "away": 16.0}})
     _, bus = await run(pool)
-    assert commands(bus, VALVE)[0].args["value"] == 21.0
-
-
-FORCE = f"{VALVE}:force"
-FORCEABLE = {(FORCE, "enum_options"): ('["normal", "open", "close"]', 60)}
+    assert published(bus, "heating:room:7", "target_temperature") == 21.0
 
 
 async def test_the_room_thermometer_opens_and_shuts_the_valve():
     """The valve is an actuator. Its own thermometer sits on the radiator — here it
     reads 30 on a hot one — and is not asked: the room is at 19, so it opens."""
-    pool = house({**FORCEABLE, (VALVE, "temperature"): (30.0, 60)})
+    pool = house({(VALVE, "temperature"): (30.0, 60)})
     ctrl, bus = await run(pool)
-    assert [c.args["value"] for c in commands(bus, FORCE)] == ["open"]
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0], "the setpoint still says what the room wants"
-    pool.state[(FORCE, "enum")] = ("open", 30)
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [H.OPEN_SETPOINT]
+    assert published(bus, "heating:room:7", "target_temperature") == 21.0
+    pool.state[(VALVE, "target_temperature")] = (H.OPEN_SETPOINT, 30)
     pool.state[(SENSOR, "temperature")] = (21.5, 30)
     bus.commands.clear()
     await ctrl.tick()
-    assert [c.args["value"] for c in commands(bus, FORCE)] == ["close"]
-
-
-async def test_a_valve_that_cannot_be_forced_keeps_regulating_itself():
-    _, bus = await run(house())
-    assert commands(bus, FORCE) == []
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0]
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [H.SHUT_SETPOINT]
 
 
 async def test_without_a_room_thermometer_the_valve_regulates_itself():
     """No better witness than the valve's own reading, so the valve keeps deciding."""
-    pool = house({**FORCEABLE, (FORCE, "enum"): ("close", 60), (VALVE, "temperature"): (18.0, 60)},
+    pool = house({(VALVE, "temperature"): (18.0, 60)},
                  entities=[(VALVE, 7, ["target_temperature", "temperature"]), (BOILER, 17, ["on_off"])])
     _, bus = await run(pool)
-    assert [c.args["value"] for c in commands(bus, FORCE)] == ["normal"]
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0]
 
 
-async def test_the_freeze_guard_is_left_to_the_valve():
-    """A room parked at frost must stay protected even if DIDA stops."""
-    _, bus = await run(house({**FORCEABLE, (FORCE, "enum"): ("open", 60)}, room_over={"enabled": False}))
-    assert [c.args["value"] for c in commands(bus, FORCE)] == ["normal"]
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [8.0]
-
-
-@pytest.mark.parametrize("forced,released", [("close", ["normal"]), ("normal", [])])
-async def test_switching_heating_off_hands_every_valve_back(forced, released):
-    pool = house({**FORCEABLE, (FORCE, "enum"): (forced, 60)}, settings_over={"enabled": False})
+@pytest.mark.parametrize("left,handed", [(H.OPEN_SETPOINT, [21.0]), (H.SHUT_SETPOINT, [21.0]), (19.0, [])])
+async def test_switching_heating_off_hands_every_valve_back(left, handed):
+    pool = house({(VALVE, "target_temperature"): (left, 60)}, settings_over={"enabled": False})
     _, bus = await run(pool)
-    assert [c.args["value"] for c in commands(bus, FORCE)] == released
-    assert commands(bus, VALVE) == [], "and nothing else is touched"
-
-
-async def test_a_valve_that_ignores_force_is_reported_faulty():
-    pool = house(FORCEABLE)
-    ctrl, bus = await run(pool)
-    ctrl._written[FORCE] = ("open", time.monotonic() - H.VERIFY_S - 1)
-    bus.commands.clear()
-    await ctrl.tick()
-    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
-    assert [c.args["value"] for c in commands(bus, FORCE)] == ["open"], "and it is retried"
+    assert [c.args["value"] for c in commands(bus, VALVE)] == handed
 
 
 ROOM_PRESENCE = "esphome:study:occupancy"
@@ -516,7 +489,7 @@ async def test_a_room_nobody_is_in_runs_eco():
     """Quiet for longer than the hold: comfort drops to eco, and the card says why
     the target is lower rather than just showing a smaller number."""
     _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)}))
-    assert commands(bus, VALVE)[0].args["value"] == 19.0
+    assert published(bus, "heating:room:7", "target_temperature") == 19.0
     assert published(bus, "heating:room:7", "text") == H.ST_VACANT
     assert not commands(bus, BOILER), "21.5 in an empty room is warm enough"
 
@@ -528,20 +501,20 @@ async def test_a_room_nobody_is_in_runs_eco():
 ])
 async def test_a_room_someone_might_be_in_stays_comfortable(presence):
     _, bus = await run(empty_room(presence))
-    assert commands(bus, VALVE)[0].args["value"] == 22.0
+    assert published(bus, "heating:room:7", "target_temperature") == 22.0
     assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
 
 async def test_a_presence_sensor_that_dropped_off_cannot_vouch_for_an_empty_room():
     _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)}),
                        unreachable={ROOM_PRESENCE})
-    assert commands(bus, VALVE)[0].args["value"] == 22.0
+    assert published(bus, "heating:room:7", "target_temperature") == 22.0
 
 
 async def test_an_empty_room_stays_comfortable_unless_it_asked_for_eco():
     _, bus = await run(empty_room({(ROOM_PRESENCE, "occupancy"): (False, 60, 3600)},
                                   eco_when_empty=False))
-    assert commands(bus, VALVE)[0].args["value"] == 22.0
+    assert published(bus, "heating:room:7", "target_temperature") == 22.0
 
 
 async def test_unchanged_decisions_are_not_republished():
@@ -577,7 +550,7 @@ async def test_a_room_that_may_not_start_the_boiler_does_not():
     pool = house(room_over={"can_call_boiler": False})
     _, bus = await run(pool)
     assert commands(bus, BOILER) == [], "it wants heat, but it may not ask for it"
-    assert commands(bus, VALVE)[0].args["value"] == 21.0, "…and its valve is still set"
+    assert commands(bus, VALVE)[0].args["value"] == H.OPEN_SETPOINT, "…and it takes heat the boiler makes for others"
 
 
 async def test_a_room_that_may_not_start_the_boiler_does_not_keep_it_burning():
@@ -606,7 +579,7 @@ async def test_the_boiler_waits_for_a_quorum():
 
 async def test_a_room_offset_shifts_the_house_setpoint():
     _, bus = await run(house(room_over={"offset": -1.5}))
-    assert commands(bus, VALVE)[0].args["value"] == 19.5
+    assert published(bus, "heating:room:7", "target_temperature") == 19.5
 
 
 async def test_a_contact_sensor_in_the_room_pauses_it():

@@ -69,8 +69,10 @@ VERIFY_S = 900.0
 RESEND_S = 120.0
 # TRVs step in halves; anything finer would write forever without converging.
 STEP = 0.5
-# A valve's `force` mode: held open, held shut, or regulating on its own thermostat.
-FORCE_OPEN, FORCE_CLOSE, FORCE_NORMAL = "open", "close", "normal"
+# A valve driven by the room's thermometer is only opened or shut, by a setpoint its
+# own thermometer on the radiator cannot reach either way. Shut is a real setpoint,
+# not a hold, so a shut valve still opens by itself to guard against frost.
+OPEN_SETPOINT, SHUT_SETPOINT = 28.0, 10.0
 
 # Room status, published as the room entity's `text`. One vocabulary, English like
 # every other adapter descriptor — the UI translates it.
@@ -419,28 +421,26 @@ class HeatingController:
     # --- actuation -------------------------------------------------------------
 
     async def _drive_valves(self, room: Room, state: _State) -> None:
-        if not self._settings.enabled:
-            # Hands off — but a head left forced by a controller that stopped deciding
-            # is a radiator nobody regulates, so it goes back to its own thermostat.
-            for valve in room.valves:
-                if state.value(f"{valve}:force", "enum") in (FORCE_OPEN, FORCE_CLOSE):
-                    await self._converge(room, f"{valve}:force", "enum", "set_option", FORCE_NORMAL, state)
-            return
         if room.target is None:
             return
         target = round(room.target / STEP) * STEP
+        if not self._settings.enabled:
+            # Hands off — but a head left open or shut by a controller that stopped
+            # deciding is a radiator nobody regulates, so it gets the room's target.
+            for valve in room.valves:
+                if state.value(valve, "target_temperature") in self._drive_setpoints(valve, state):
+                    await self._converge(room, valve, "target_temperature", "set_temperature",
+                                         self._clamp(valve, target, state), state)
+            return
         # The room's own thermometer decides and the valve only opens and shuts: the
         # valve's thermometer sits on the radiator and reads degrees off the room.
         # Without a thermometer of the room's own, or parked at frost, the valve
-        # regulates by itself on its setpoint — the freeze guard must not depend on
-        # DIDA running.
+        # regulates by itself on the room's target.
         drive = room.status in REGULATING and self._mean_temperature(room.sensors, state) is not None
         for valve in room.valves:
+            want = (OPEN_SETPOINT if room.demand else SHUT_SETPOINT) if drive else target
             await self._converge(room, valve, "target_temperature", "set_temperature",
-                                 self._clamp(valve, target, state), state)
-            if self._can_force(valve, state):
-                want = (FORCE_OPEN if room.demand else FORCE_CLOSE) if drive else FORCE_NORMAL
-                await self._converge(room, f"{valve}:force", "enum", "set_option", want, state)
+                                 self._clamp(valve, want, state), state)
             await self._hold_manual(valve, state, room)
             await self._sync_window_detection(valve, state, room)
 
@@ -474,9 +474,8 @@ class HeatingController:
         self._sent[entity_id] = time.monotonic()
         await self._command(entity_id, capability, command, {"value": want}, room)
 
-    def _can_force(self, valve: str, state: _State) -> bool:
-        options = state.value(f"{valve}:force", "enum_options")
-        return isinstance(options, str) and all(o in options for o in (FORCE_OPEN, FORCE_CLOSE, FORCE_NORMAL))
+    def _drive_setpoints(self, valve: str, state: _State) -> tuple[float, float]:
+        return self._clamp(valve, OPEN_SETPOINT, state), self._clamp(valve, SHUT_SETPOINT, state)
 
     def _clamp(self, valve: str, target: float, state: _State) -> float:
         """Respect the valve's own limits — writing 21 °C to a TRV capped at 20
@@ -635,7 +634,7 @@ class HeatingController:
             ids.update(room.presence)
             for valve in room.valves:
                 ids.update((valve, f"{valve}:window_open", f"{valve}:preset",
-                            f"{valve}:window_detection", f"{valve}:force",
+                            f"{valve}:window_detection",
                             f"{valve}:min_temperature", f"{valve}:max_temperature"))
         for eid in (self._settings.boiler, self._settings.outdoor, self._settings.away_helper):
             if eid:

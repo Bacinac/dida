@@ -228,8 +228,9 @@ class AutomationEngine:
         # `mode: single`): a re-trigger while it's still running is ignored, so
         # a long sequence (a gate's click-wait-click) can't overlap itself.
         self._firing: set[int] = set()
-        # Per rule in run_mode "queued": the latest fire that landed mid-run.
-        self._queued: dict[int, tuple[object, StateUpdate]] = {}
+        # Per rule in run_mode "queued": the latest fire per trigger id that landed
+        # mid-run, in arrival order.
+        self._queued: dict[int, dict[str, tuple[object, StateUpdate]]] = {}
         self._stale_bursts: dict[int, _StaleBurst] = {}
         self._fleet_fires: list[float] = []  # monotonic ts of recent fires across ALL rules
         self._helper_seq: dict[str, int] = {}  # helper entity_id -> latest issued eval seq (latest-wins)
@@ -687,7 +688,9 @@ class AutomationEngine:
             return  # runaway guard already tripped — halt until the reload drops it (≤REFRESH_INTERVAL)
         if rule.id in self._firing:
             if rule.defn.run_mode == "queued":
-                self._queued[rule.id] = (trig, update)
+                pending = self._queued.setdefault(rule.id, {})
+                pending.pop(trig.id, None)
+                pending[trig.id] = (trig, update)
                 return
             # single: for a hold-expiry this consumes the fire — log it so a
             # "lights stayed on" has a trace.
@@ -754,10 +757,17 @@ class AutomationEngine:
 
     def _release(self, rule: Rule) -> None:
         self._firing.discard(rule.id)
-        queued = self._queued.pop(rule.id, None)
+        pending = self._queued.get(rule.id)
+        if not pending:
+            return
         current = next((r for r in self._rules if r.id == rule.id), None)
-        if queued is not None and current is not None:
-            spawn(self._fire(current, *queued), log=log, name=f"queued {current.name}")
+        if current is None:
+            del self._queued[rule.id]
+            return
+        trig, update = pending.pop(next(iter(pending)))
+        if not pending:
+            del self._queued[rule.id]
+        spawn(self._fire(current, trig, update), log=log, name=f"queued {current.name}")
 
     async def _run(self, rule: Rule, trig, update: StateUpdate) -> bool:
         """Execute the rule. Returns True if commands were actually published.

@@ -92,9 +92,9 @@ class AutomationDef(msgspec.Struct, frozen=True):
     script: str = ""
     cooldown_seconds: float | None = None
     # A fire landing while the rule still runs: "single" drops it (a gate pulse must
-    # never overlap itself), "queued" runs the latest such fire once the run ends —
-    # for a rule that reads the house afresh each time, a dropped "off" is a light
-    # left on.
+    # never overlap itself), "queued" runs it once the run ends — the latest per
+    # trigger id, so repeats of one branch collapse and no other branch is lost. For
+    # a rule that reads the house afresh each time, a dropped "off" is a light left on.
     run_mode: Literal["single", "queued"] = "single"
 
 

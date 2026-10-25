@@ -506,13 +506,19 @@ async def test_a_helper_reading_a_device_is_recomputed_when_the_device_drops_off
     assert published == ["unknown"]
 
 
-@pytest.mark.parametrize("run_mode,runs", [("single", 1), ("queued", 2)])
-async def test_fires_landing_mid_run_are_dropped_or_run_once_after(run_mode, runs):
-    """Three sensors of one room flip together while the first run is still going:
-    a single rule drops the other two, a queued one runs once more for the latest."""
+@pytest.mark.parametrize("run_mode,branches,runs", [
+    ("single", ["on", "on", "on"], 1),
+    ("queued", ["on", "on", "on"], 2),
+    ("queued", ["on", "on", "off"], 3),
+])
+async def test_fires_landing_mid_run_are_dropped_or_run_after(run_mode, branches, runs):
+    """Three sensors flip together while the first run is still going. A single rule
+    drops the rest; a queued one runs the latest of each branch once the run ends, so
+    repeats collapse and a different branch is never lost."""
     eng = AutomationEngine(FakeBus(), FakePool())
     defn = AutomationDef(
-        triggers=[Trigger(entity_id=f"mqtt:pir{i}", capability="occupancy", to=True) for i in range(3)],
+        triggers=[Trigger(entity_id=f"mqtt:pir{i}", capability="occupancy", to=True, id=b)
+                  for i, b in enumerate(branches)],
         actions=[Action(entity_id="mqtt:lamp", capability="on_off", command="turn_on", delay_ms=50)],
         run_mode=run_mode,
     )
@@ -520,6 +526,6 @@ async def test_fires_landing_mid_run_are_dropped_or_run_once_after(run_mode, run
     eng._last = {(f"mqtt:pir{i}", "occupancy"): False for i in range(3)}
     for i in range(3):
         await eng.on_event(upd(f"mqtt:pir{i}", "occupancy", True))
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.4)
     assert len(eng._bus.commands) == runs
     assert not eng._firing and not eng._queued

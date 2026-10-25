@@ -3,7 +3,7 @@ Pravilo je **okidač → uvjeti → akcije**.
 - **Okidač** — jedan entitet i sposobnost, po želji vrijednost NA koju se mijenja i po želji zadržavanje (`for_seconds`): pravilo se pokreće tek kad se vrijednost toliko dugo zadrži. Okidač reagira na PROMJENU vrijednosti, a ne na svako javljanje uređaja.
 - **Uvjeti** — popis uvjeta koji svi moraju vrijediti (I). Bez uvjeta pravilo je bezuvjetno.
 - **Akcije** — izvode se redom. Svaka može imati odgodu PRIJE sebe, i tako se grade nizovi i impulsi: relej vrata je klik, čekanje, klik.
-- **Dok se izvodi** — okidanje koje stigne dok se pravilo još izvodi preskače se, pa se impuls vrata ne može preklopiti sam sa sobom. Pravilo koje svaki put iznova čita stanje kuće (svjetla, glazba) može ga umjesto toga staviti **na čekanje**: zadnje takvo okidanje izvede se kad trenutno izvođenje završi.
+- **Dok se izvodi** — okidanje koje stigne dok se pravilo još izvodi preskače se, pa se impuls vrata ne može preklopiti sam sa sobom. Pravilo koje svaki put iznova čita stanje kuće (svjetla, glazba) može ga umjesto toga staviti **na čekanje**: kad trenutno izvođenje završi, izvede se zadnje okidanje svake oznake okidača, pa se ponavljanja stope, a nijedna druga grana se ne gubi.
 
 ## Kad obično pravilo nije dovoljno
 

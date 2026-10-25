@@ -345,6 +345,15 @@ async def test_a_valve_that_never_echoes_is_reported_faulty():
     assert [c.command for c in commands(bus, VALVE)] == ["set_temperature"], "and it is retried"
 
 
+@pytest.mark.parametrize("published_before,calling", [(True, True), (False, False), (None, False)])
+async def test_a_restart_inside_the_band_keeps_what_the_room_was_doing(published_before, calling):
+    """At 21.0 against 21 a climbing room keeps calling and a cooling one does not;
+    only the demand published before the restart can tell which this is."""
+    before = {} if published_before is None else {("heating:room:7", "binary"): (published_before, 60)}
+    _, bus = await run(house({(SENSOR, "temperature"): (21.0, 60), **before}))
+    assert published(bus, "heating:room:7", "binary") is calling
+
+
 async def test_a_write_lost_on_the_way_is_sent_again():
     """A command published while the valve's adapter restarts never arrives. Waiting
     out the whole verification window would leave the room on the old setpoint for a

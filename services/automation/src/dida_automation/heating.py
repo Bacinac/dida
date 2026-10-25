@@ -156,7 +156,9 @@ class HeatingController:
         # is a LATCH (keep calling until a deadband above target), so it must persist
         # across ticks — and `Room` objects are rebuilt on every reload(), which runs
         # before every tick, so it cannot live on the Room. Keyed by area_id, like
-        # the trace above.
+        # the trace above. A restart starts from the demand last published: inside
+        # the band an empty latch reads "not calling", so every deploy would stop a
+        # room mid-climb and the boiler with it.
         self._demand: dict[int, bool] = {}
         # Last config error logged per room (and "" for the house), so a config that
         # stays broken says so ONCE instead of every reload — the reason the same
@@ -284,7 +286,9 @@ class HeatingController:
     def _decide(self, room: Room, state: _State, local: datetime, *,
                 away: bool, summer: bool, frost: float, outdoor: float | None, now: float) -> None:
         cfg = room.cfg
-        was_demanding = self._demand.get(room.area_id, False)
+        was_demanding = self._demand.get(room.area_id)
+        if was_demanding is None:
+            was_demanding = state.value(f"heating:room:{room.area_id}", "binary") is True
         room.temperature = self._room_temperature(room, state)
         self._track(room, now)  # the trace our own window detection reads, kept current
         vacant = self._vacant(room, state, now)
@@ -629,6 +633,7 @@ class HeatingController:
         what makes freshness a first-class input."""
         ids: set[str] = set()
         for room in self._rooms:
+            ids.add(f"heating:room:{room.area_id}")
             ids.update(room.sensors)
             ids.update(room.contacts)
             ids.update(room.presence)

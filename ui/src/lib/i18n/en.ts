@@ -796,6 +796,8 @@ export const en = {
 	'auto.hold': 'hold (s)',
 	'auto.cooldown': 'cooldown (s)',
 	'auto.cooldownHint': 'After firing, stay silent this many seconds. For a zone people walk through: one visit crosses it both ways.',
+	'auto.queued': 'queue',
+	'auto.queuedHint': 'A fire that lands while the rule still runs runs after it, instead of being skipped. For lights and music, not for a gate pulse.',
 	'ai.title': 'Describe a rule in plain language',
 	'ai.placeholder': 'e.g. when everyone leaves, turn off all lights and close the gate',
 	'ai.generate': 'Generate',

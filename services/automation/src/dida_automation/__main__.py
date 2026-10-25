@@ -228,6 +228,8 @@ class AutomationEngine:
         # `mode: single`): a re-trigger while it's still running is ignored, so
         # a long sequence (a gate's click-wait-click) can't overlap itself.
         self._firing: set[int] = set()
+        # Per rule in run_mode "queued": the latest fire that landed mid-run.
+        self._queued: dict[int, tuple[object, StateUpdate]] = {}
         self._stale_bursts: dict[int, _StaleBurst] = {}
         self._fleet_fires: list[float] = []  # monotonic ts of recent fires across ALL rules
         self._helper_seq: dict[str, int] = {}  # helper entity_id -> latest issued eval seq (latest-wins)
@@ -684,8 +686,11 @@ class AutomationEngine:
         if rule.disabled:
             return  # runaway guard already tripped — halt until the reload drops it (≤REFRESH_INTERVAL)
         if rule.id in self._firing:
-            # mode=single: still running from a prior trigger. For a hold-expiry
-            # this consumes the fire — log it so a "lights stayed on" has a trace.
+            if rule.defn.run_mode == "queued":
+                self._queued[rule.id] = (trig, update)
+                return
+            # single: for a hold-expiry this consumes the fire — log it so a
+            # "lights stayed on" has a trace.
             log.warning("automation %r (id=%s): fire suppressed — previous run still in flight",
                         rule.name, rule.id)
             return
@@ -745,7 +750,14 @@ class AutomationEngine:
                           "capability": update.capability, "value": update.value},
                 )
         finally:
-            self._firing.discard(rule.id)
+            self._release(rule)
+
+    def _release(self, rule: Rule) -> None:
+        self._firing.discard(rule.id)
+        queued = self._queued.pop(rule.id, None)
+        current = next((r for r in self._rules if r.id == rule.id), None)
+        if queued is not None and current is not None:
+            spawn(self._fire(current, *queued), log=log, name=f"queued {current.name}")
 
     async def _run(self, rule: Rule, trig, update: StateUpdate) -> bool:
         """Execute the rule. Returns True if commands were actually published.
@@ -831,7 +843,7 @@ class AutomationEngine:
             log.debug("rule %s run failed", rule.id, exc_info=True)
             await self._on_error(rule, exc)
         finally:
-            self._firing.discard(rule.id)
+            self._release(rule)
 
     async def _run_starlark(self, rule: Rule, trig, update: StateUpdate, *, by_hand: bool = False) -> bool:
         # Snapshot current state so the hermetic script can read it via state().

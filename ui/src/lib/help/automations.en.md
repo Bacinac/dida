@@ -3,6 +3,7 @@ A rule is **Trigger → Conditions → Actions**.
 - **Trigger** — one entity and capability, optionally the value it changes TO, and optionally a hold (`for_seconds`): the rule fires only once the value has held that long. A trigger fires on a CHANGE of value, not on every report from the device.
 - **Conditions** — a list, all of which must hold (AND). No conditions means the rule is unconditional.
 - **Actions** — run in order. Each may carry a delay that happens BEFORE it, which is how sequences and pulses are built: a gate relay is click, wait, click.
+- **While it runs** — a fire that lands while the rule is still running is skipped, so a gate pulse can never overlap itself. A rule that reads the house afresh each time (lights, music) can **queue** it instead: the latest such fire runs once the current run ends.
 
 ## When a typed rule is not enough
 

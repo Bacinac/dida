@@ -28,6 +28,7 @@
     actions: FAction[];
     script: string;
     cooldown: string;
+    queued: boolean;
   }
   const blankTrigger = (entityId: string): FTrigger =>
     ({ entity_id: entityId, capability: capsOf(entityId)[0] ?? "", to: "", for_seconds: "", id: "" });
@@ -187,6 +188,7 @@
       actions: [],
       script: STARLARK_HELP,
       cooldown: "",
+      queued: false,
     };
   }
 
@@ -198,6 +200,7 @@
       id, name, enabled,
       mode: isStarlark ? "starlark" : "typed",
       cooldown: d.cooldown_seconds ? String(d.cooldown_seconds) : "",
+      queued: d.run_mode === "queued",
       triggers: (d.triggers ?? []).map((tr) => ({
         entity_id: tr.entity_id,
         capability: tr.capability,
@@ -329,12 +332,14 @@
     });
     const cd = Number(f.cooldown);
     const cooldown = f.cooldown !== "" && cd > 0 ? cd : undefined;
+    const run_mode = f.queued ? "queued" : undefined;
     if (f.mode === "starlark") {
-      return { triggers, conditions: [], actions: [], script: f.script, cooldown_seconds: cooldown };
+      return { triggers, conditions: [], actions: [], script: f.script, cooldown_seconds: cooldown, run_mode };
     }
     return {
       triggers,
       cooldown_seconds: cooldown,
+      run_mode,
       conditions: f.conditions.map((c): Condition =>
         c.kind === ""
           ? { entity_id: c.entity_id, capability: c.capability, op: c.op, value: conv(c.capability, c.value) }
@@ -657,6 +662,12 @@
         <input bind:value={form.cooldown} type="number" min="0" step="1" class="w-20" placeholder="0" />
         <span class="text-dida-text-faint/80">{t("auto.cooldownHint")}</span>
       </label>
+      <div class="mt-2 flex items-center gap-2 text-s text-dida-text-faint">
+        <Toggle size="small" checked={form.queued} onclick={() => form && (form.queued = !form.queued)}
+          label={t("auto.queued")} />
+        {t("auto.queued")}
+        <span class="text-dida-text-faint/80">{t("auto.queuedHint")}</span>
+      </div>
     </div>
 
     {#if form.mode === "typed"}

@@ -19,6 +19,7 @@ import contextlib
 import time
 
 import msgspec
+import pytest
 from dida_automation.__main__ import (
     FIRE_RATE_LIMIT,
     STALE_EVENT_NS,
@@ -503,3 +504,22 @@ async def test_a_helper_reading_a_device_is_recomputed_when_the_device_drops_off
     await eng.refresh_reachability()
     await asyncio.sleep(0.05)
     assert published == ["unknown"]
+
+
+@pytest.mark.parametrize("run_mode,runs", [("single", 1), ("queued", 2)])
+async def test_fires_landing_mid_run_are_dropped_or_run_once_after(run_mode, runs):
+    """Three sensors of one room flip together while the first run is still going:
+    a single rule drops the other two, a queued one runs once more for the latest."""
+    eng = AutomationEngine(FakeBus(), FakePool())
+    defn = AutomationDef(
+        triggers=[Trigger(entity_id=f"mqtt:pir{i}", capability="occupancy", to=True) for i in range(3)],
+        actions=[Action(entity_id="mqtt:lamp", capability="on_off", command="turn_on", delay_ms=50)],
+        run_mode=run_mode,
+    )
+    eng._rules = [Rule(5, "kitchen", defn)]
+    eng._last = {(f"mqtt:pir{i}", "occupancy"): False for i in range(3)}
+    for i in range(3):
+        await eng.on_event(upd(f"mqtt:pir{i}", "occupancy", True))
+    await asyncio.sleep(0.3)
+    assert len(eng._bus.commands) == runs
+    assert not eng._firing and not eng._queued

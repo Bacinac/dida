@@ -14,6 +14,7 @@ boundary, exactly like a bad capability value.
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 import msgspec
 
@@ -90,6 +91,11 @@ class AutomationDef(msgspec.Struct, frozen=True):
     conditions: list[Condition] = []
     script: str = ""
     cooldown_seconds: float | None = None
+    # A fire landing while the rule still runs: "single" drops it (a gate pulse must
+    # never overlap itself), "queued" runs the latest such fire once the run ends —
+    # for a rule that reads the house afresh each time, a dropped "off" is a light
+    # left on.
+    run_mode: Literal["single", "queued"] = "single"
 
 
 def validate_definition(raw: object) -> AutomationDef:

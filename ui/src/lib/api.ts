@@ -441,6 +441,7 @@ export interface AutomationDef {
   actions: Action[];
   script?: string; // Layer 2: non-empty selects a Starlark automation
   cooldown_seconds?: number | null; // silence repeat firings for this long after one
+  run_mode?: "single" | "queued"; // a fire landing mid-run: dropped, or run once the run ends
 }
 export interface Automation {
   id: number;

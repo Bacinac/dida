@@ -796,6 +796,8 @@ export const hr = {
 	'auto.hold': 'drži (s)',
 	'auto.cooldown': 'prigušenje (s)',
 	'auto.cooldownHint': 'Nakon okidanja šuti ovoliko sekundi. Za zonu kroz koju se prolazi: jedan posjet je prelazi u oba smjera.',
+	'auto.queued': 'na čekanje',
+	'auto.queuedHint': 'Okidanje koje stigne dok se pravilo još izvodi izvede se nakon njega, umjesto da se preskoči. Za svjetla i glazbu, ne za impuls vrata.',
 	'ai.title': 'Opiši pravilo riječima',
 	'ai.placeholder': 'npr. kad svi odu, ugasi sva svjetla i zatvori kapiju',
 	'ai.generate': 'Generiraj',

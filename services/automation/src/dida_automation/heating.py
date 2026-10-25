@@ -43,14 +43,16 @@ from dida_core.heating import (
     RoomHeating,
     boiler_decision,
     boiler_demand,
+    compensated_setpoint,
     demands_heat,
     derive_rooms,
     detect_window,
     frost_for,
+    house_away,
     next_step,
     preheat_minutes,
+    profile_setpoint,
     room_vacant,
-    setpoint_for,
     target_for,
     validate_room,
     validate_settings,
@@ -64,6 +66,10 @@ SETTINGS_KEY = "heating"
 VERIFY_S = 900.0
 # TRVs step in halves; anything finer would write forever without converging.
 STEP = 0.5
+# How long a compensated setpoint stands before it is re-aimed. The valve is the fast
+# inner loop on its own thermometer, the room the slow outer one: re-aiming every tick
+# would chase the radiator's own warm-up and spend the valve's battery doing it.
+REAIM_S = 900.0
 
 # Room status, published as the room entity's `text`. One vocabulary, English like
 # every other adapter descriptor — the UI translates it.
@@ -78,6 +84,8 @@ ST_WAITING = "waiting"    # calls for heat, but the boiler is not running (resti
 ST_PREHEAT = "preheat"    # climbing early so it ARRIVES at the scheduled temperature
 ST_VACANT = "vacant"      # nobody has been in it, so comfort is running as eco
 ST_IDLE = "idle"
+# Statuses that hold the room at a real target, as opposed to parking it at frost.
+REGULATING = frozenset({ST_HEATING, ST_PREHEAT, ST_VACANT, ST_IDLE})
 
 
 class Room:
@@ -121,6 +129,13 @@ class HeatingController:
         # Per-valve: the setpoint we last wrote and when (monotonic). Drives both
         # the re-write interval and the did-it-take verification.
         self._written: dict[str, tuple[float, float]] = {}
+        # Per-valve: the room target that write was aimed at, before compensation.
+        self._aimed: dict[str, float] = {}
+        # Valves seen reporting a position above 0. Some heads report 0 % whatever
+        # the valve does, so only one that has been seen open can vouch for being
+        # shut. In memory only: after a restart the stop waits until heads prove
+        # themselves again, which is the safe side — the check only ever stops.
+        self._seen_open: set[str] = set()
         # Valves already reported as not echoing their setpoint — logged once, not
         # every tick, so a dead TRV doesn't drown the log.
         self._valve_errors: set[str] = set()
@@ -200,7 +215,8 @@ class HeatingController:
         state = await self._read_state()
         now = time.time() if now is None else now
         local = datetime.fromtimestamp(now, self._tz)
-        away = self._settings.away_helper != "" and state.value(self._settings.away_helper) is True
+        helper = self._settings.away_helper
+        away = helper != "" and house_away(state.readings(helper, ("boolean",)), now, self._settings)
         outdoor = self._outdoor(state)
         summer = outdoor is not None and outdoor > self._settings.summer_cutoff
         frost = frost_for(self._settings, outdoor)
@@ -210,6 +226,10 @@ class HeatingController:
                           outdoor=outdoor, now=now)
         for room in self._rooms:
             await self._drive_valves(room, state)
+            self._seen_open.update(
+                v for v in room.valves
+                if isinstance(p := state.value(v, "open_close"), int | float) and p > 0
+            )
 
         is_on = state.value(self._settings.boiler, "on_off") is True if self._settings.boiler else False
         want = boiler_demand(
@@ -264,9 +284,10 @@ class HeatingController:
         was_demanding = self._demand.get(room.area_id, False)
         room.temperature = self._room_temperature(room, state)
         self._track(room, now)  # the trace our own window detection reads, kept current
+        vacant = self._vacant(room, state, now)
         room.target, room.profile = target_for(
             cfg, self._settings, local.weekday(), local.hour * 60 + local.minute,
-            away=away, vacant=self._vacant(room, state, now), now=now,
+            away=away, vacant=vacant, now=now,
         )
         if not self._settings.enabled:
             # Master off: hands off. The resolved target is still published (it is
@@ -300,7 +321,7 @@ class HeatingController:
             room.status = ST_STALE if self._has_stale_source(room, state) else ST_NO_SENSOR
             room.demand = False
             return
-        early = self._preheat(room, local, outdoor, now, away=away)
+        early = self._preheat(room, local, outdoor, now, away=away, vacant=vacant)
         if early is not None and early > room.target:
             room.target = early
             room.demand = demands_heat(was_demanding, room.temperature, room.target, self._settings)
@@ -318,7 +339,7 @@ class HeatingController:
         return room_vacant(readings, now, self._settings)
 
     def _preheat(self, room: Room, local: datetime, outdoor: float | None,
-                 now: float, *, away: bool) -> float | None:
+                 now: float, *, away: bool, vacant: bool) -> float | None:
         """The setpoint of the NEXT scheduled step, if the room has to start climbing
         now to reach it on time. A schedule that says 21 at 06:30 means the room is
         warm at half six, not that the boiler lights then — which is the whole
@@ -338,7 +359,7 @@ class HeatingController:
                          local.hour * 60 + local.minute)
         if step is None or step[0] == OFF:
             return None
-        upcoming = setpoint_for(room.cfg, settings, step[0])
+        upcoming, _ = profile_setpoint(room.cfg, settings, step[0], vacant=vacant)
         if upcoming <= room.temperature:
             return None
         return upcoming if step[1] <= preheat_minutes(room.temperature, upcoming, outdoor, settings) else None
@@ -349,13 +370,13 @@ class HeatingController:
         of its own falls back to its valves' internal readings, which are biased by the
         radiator but better than nothing. Stale readings are not used at all; heating
         on a number from two days ago is worse than not heating."""
-        fresh = self._settings.stale_after_s
-        for sources in (room.sensors, room.valves):
-            vals = [state.value(s, "temperature", max_age=fresh) for s in sources]
-            nums = [float(v) for v in vals if isinstance(v, int | float)]
-            if nums:
-                return sum(nums) / len(nums)
-        return None
+        own = self._mean_temperature(room.sensors, state)
+        return own if own is not None else self._mean_temperature(room.valves, state)
+
+    def _mean_temperature(self, sources: list[str], state: _State) -> float | None:
+        vals = [state.value(s, "temperature", max_age=self._settings.stale_after_s) for s in sources]
+        nums = [float(v) for v in vals if isinstance(v, int | float)]
+        return sum(nums) / len(nums) if nums else None
 
     def _has_stale_source(self, room: Room, state: _State) -> bool:
         """True when the room HAS a temperature source that has simply gone quiet
@@ -400,18 +421,16 @@ class HeatingController:
         if not self._settings.enabled or room.target is None:
             return
         target = round(room.target / STEP) * STEP
+        room_reading = self._mean_temperature(room.sensors, state) if room.status in REGULATING else None
         for valve in room.valves:
-            clamped = self._clamp(valve, target, state)
             reported = state.value(valve, "target_temperature")
             written, at = self._written.get(valve, (None, 0.0))
             age = time.monotonic() - at
-            converged = isinstance(reported, int | float) and abs(float(reported) - clamped) < STEP / 2
-            if converged:
+            clamped = self._clamp(valve, self._aim(valve, target, room_reading, state, written, age), state)
+            if _echoes(reported, clamped):
                 # The valve agrees with us — clear any earlier complaint about it.
                 self._valve_errors.discard(valve)
-            elif written == clamped and age < VERIFY_S:
-                pass  # written, still within the window a battery TRV may take to echo
-            elif written == clamped and age >= VERIFY_S:
+            elif written is not None and age >= VERIFY_S and not _echoes(reported, written):
                 # The valve had its VERIFY_S window and still hasn't echoed the
                 # setpoint: flag it (once) and re-send. The re-send resets the write
                 # clock, so a genuinely-deaf valve is retried once every VERIFY_S.
@@ -419,12 +438,28 @@ class HeatingController:
                 if valve not in self._valve_errors:
                     self._valve_errors.add(valve)
                     log.error("heating: %s did not take setpoint %.1f °C (reports %r) — check battery/pairing",
-                              valve, clamped, reported)
-                await self._write_setpoint(valve, clamped, room)
+                              valve, written, reported)
+                await self._write_setpoint(valve, clamped, target, room)
+            elif written == clamped and age < VERIFY_S:
+                pass  # written, still within the window a battery TRV may take to echo
             else:
-                await self._write_setpoint(valve, clamped, room)
+                await self._write_setpoint(valve, clamped, target, room)
             await self._hold_manual(valve, state, room)
             await self._sync_window_detection(valve, state, room)
+
+    def _aim(self, valve: str, target: float, room_reading: float | None, state: _State,
+             written: float | None, age: float) -> float:
+        """What to write to this valve for a room target: the target itself, or — while
+        the room is regulating on its own thermometer — the target shifted by how far
+        the valve's thermometer reads from it. A compensated write stands for REAIM_S
+        unless the target itself moves."""
+        if not self._settings.compensate_valves or room_reading is None:
+            return target
+        if written is not None and self._aimed.get(valve) == target and age < REAIM_S:
+            return written
+        reading = state.value(valve, "temperature", max_age=self._settings.stale_after_s)
+        own = float(reading) if isinstance(reading, int | float) else None
+        return round(compensated_setpoint(target, own, room_reading) / STEP) * STEP
 
     def _clamp(self, valve: str, target: float, state: _State) -> float:
         """Respect the valve's own limits — writing 21 °C to a TRV capped at 20
@@ -437,10 +472,11 @@ class HeatingController:
             target = min(target, float(hi))
         return target
 
-    async def _write_setpoint(self, valve: str, target: float, room: Room) -> None:
-        self._written[valve] = (target, time.monotonic())
-        await self._command(valve, "target_temperature", "set_temperature", {"value": target}, room)
-        log.info("heating: %s → %.1f °C (%s, %s)", valve, target, room.name, room.profile)
+    async def _write_setpoint(self, valve: str, setpoint: float, target: float, room: Room) -> None:
+        self._written[valve] = (setpoint, time.monotonic())
+        self._aimed[valve] = target
+        await self._command(valve, "target_temperature", "set_temperature", {"value": setpoint}, room)
+        log.info("heating: %s → %.1f °C for %.1f °C (%s, %s)", valve, setpoint, target, room.name, room.profile)
 
     async def _hold_manual(self, valve: str, state: _State, room: Room) -> None:
         """A TRV carries its own weekly programme. Left in a scheduled preset it will
@@ -517,8 +553,9 @@ class HeatingController:
         self._master_off_logged = False
         if want and is_on and settings.require_open_valve and self._all_valves_shut(state):
             # Every valve confirmed shut while the boiler runs = pumping against a
-            # closed circuit. Only ever a reason to STOP: an unknown position counts
-            # as open, so this can never block a legitimate start.
+            # closed circuit. Only ever a reason to STOP: an unknown position, or one
+            # from a head never seen open, counts as open, so this can never block a
+            # legitimate start.
             log.warning("heating: every valve is shut — stopping the boiler despite demand")
             want = False
         decision = boiler_decision(want, is_on, now - self._boiler_since, settings)
@@ -529,13 +566,11 @@ class HeatingController:
         await self._command(settings.boiler, "on_off", "turn_on" if decision else "turn_off", {}, None)
 
     def _all_valves_shut(self, state: _State) -> bool:
-        positions = [
-            state.value(v, "open_close")
-            for room in self._rooms if room.cfg.enabled
-            for v in room.valves
-        ]
-        known = [p for p in positions if isinstance(p, int | float)]
-        return bool(known) and len(known) == len(positions) and all(p <= 0 for p in known)
+        valves = [v for room in self._rooms if room.cfg.enabled for v in room.valves]
+        return bool(valves) and all(
+            v in self._seen_open and isinstance(p := state.value(v, "open_close"), int | float) and p <= 0
+            for v in valves
+        )
 
     async def _command(self, entity_id: str, capability: str, command: str,
                        args: dict, room: Room | None) -> None:
@@ -652,6 +687,10 @@ class _State:
 
     def unreachable(self, entity_id: str) -> bool:
         return entity_id in self._down
+
+
+def _echoes(reported: object, setpoint: float) -> bool:
+    return isinstance(reported, int | float) and abs(float(reported) - setpoint) < STEP / 2
 
 
 def _json(raw: str) -> object:

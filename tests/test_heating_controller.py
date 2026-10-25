@@ -389,9 +389,21 @@ async def test_switching_the_master_on_fires_an_idle_boiler_at_once():
 async def test_a_running_boiler_stops_when_every_valve_is_shut():
     """Demand with every valve confirmed closed means the pump is working against a
     dead circuit — the one case that overrides the room's own call for heat."""
-    pool = house({(VALVE, "open_close"): (0, 30)}, boiler_on=True)
-    _, bus = await run(pool)
+    pool = house({(VALVE, "open_close"): (40, 30)}, boiler_on=True)
+    ctrl, bus = await run(pool)
+    assert commands(bus, BOILER) == []
+    pool.state[(VALVE, "open_close")] = (0, 30)
+    await ctrl.tick()
     assert [c.command for c in commands(bus, BOILER)] == ["turn_off"]
+
+
+async def test_a_head_that_only_ever_reports_shut_proves_nothing():
+    """Some heads report 0 % whatever the valve does. Read as shut, they would stop
+    a boiler that is heating radiators through valves that are wide open."""
+    pool = house({(VALVE, "open_close"): (0, 30)}, boiler_on=True)
+    ctrl, bus = await run(pool)
+    await ctrl.tick()
+    assert commands(bus, BOILER) == []
 
 
 async def test_an_unknown_valve_position_never_blocks_a_start():
@@ -403,11 +415,78 @@ async def test_an_unknown_valve_position_never_blocks_a_start():
 
 
 async def test_empty_house_uses_the_away_setpoint():
-    pool = house({("helper:house_empty", "boolean"): (True, 60)},
+    pool = house({("helper:house_empty", "boolean"): (True, 60, 3600)},
                  settings_over={"away_helper": "helper:house_empty",
                                 "targets": {"comfort": 21.0, "away": 16.0}})
     _, bus = await run(pool)
     assert commands(bus, VALVE)[0].args["value"] == 16.0
+
+
+async def test_a_house_empty_for_a_moment_is_not_away():
+    """The flag follows phones; one GPS fix off by a street is not an empty house."""
+    pool = house({("helper:house_empty", "boolean"): (True, 60, 120)},
+                 settings_over={"away_helper": "helper:house_empty",
+                                "targets": {"comfort": 21.0, "away": 16.0}})
+    _, bus = await run(pool)
+    assert commands(bus, VALVE)[0].args["value"] == 21.0
+
+
+async def test_a_valve_reading_its_radiator_is_aimed_at_the_room():
+    """The head reads 15 on a cold radiator in a 19 °C room. Given 21 it would sit
+    fully open long after the room got there; given 17 it opens exactly while the
+    room is short of 21."""
+    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)}))
+    assert commands(bus, VALVE)[0].args["value"] == 17.0
+    assert published(bus, "heating:room:7", "target_temperature") == 21.0, "the room's target is unchanged"
+
+
+async def test_compensation_can_be_switched_off():
+    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)},
+                             settings_over={"compensate_valves": False}))
+    assert commands(bus, VALVE)[0].args["value"] == 21.0
+
+
+async def test_the_freeze_guard_is_written_as_it_is():
+    """Frost protection is about the pipe at the radiator, which is exactly what the
+    valve's own thermometer measures."""
+    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)}, room_over={"enabled": False}))
+    assert commands(bus, VALVE)[0].args["value"] == 8.0
+
+
+async def test_a_compensated_setpoint_stands_until_it_is_reaimed():
+    pool = house({(VALVE, "temperature"): (15.0, 60)})
+    ctrl, bus = await run(pool)
+    pool.state[(VALVE, "target_temperature")] = (17.0, 30)
+    pool.state[(VALVE, "temperature")] = (17.0, 30)
+    bus.commands.clear()
+    await ctrl.tick()
+    assert commands(bus, VALVE) == [], "a radiator warming up is the valve's job, not a reason to write"
+    ctrl._written[VALVE] = (17.0, time.monotonic() - H.REAIM_S - 1)
+    await ctrl.tick()
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [19.0]
+
+
+async def test_a_new_target_is_reaimed_at_once():
+    pool = house({(VALVE, "temperature"): (15.0, 60)})
+    ctrl, bus = await run(pool)
+    pool.state[(VALVE, "target_temperature")] = (17.0, 30)
+    pool.settings["targets"] = {"comfort": 22.0}
+    bus.commands.clear()
+    await ctrl.reload()
+    await ctrl.tick()
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [18.0]
+
+
+async def test_a_deaf_valve_is_reported_even_while_its_aim_moves():
+    """Re-aiming must not launder a valve that never took the last write."""
+    pool = house({(VALVE, "temperature"): (15.0, 60)})
+    ctrl, bus = await run(pool)
+    pool.state[(VALVE, "temperature")] = (16.0, 30)
+    ctrl._written[VALVE] = (17.0, time.monotonic() - H.VERIFY_S - 1)
+    bus.commands.clear()
+    await ctrl.tick()
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [18.0]
 
 
 ROOM_PRESENCE = "esphome:study:occupancy"
@@ -591,6 +670,23 @@ async def test_the_room_is_warm_at_half_six_not_starting_then():
     await ctrl.tick(monday_at(5, 30))
     assert ctrl._rooms[0].target == 21.0, "inside the climb, so the morning target already"
     assert ctrl._rooms[0].status == H.ST_PREHEAT
+
+
+@pytest.mark.parametrize("someone_in,target", [(False, 18.0), (True, 21.0)])
+async def test_an_empty_room_does_not_climb_to_comfort(someone_in, target):
+    """At 05:30 an occupied room is already climbing to 21 for half six. An empty one
+    would only be held at eco when comfort starts, so climbing past it is gas spent
+    on nobody: 18 → 19 needs 24 minutes, so at 05:30 it is still at night."""
+    since = time.time() - monday_at(4, 0)
+    pool = house({(SENSOR, "temperature"): (18.0, 60),
+                  (ROOM_PRESENCE, "occupancy"): (someone_in, 60, since)},
+                 settings_over={**PREHEAT_HOUSE, "targets": {"comfort": 21.0, "eco": 19.0, "night": 18.0}},
+                 room_over={"eco_when_empty": True}, entities=WITH_PRESENCE)
+    bus = FakeBus()
+    ctrl = HeatingController(bus, pool, frozenset)
+    await ctrl.reload()
+    await ctrl.tick(monday_at(5, 30))
+    assert ctrl._rooms[0].target == target
 
 
 async def test_a_colder_morning_starts_earlier():

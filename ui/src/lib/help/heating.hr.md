@@ -5,11 +5,12 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 - Svaka prostorija ima senzor temperature, svoje ventile, četiri zadane temperature (Komfor, Eko, Noć, Odsutnost) i tjedni raspored koji kaže koja kada vrijedi. Bez rasporeda prostorija stalno drži Komfor.
 - **±** na kartici prostorije drži je sat vremena na toj temperaturi, a zatim se vraća rasporedu.
 - Otvoren prozor pauzira prostoriju: prema kontaktnom senzoru ako ga ima, inače prema DIDA-inu vlastitom očitanju da temperatura pada brže nego što grijanje može objasniti.
-- **Eko kad nikoga nema** (prostorija sa senzorom prisutnosti ili pokreta): kad nijedan senzor u prostoriji nikoga ne vidi zadani broj minuta, Komfor ide na Eko; čim netko uđe, vraća se Komfor. Nedostupan senzor ili senzor koji se nikad nije javio drži prostoriju na Komforu.
+- **Eko kad nikoga nema** (prostorija sa senzorom prisutnosti ili pokreta): kad nijedan senzor u prostoriji nikoga ne vidi zadani broj minuta, Komfor ide na Eko; čim netko uđe, vraća se Komfor. Nedostupan senzor ili senzor koji se nikad nije javio drži prostoriju na Komforu. I jutarnje zagrijavanje prazne prostorije ide prema Eku.
+- **Ventili prate sobni termometar**: termometar u ventilu je uz radijator i pokazuje nekoliko stupnjeva drukčije od prostorije. DIDA za tu razliku pomakne zadanu temperaturu koju mu šalje, pa se ventil otvara kad je hladna prostorija, a ne radijator.
 
 ## Kuća
 
-- **Način rada kuće** nadjačava sve prostorije odjednom; Automatski pušta svaku prostoriju da slijedi svoj raspored. Prazna kuća (podešeni helper) sve prebacuje na Odsutnost.
+- **Način rada kuće** nadjačava sve prostorije odjednom; Automatski pušta svaku prostoriju da slijedi svoj raspored. Prazna kuća (podešeni helper) sve prebacuje na Odsutnost kad potraje koliko i prazna soba, pa jedna zalutala lokacija mobitela ne hladi kuću.
 - **Vanjski senzor** radi tri stvari: iznad ljetne granice zaustavlja sezonu; jutarnje zagrijavanje započinje dovoljno rano da prostorija DOSEGNE zadanu temperaturu u predviđeno vrijeme, a ne da se tek tada počne grijati; a kad zahladi, podiže granicu protusmrzavanja.
 
 ## Kotao
@@ -21,4 +22,5 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 
 - Prostorija se ne grije prema očitanju koje je prestalo stizati.
 - Ventil koji nikad ne potvrdi zadanu temperaturu prijavljuje se kao neispravan, umjesto da se tiho zanemari.
+- Kotao se zbog zatvorenih ventila gasi samo kad je svaki ventil barem jednom viđen otvoren i sad javlja da je zatvoren; ventil koji uvijek javlja 0 % ništa ne dokazuje.
 - Ništa se ne pokreće dok se grijanje ne uključi. Glavni prekidač omogućuje da se kuća sigurno podesi prije početka sezone.

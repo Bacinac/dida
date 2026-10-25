@@ -215,6 +215,12 @@
               label={t("heating.requireOpenValve")} />
             <span class="text-m">{t("heating.requireOpenValve")}</span>
           </div>
+          <div class="flex items-center gap-2 self-end">
+            <Toggle size="small" checked={draft.compensate_valves}
+              onclick={() => (draft && (draft.compensate_valves = !draft.compensate_valves))}
+              label={t("heating.compensateValves")} />
+            <span class="text-m">{t("heating.compensateValves")}</span>
+          </div>
         </div>
       {/if}
     {/if}

@@ -15,12 +15,15 @@ from dida_core.heating import (
     boiler_decision,
     boiler_demand,
     classify_entities,
+    compensated_setpoint,
     demands_heat,
     detect_window,
     frost_for,
+    house_away,
     next_step,
     preheat_minutes,
     profile_at,
+    profile_setpoint,
     room_vacant,
     setpoint_for,
     target_for,
@@ -249,6 +252,38 @@ def test_an_empty_room_never_warms_up():
 def test_room_vacant(presence, vacant):
     stamped = [(v, 10_000.0 - ago) for v, ago in presence]
     assert room_vacant(stamped, 10_000.0, HeatingSettings(vacant_minutes=30)) is vacant
+
+
+@pytest.mark.parametrize("flag,away", [
+    ([], False),                 # the flag never reported
+    ([(True, 1800.0)], True),    # empty for the whole hold
+    ([(True, 120.0)], False),    # a phone's GPS blipped outside the zone
+    ([(False, 7200.0)], False),  # someone is home
+    ([(None, 7200.0)], False),   # the flag's device dropped off
+])
+def test_an_empty_house_counts_only_once_it_lasts(flag, away):
+    stamped = [(v, 10_000.0 - ago) for v, ago in flag]
+    assert house_away(stamped, 10_000.0, HeatingSettings(vacant_minutes=30)) is away
+
+
+def test_the_morning_climb_of_an_empty_room_aims_at_eco():
+    house = HeatingSettings(targets={"comfort": 22.0, "eco": 19.0})
+    room = RoomHeating(eco_when_empty=True)
+    assert profile_setpoint(room, house, "comfort", vacant=True) == (19.0, "vacant")
+    assert profile_setpoint(room, house, "comfort", vacant=False) == (22.0, "comfort")
+    assert profile_setpoint(room, house, "night", vacant=True) == (18.0, "night")
+
+
+@pytest.mark.parametrize("valve,room,expected", [
+    (15.0, 19.0, 17.0),   # cold radiator reads low: aim lower, or it opens for a warm room
+    (25.0, 20.0, 26.0),   # hot radiator reads high: aim higher, or it shuts on a cold room
+    (None, 19.0, 21.0),   # no valve reading: write the target as it is
+    (15.0, None, 21.0),   # no room reading: nothing to compare against
+    (0.0, 20.0, 13.0),    # a valve twenty degrees off is broken: the shift stops at 8
+    (40.0, 20.0, 29.0),
+])
+def test_a_valve_is_aimed_at_the_room_not_at_its_radiator(valve, room, expected):
+    assert compensated_setpoint(21.0, valve, room) == expected
 
 
 def test_target_falls_back_to_the_default_setpoint():

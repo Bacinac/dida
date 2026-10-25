@@ -197,8 +197,8 @@ export interface HeatingSettings {
   min_off_s: number;         // anti-cycling: shortest rest
   outdoor: string;
   summer_cutoff: number;
-  away_helper: string;       // boolean entity: true → the away profile everywhere
-  vacant_minutes: number;    // presence sensors quiet this long = nobody in the room
+  away_helper: string;       // boolean entity: true (for vacant_minutes) → the away profile everywhere
+  vacant_minutes: number;    // a room's presence quiet, or the house flag set, this long = empty
   frost_target: number;
   stale_after_s: number;
   force_manual: boolean;     // hold TRVs off their own internal weekly programme
@@ -216,6 +216,7 @@ export interface HeatingSettings {
   frost_per_degree: number;
   frost_max: number;
   require_open_valve: boolean;
+  compensate_valves: boolean; // shift each valve's setpoint by how far its thermometer reads off the room's
 }
 
 export interface HeatingSlot {

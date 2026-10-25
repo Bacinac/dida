@@ -1,4 +1,4 @@
-Heating is a control loop, not a rule. Each room's radiator valve gets a setpoint, and the boiler relay — a plain thermostat contact — fires while at least one room allowed to fire it is short of its target.
+Heating is a control loop, not a rule. Each room's radiator valve is opened and shut by the room's own thermometer, and the boiler relay — a plain thermostat contact — fires while at least one room allowed to fire it is short of its target.
 
 ## Rooms
 
@@ -6,7 +6,7 @@ Heating is a control loop, not a rule. Each room's radiator valve gets a setpoin
 - **±** on a room card holds it at a temperature for an hour; then it returns to its schedule.
 - An open window pauses the room: from a contact sensor if it has one, otherwise from DIDA's own reading of the temperature falling faster than heating can explain.
 - **Eco while nobody is in** (a room with an occupancy or motion sensor): once every sensor in the room has seen no one for the configured minutes, comfort runs as eco; the first person seen brings comfort back. A sensor that is unreachable or has never reported keeps the room on comfort. The morning climb of an empty room aims at eco too.
-- **Valves follow the room thermometer**: a valve's own thermometer sits on the radiator and reads several degrees off the room. DIDA shifts the setpoint it writes by that difference, so the valve opens when the room is short of its target, not when the radiator is.
+- In a room with its own thermometer the valves only open and shut: DIDA holds them open while the room calls for heat and shut otherwise. The valve's own thermometer sits on the radiator and is not used. A room without a thermometer, a room that is off, an open window and the freeze guard leave the valve regulating by itself, so frost protection does not depend on DIDA running.
 
 ## The house
 
@@ -21,6 +21,6 @@ Heating is a control loop, not a rule. Each room's radiator valve gets a setpoin
 ## What it refuses to do
 
 - A room is not heated on a reading that stopped arriving.
-- A valve that never echoes the setpoint written to it is reported as faulty rather than quietly ignored.
+- A valve that never echoes the setpoint or the open/shut written to it is reported as faulty rather than quietly ignored.
 - The boiler is stopped for shut valves only when every valve has been seen open at some point and now reports shut; a valve that always reports 0 % proves nothing.
 - Nothing is driven at all until heating is switched on. The master switch is what makes it safe to set the house up before the season starts.

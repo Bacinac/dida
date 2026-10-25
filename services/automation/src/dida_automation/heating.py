@@ -43,7 +43,6 @@ from dida_core.heating import (
     RoomHeating,
     boiler_decision,
     boiler_demand,
-    compensated_setpoint,
     demands_heat,
     derive_rooms,
     detect_window,
@@ -61,19 +60,17 @@ from dida_core.heating import (
 log = logging.getLogger("dida.automation.heating")
 
 SETTINGS_KEY = "heating"
-# How long a valve gets to echo a setpoint we wrote before we call it broken. Long
-# on purpose: a battery TRV reports on its own schedule, not ours.
+# How long a valve gets to echo what we wrote before we call it broken. Long on
+# purpose: a battery TRV reports on its own schedule, not ours.
 VERIFY_S = 900.0
 # An unechoed write is sent again after this. Commands are fire-and-forget, so one
 # published while the valve's adapter restarts — every deploy — is simply gone, and
-# the same setpoint twice costs the valve nothing.
+# the same command twice costs the valve nothing.
 RESEND_S = 120.0
 # TRVs step in halves; anything finer would write forever without converging.
 STEP = 0.5
-# How long a compensated setpoint stands before it is re-aimed. The valve is the fast
-# inner loop on its own thermometer, the room the slow outer one: re-aiming every tick
-# would chase the radiator's own warm-up and spend the valve's battery doing it.
-REAIM_S = 900.0
+# A valve's `force` mode: held open, held shut, or regulating on its own thermostat.
+FORCE_OPEN, FORCE_CLOSE, FORCE_NORMAL = "open", "close", "normal"
 
 # Room status, published as the room entity's `text`. One vocabulary, English like
 # every other adapter descriptor — the UI translates it.
@@ -130,20 +127,18 @@ class HeatingController:
         self._rooms: list[Room] = []
         self._tz = ZoneInfo("Europe/Zagreb")
         self._astro_cfg = AdapterConfig("astro", pool)
-        # Per-valve: the setpoint we last wrote and when (monotonic). Drives both
-        # the re-write interval and the did-it-take verification.
-        self._written: dict[str, tuple[float, float]] = {}
-        # Per-valve: the room target and call for heat that write was aimed at, and
-        # when it was last sent (a resend keeps the write's own clock).
-        self._aimed: dict[str, tuple[float, bool]] = {}
+        # Per valve setting (its entity id): what we last wrote and when (monotonic),
+        # and when it was last sent — a resend keeps the write's own clock, which is
+        # what the did-it-take verification runs on.
+        self._written: dict[str, tuple[object, float]] = {}
         self._sent: dict[str, float] = {}
         # Valves seen reporting a position above 0. Some heads report 0 % whatever
         # the valve does, so only one that has been seen open can vouch for being
         # shut. In memory only: after a restart the stop waits until heads prove
         # themselves again, which is the safe side — the check only ever stops.
         self._seen_open: set[str] = set()
-        # Valves already reported as not echoing their setpoint — logged once, not
-        # every tick, so a dead TRV doesn't drown the log.
+        # Valve settings already reported as not echoed — logged once, not every
+        # tick, so a dead TRV doesn't drown the log.
         self._valve_errors: set[str] = set()
         self._boiler_on: bool | None = None
         self._boiler_since = 0.0  # epoch seconds of the last boiler transition
@@ -424,53 +419,64 @@ class HeatingController:
     # --- actuation -------------------------------------------------------------
 
     async def _drive_valves(self, room: Room, state: _State) -> None:
-        if not self._settings.enabled or room.target is None:
+        if not self._settings.enabled:
+            # Hands off — but a head left forced by a controller that stopped deciding
+            # is a radiator nobody regulates, so it goes back to its own thermostat.
+            for valve in room.valves:
+                if state.value(f"{valve}:force", "enum") in (FORCE_OPEN, FORCE_CLOSE):
+                    await self._converge(room, f"{valve}:force", "enum", "set_option", FORCE_NORMAL, state)
+            return
+        if room.target is None:
             return
         target = round(room.target / STEP) * STEP
-        room_reading = self._mean_temperature(room.sensors, state) if room.status in REGULATING else None
+        # The room's own thermometer decides and the valve only opens and shuts: the
+        # valve's thermometer sits on the radiator and reads degrees off the room.
+        # Without a thermometer of the room's own, or parked at frost, the valve
+        # regulates by itself on its setpoint — the freeze guard must not depend on
+        # DIDA running.
+        drive = room.status in REGULATING and self._mean_temperature(room.sensors, state) is not None
         for valve in room.valves:
-            reported = state.value(valve, "target_temperature")
-            written, at = self._written.get(valve, (None, 0.0))
-            age = time.monotonic() - at
-            clamped = self._clamp(valve, self._aim(valve, room, target, room_reading, state, written, age), state)
-            if _echoes(reported, clamped):
-                # The valve agrees with us — clear any earlier complaint about it.
-                self._valve_errors.discard(valve)
-            elif written is not None and age >= VERIFY_S and not _echoes(reported, written):
-                # The valve had its VERIFY_S window and still hasn't echoed the
-                # setpoint: flag it (once) and re-send. The re-send resets the write
-                # clock, so a genuinely-deaf valve is retried once every VERIFY_S.
-                room.status = ST_VALVE_ERROR
-                if valve not in self._valve_errors:
-                    self._valve_errors.add(valve)
-                    log.error("heating: %s did not take setpoint %.1f °C (reports %r) — check battery/pairing",
-                              valve, written, reported)
-                await self._write_setpoint(valve, clamped, target, room)
-            elif written == clamped:
-                # Written, still within the window a battery TRV may take to echo. A
-                # valve already reported faulty is retried by the branch above only.
-                if valve not in self._valve_errors and time.monotonic() - self._sent.get(valve, 0.0) >= RESEND_S:
-                    await self._send_setpoint(valve, clamped, room)
-            else:
-                await self._write_setpoint(valve, clamped, target, room)
+            await self._converge(room, valve, "target_temperature", "set_temperature",
+                                 self._clamp(valve, target, state), state)
+            if self._can_force(valve, state):
+                want = (FORCE_OPEN if room.demand else FORCE_CLOSE) if drive else FORCE_NORMAL
+                await self._converge(room, f"{valve}:force", "enum", "set_option", want, state)
             await self._hold_manual(valve, state, room)
             await self._sync_window_detection(valve, state, room)
 
-    def _aim(self, valve: str, room: Room, target: float, room_reading: float | None, state: _State,
-             written: float | None, age: float) -> float:
-        """What to write to this valve for a room target: the target itself, or — while
-        the room is regulating on its own thermometer — the target shifted by how far
-        the valve's thermometer reads from it. A compensated write stands for REAIM_S
-        unless the target moves or the room starts or stops calling for heat: a shift
-        taken while the room was warm would keep its valve shut under a boiler that
-        just fired for it."""
-        if not self._settings.compensate_valves or room_reading is None:
-            return target
-        if written is not None and self._aimed.get(valve) == (target, room.demand) and age < REAIM_S:
-            return written
-        reading = state.value(valve, "temperature", max_age=self._settings.stale_after_s)
-        own = float(reading) if isinstance(reading, int | float) else None
-        return round(compensated_setpoint(target, own, room_reading) / STEP) * STEP
+    async def _converge(self, room: Room, entity_id: str, capability: str, command: str,
+                        want: object, state: _State) -> None:
+        """Bring one valve setting to `want` and see that it took: written on a change,
+        sent again every RESEND_S while unechoed, and once VERIFY_S has passed reported
+        as a faulty valve (once) and retried at that slower pace from then on."""
+        reported = state.value(entity_id, capability)
+        written, since = self._written.get(entity_id, (None, 0.0))
+        now = time.monotonic()
+        if _echoes(reported, want):
+            self._valve_errors.discard(entity_id)
+            return
+        if written == want and now - since < VERIFY_S:
+            if entity_id not in self._valve_errors and now - self._sent.get(entity_id, 0.0) >= RESEND_S:
+                await self._send(room, entity_id, capability, command, want)
+            return
+        if written == want:
+            room.status = ST_VALVE_ERROR
+            if entity_id not in self._valve_errors:
+                self._valve_errors.add(entity_id)
+                log.error("heating: %s did not take %s (reports %r) — check battery/pairing",
+                          entity_id, want, reported)
+        else:
+            log.info("heating: %s → %s (%s, %s)", entity_id, want, room.name, room.profile)
+        self._written[entity_id] = (want, now)
+        await self._send(room, entity_id, capability, command, want)
+
+    async def _send(self, room: Room, entity_id: str, capability: str, command: str, want: object) -> None:
+        self._sent[entity_id] = time.monotonic()
+        await self._command(entity_id, capability, command, {"value": want}, room)
+
+    def _can_force(self, valve: str, state: _State) -> bool:
+        options = state.value(f"{valve}:force", "enum_options")
+        return isinstance(options, str) and all(o in options for o in (FORCE_OPEN, FORCE_CLOSE, FORCE_NORMAL))
 
     def _clamp(self, valve: str, target: float, state: _State) -> float:
         """Respect the valve's own limits — writing 21 °C to a TRV capped at 20
@@ -482,16 +488,6 @@ class HeatingController:
         if isinstance(hi, int | float):
             target = min(target, float(hi))
         return target
-
-    async def _write_setpoint(self, valve: str, setpoint: float, target: float, room: Room) -> None:
-        self._written[valve] = (setpoint, time.monotonic())
-        self._aimed[valve] = (target, room.demand)
-        await self._send_setpoint(valve, setpoint, room)
-        log.info("heating: %s → %.1f °C for %.1f °C (%s, %s)", valve, setpoint, target, room.name, room.profile)
-
-    async def _send_setpoint(self, valve: str, setpoint: float, room: Room) -> None:
-        self._sent[valve] = time.monotonic()
-        await self._command(valve, "target_temperature", "set_temperature", {"value": setpoint}, room)
 
     async def _hold_manual(self, valve: str, state: _State, room: Room) -> None:
         """A TRV carries its own weekly programme. Left in a scheduled preset it will
@@ -639,7 +635,7 @@ class HeatingController:
             ids.update(room.presence)
             for valve in room.valves:
                 ids.update((valve, f"{valve}:window_open", f"{valve}:preset",
-                            f"{valve}:window_detection",
+                            f"{valve}:window_detection", f"{valve}:force",
                             f"{valve}:min_temperature", f"{valve}:max_temperature"))
         for eid in (self._settings.boiler, self._settings.outdoor, self._settings.away_helper):
             if eid:
@@ -704,8 +700,10 @@ class _State:
         return entity_id in self._down
 
 
-def _echoes(reported: object, setpoint: float) -> bool:
-    return isinstance(reported, int | float) and abs(float(reported) - setpoint) < STEP / 2
+def _echoes(reported: object, want: object) -> bool:
+    if isinstance(want, float):
+        return isinstance(reported, int | float) and abs(float(reported) - want) < STEP / 2
+    return reported == want
 
 
 def _json(raw: str) -> object:

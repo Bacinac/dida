@@ -216,7 +216,6 @@ export interface HeatingSettings {
   frost_per_degree: number;
   frost_max: number;
   require_open_valve: boolean;
-  compensate_valves: boolean; // shift each valve's setpoint by how far its thermometer reads off the room's
 }
 
 export interface HeatingSlot {

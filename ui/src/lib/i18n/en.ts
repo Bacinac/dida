@@ -1498,7 +1498,6 @@ export const en = {
 	'heating.vacantMinutesHint': 'An empty room and an empty house count only once they last this long.',
 	'heating.forceManual': 'Hold valves in manual mode',
 	'heating.requireOpenValve': 'Stop the boiler when every valve is shut',
-	'heating.compensateValves': 'Valves follow the room thermometer',
 	'heating.mode.auto': 'Automatic',
 	'heating.mode.comfort': 'Comfort',
 	'heating.mode.eco': 'Eco',

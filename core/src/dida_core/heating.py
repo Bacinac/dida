@@ -46,8 +46,6 @@ TARGET_MAX = 30.0
 # How far a room may trim the house setpoint. A room is a variation on the house,
 # not a different house — past a few degrees it is a different profile, not an offset.
 MAX_OFFSET = 5.0
-# The most a valve's setpoint is shifted for its thermometer reading off the room's.
-MAX_COMPENSATION = 8.0
 
 _HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -260,11 +258,6 @@ class HeatingSettings(msgspec.Struct, frozen=True):
     frost_per_degree: float = 0.2     # …by this much per °C below it
     frost_max: float = 12.0
     require_open_valve: bool = True  # stop a running boiler once every valve is confirmed shut
-    # A TRV regulates on the thermometer inside it, which sits on the radiator and reads
-    # degrees off the room: cold, it opens fully for a room that is already warm. The
-    # setpoint written to it is shifted by that difference, so the valve aims at the
-    # temperature the ROOM's thermometer should reach.
-    compensate_valves: bool = True
 
 
 _SETTING_RANGES: tuple[tuple[str, float, float, str], ...] = (
@@ -443,19 +436,6 @@ def house_away(flag: list[tuple[object, float]], now: float, settings: HeatingSe
     off by a street would otherwise drop every room to the away setpoint."""
     hold = settings.vacant_minutes * 60
     return any(v is True and now - at >= hold for v, at in flag)
-
-
-def compensated_setpoint(target: float, valve_reading: float | None,
-                         room_reading: float | None) -> float:
-    """The setpoint that makes a valve hold the ROOM at `target`: shifted by how far
-    the valve's own thermometer reads from the room's. A valve reading 4 °C low gets
-    4 °C less, so it opens exactly when the room — not the radiator — is below target.
-    The shift is capped: a valve claiming a room ten degrees off is broken, and
-    following it would pin the radiator fully open or shut."""
-    if valve_reading is None or room_reading is None:
-        return target
-    shift = max(-MAX_COMPENSATION, min(MAX_COMPENSATION, valve_reading - room_reading))
-    return min(TARGET_MAX, max(TARGET_MIN, target + shift))
 
 
 def setpoint_for(room: RoomHeating, settings: HeatingSettings, profile: str) -> float:

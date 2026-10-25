@@ -1,4 +1,4 @@
-Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prostoriji dobiva zadanu temperaturu, a relej kotla — običan termostatski kontakt — uključen je dok god je barem jednoj prostoriji koja smije paliti kotao hladnije od cilja.
+Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prostoriji otvara i zatvara njezin termometar, a relej kotla — običan termostatski kontakt — uključen je dok god je barem jednoj prostoriji koja smije paliti kotao hladnije od cilja.
 
 ## Prostorije
 
@@ -6,7 +6,7 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 - **±** na kartici prostorije drži je sat vremena na toj temperaturi, a zatim se vraća rasporedu.
 - Otvoren prozor pauzira prostoriju: prema kontaktnom senzoru ako ga ima, inače prema DIDA-inu vlastitom očitanju da temperatura pada brže nego što grijanje može objasniti.
 - **Eko kad nikoga nema** (prostorija sa senzorom prisutnosti ili pokreta): kad nijedan senzor u prostoriji nikoga ne vidi zadani broj minuta, Komfor ide na Eko; čim netko uđe, vraća se Komfor. Nedostupan senzor ili senzor koji se nikad nije javio drži prostoriju na Komforu. I jutarnje zagrijavanje prazne prostorije ide prema Eku.
-- **Ventili prate sobni termometar**: termometar u ventilu je uz radijator i pokazuje nekoliko stupnjeva drukčije od prostorije. DIDA za tu razliku pomakne zadanu temperaturu koju mu šalje, pa se ventil otvara kad je hladna prostorija, a ne radijator.
+- U prostoriji sa svojim termometrom ventili se samo otvaraju i zatvaraju: DIDA ih drži otvorenima dok prostorija traži toplinu, inače zatvorenima. Termometar u ventilu je uz radijator i ne koristi se. Prostorija bez termometra, isključena prostorija, otvoren prozor i zaštita od smrzavanja ostavljaju ventil da regulira sam, pa zaštita od smrzavanja ne ovisi o tome radi li DIDA.
 
 ## Kuća
 
@@ -21,6 +21,6 @@ Grijanje je regulacijska petlja, a ne pravilo. Ventil radijatora u svakoj prosto
 ## Što odbija raditi
 
 - Prostorija se ne grije prema očitanju koje je prestalo stizati.
-- Ventil koji nikad ne potvrdi zadanu temperaturu prijavljuje se kao neispravan, umjesto da se tiho zanemari.
+- Ventil koji nikad ne potvrdi zadanu temperaturu ili otvaranje i zatvaranje prijavljuje se kao neispravan, umjesto da se tiho zanemari.
 - Kotao se zbog zatvorenih ventila gasi samo kad je svaki ventil barem jednom viđen otvoren i sad javlja da je zatvoren; ventil koji uvijek javlja 0 % ništa ne dokazuje.
 - Ništa se ne pokreće dok se grijanje ne uključi. Glavni prekidač omogućuje da se kuća sigurno podesi prije početka sezone.

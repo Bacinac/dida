@@ -1498,7 +1498,6 @@ export const hr = {
 	'heating.vacantMinutesHint': 'Soba bez ikoga i prazna kuća vrijede tek kad potraju ovoliko.',
 	'heating.forceManual': 'Drži ventile u ručnom načinu',
 	'heating.requireOpenValve': 'Zaustavi kotao kad su svi ventili zatvoreni',
-	'heating.compensateValves': 'Ventili prate sobni termometar',
 	'heating.mode.auto': 'Automatski',
 	'heating.mode.comfort': 'Komfor',
 	'heating.mode.eco': 'Eko',

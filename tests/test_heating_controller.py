@@ -445,76 +445,61 @@ async def test_a_house_empty_for_a_moment_is_not_away():
     assert commands(bus, VALVE)[0].args["value"] == 21.0
 
 
-async def test_a_valve_reading_its_radiator_is_aimed_at_the_room():
-    """The head reads 15 on a cold radiator in a 19 °C room. Given 21 it would sit
-    fully open long after the room got there; given 17 it opens exactly while the
-    room is short of 21."""
-    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)}))
-    assert commands(bus, VALVE)[0].args["value"] == 17.0
-    assert published(bus, "heating:room:7", "target_temperature") == 21.0, "the room's target is unchanged"
+FORCE = f"{VALVE}:force"
+FORCEABLE = {(FORCE, "enum_options"): ('["normal", "open", "close"]', 60)}
 
 
-async def test_compensation_can_be_switched_off():
-    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)},
-                             settings_over={"compensate_valves": False}))
-    assert commands(bus, VALVE)[0].args["value"] == 21.0
-
-
-async def test_the_freeze_guard_is_written_as_it_is():
-    """Frost protection is about the pipe at the radiator, which is exactly what the
-    valve's own thermometer measures."""
-    _, bus = await run(house({(VALVE, "temperature"): (15.0, 60)}, room_over={"enabled": False}))
-    assert commands(bus, VALVE)[0].args["value"] == 8.0
-
-
-async def test_a_compensated_setpoint_stands_until_it_is_reaimed():
-    pool = house({(VALVE, "temperature"): (15.0, 60)})
+async def test_the_room_thermometer_opens_and_shuts_the_valve():
+    """The valve is an actuator. Its own thermometer sits on the radiator — here it
+    reads 30 on a hot one — and is not asked: the room is at 19, so it opens."""
+    pool = house({**FORCEABLE, (VALVE, "temperature"): (30.0, 60)})
     ctrl, bus = await run(pool)
-    pool.state[(VALVE, "target_temperature")] = (17.0, 30)
-    pool.state[(VALVE, "temperature")] = (17.0, 30)
+    assert [c.args["value"] for c in commands(bus, FORCE)] == ["open"]
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0], "the setpoint still says what the room wants"
+    pool.state[(FORCE, "enum")] = ("open", 30)
+    pool.state[(SENSOR, "temperature")] = (21.5, 30)
     bus.commands.clear()
     await ctrl.tick()
-    assert commands(bus, VALVE) == [], "a radiator warming up is the valve's job, not a reason to write"
-    ctrl._written[VALVE] = (17.0, time.monotonic() - H.REAIM_S - 1)
-    await ctrl.tick()
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [19.0]
+    assert [c.args["value"] for c in commands(bus, FORCE)] == ["close"]
 
 
-async def test_a_new_target_is_reaimed_at_once():
-    pool = house({(VALVE, "temperature"): (15.0, 60)})
+async def test_a_valve_that_cannot_be_forced_keeps_regulating_itself():
+    _, bus = await run(house())
+    assert commands(bus, FORCE) == []
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0]
+
+
+async def test_without_a_room_thermometer_the_valve_regulates_itself():
+    """No better witness than the valve's own reading, so the valve keeps deciding."""
+    pool = house({**FORCEABLE, (FORCE, "enum"): ("close", 60), (VALVE, "temperature"): (18.0, 60)},
+                 entities=[(VALVE, 7, ["target_temperature", "temperature"]), (BOILER, 17, ["on_off"])])
+    _, bus = await run(pool)
+    assert [c.args["value"] for c in commands(bus, FORCE)] == ["normal"]
+
+
+async def test_the_freeze_guard_is_left_to_the_valve():
+    """A room parked at frost must stay protected even if DIDA stops."""
+    _, bus = await run(house({**FORCEABLE, (FORCE, "enum"): ("open", 60)}, room_over={"enabled": False}))
+    assert [c.args["value"] for c in commands(bus, FORCE)] == ["normal"]
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [8.0]
+
+
+@pytest.mark.parametrize("forced,released", [("close", ["normal"]), ("normal", [])])
+async def test_switching_heating_off_hands_every_valve_back(forced, released):
+    pool = house({**FORCEABLE, (FORCE, "enum"): (forced, 60)}, settings_over={"enabled": False})
+    _, bus = await run(pool)
+    assert [c.args["value"] for c in commands(bus, FORCE)] == released
+    assert commands(bus, VALVE) == [], "and nothing else is touched"
+
+
+async def test_a_valve_that_ignores_force_is_reported_faulty():
+    pool = house(FORCEABLE)
     ctrl, bus = await run(pool)
-    pool.state[(VALVE, "target_temperature")] = (17.0, 30)
-    pool.settings["targets"] = {"comfort": 22.0}
-    bus.commands.clear()
-    await ctrl.reload()
-    await ctrl.tick()
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [18.0]
-
-
-async def test_a_room_that_starts_calling_is_reaimed_at_once():
-    """Aimed while the room was warm, the valve sits shut; once the room calls and the
-    boiler fires, waiting out the re-aim interval would burn gas past a closed valve."""
-    pool = house({(SENSOR, "temperature"): (21.5, 60), (VALVE, "temperature"): (19.5, 60)})
-    ctrl, bus = await run(pool)
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [19.0]
-    pool.state[(VALVE, "target_temperature")] = (19.0, 30)
-    pool.state[(SENSOR, "temperature")] = (20.5, 30)
-    bus.commands.clear()
-    await ctrl.tick()
-    assert ctrl._rooms[0].demand is True
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [20.0]
-
-
-async def test_a_deaf_valve_is_reported_even_while_its_aim_moves():
-    """Re-aiming must not launder a valve that never took the last write."""
-    pool = house({(VALVE, "temperature"): (15.0, 60)})
-    ctrl, bus = await run(pool)
-    pool.state[(VALVE, "temperature")] = (16.0, 30)
-    ctrl._written[VALVE] = (17.0, time.monotonic() - H.VERIFY_S - 1)
+    ctrl._written[FORCE] = ("open", time.monotonic() - H.VERIFY_S - 1)
     bus.commands.clear()
     await ctrl.tick()
     assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
-    assert [c.args["value"] for c in commands(bus, VALVE)] == [18.0]
+    assert [c.args["value"] for c in commands(bus, FORCE)] == ["open"], "and it is retried"
 
 
 ROOM_PRESENCE = "esphome:study:occupancy"

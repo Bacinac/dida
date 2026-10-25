@@ -344,6 +344,20 @@ async def test_a_valve_that_never_echoes_is_reported_faulty():
     assert [c.command for c in commands(bus, VALVE)] == ["set_temperature"], "and it is retried"
 
 
+async def test_a_write_lost_on_the_way_is_sent_again():
+    """A command published while the valve's adapter restarts never arrives. Waiting
+    out the whole verification window would leave the room on the old setpoint for a
+    quarter of an hour and then blame a healthy valve."""
+    ctrl, bus = await run(house())
+    bus.commands.clear()
+    await ctrl.tick()
+    assert commands(bus, VALVE) == [], "too soon to tell a lost write from a slow echo"
+    ctrl._sent[VALVE] = time.monotonic() - H.RESEND_S - 1
+    await ctrl.tick()
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [21.0]
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING, "not yet a faulty valve"
+
+
 async def test_a_valve_on_its_own_programme_is_put_back_to_manual():
     pool = house({(f"{VALVE}:preset", "enum"): ("schedule", 60),
                   (f"{VALVE}:preset", "enum_options"): ('["schedule", "manual"]', 60)})

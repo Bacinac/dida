@@ -64,6 +64,10 @@ SETTINGS_KEY = "heating"
 # How long a valve gets to echo a setpoint we wrote before we call it broken. Long
 # on purpose: a battery TRV reports on its own schedule, not ours.
 VERIFY_S = 900.0
+# An unechoed write is sent again after this. Commands are fire-and-forget, so one
+# published while the valve's adapter restarts — every deploy — is simply gone, and
+# the same setpoint twice costs the valve nothing.
+RESEND_S = 120.0
 # TRVs step in halves; anything finer would write forever without converging.
 STEP = 0.5
 # How long a compensated setpoint stands before it is re-aimed. The valve is the fast
@@ -129,8 +133,10 @@ class HeatingController:
         # Per-valve: the setpoint we last wrote and when (monotonic). Drives both
         # the re-write interval and the did-it-take verification.
         self._written: dict[str, tuple[float, float]] = {}
-        # Per-valve: the room target that write was aimed at, before compensation.
+        # Per-valve: the room target that write was aimed at, before compensation,
+        # and when it was last sent (a resend keeps the write's own clock).
         self._aimed: dict[str, float] = {}
+        self._sent: dict[str, float] = {}
         # Valves seen reporting a position above 0. Some heads report 0 % whatever
         # the valve does, so only one that has been seen open can vouch for being
         # shut. In memory only: after a restart the stop waits until heads prove
@@ -440,8 +446,11 @@ class HeatingController:
                     log.error("heating: %s did not take setpoint %.1f °C (reports %r) — check battery/pairing",
                               valve, written, reported)
                 await self._write_setpoint(valve, clamped, target, room)
-            elif written == clamped and age < VERIFY_S:
-                pass  # written, still within the window a battery TRV may take to echo
+            elif written == clamped:
+                # Written, still within the window a battery TRV may take to echo. A
+                # valve already reported faulty is retried by the branch above only.
+                if valve not in self._valve_errors and time.monotonic() - self._sent.get(valve, 0.0) >= RESEND_S:
+                    await self._send_setpoint(valve, clamped, room)
             else:
                 await self._write_setpoint(valve, clamped, target, room)
             await self._hold_manual(valve, state, room)
@@ -475,8 +484,12 @@ class HeatingController:
     async def _write_setpoint(self, valve: str, setpoint: float, target: float, room: Room) -> None:
         self._written[valve] = (setpoint, time.monotonic())
         self._aimed[valve] = target
-        await self._command(valve, "target_temperature", "set_temperature", {"value": setpoint}, room)
+        await self._send_setpoint(valve, setpoint, room)
         log.info("heating: %s → %.1f °C for %.1f °C (%s, %s)", valve, setpoint, target, room.name, room.profile)
+
+    async def _send_setpoint(self, valve: str, setpoint: float, room: Room) -> None:
+        self._sent[valve] = time.monotonic()
+        await self._command(valve, "target_temperature", "set_temperature", {"value": setpoint}, room)
 
     async def _hold_manual(self, valve: str, state: _State, room: Room) -> None:
         """A TRV carries its own weekly programme. Left in a scheduled preset it will

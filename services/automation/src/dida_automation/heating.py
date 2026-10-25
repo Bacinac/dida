@@ -133,9 +133,9 @@ class HeatingController:
         # Per-valve: the setpoint we last wrote and when (monotonic). Drives both
         # the re-write interval and the did-it-take verification.
         self._written: dict[str, tuple[float, float]] = {}
-        # Per-valve: the room target that write was aimed at, before compensation,
-        # and when it was last sent (a resend keeps the write's own clock).
-        self._aimed: dict[str, float] = {}
+        # Per-valve: the room target and call for heat that write was aimed at, and
+        # when it was last sent (a resend keeps the write's own clock).
+        self._aimed: dict[str, tuple[float, bool]] = {}
         self._sent: dict[str, float] = {}
         # Valves seen reporting a position above 0. Some heads report 0 % whatever
         # the valve does, so only one that has been seen open can vouch for being
@@ -432,7 +432,7 @@ class HeatingController:
             reported = state.value(valve, "target_temperature")
             written, at = self._written.get(valve, (None, 0.0))
             age = time.monotonic() - at
-            clamped = self._clamp(valve, self._aim(valve, target, room_reading, state, written, age), state)
+            clamped = self._clamp(valve, self._aim(valve, room, target, room_reading, state, written, age), state)
             if _echoes(reported, clamped):
                 # The valve agrees with us — clear any earlier complaint about it.
                 self._valve_errors.discard(valve)
@@ -456,15 +456,17 @@ class HeatingController:
             await self._hold_manual(valve, state, room)
             await self._sync_window_detection(valve, state, room)
 
-    def _aim(self, valve: str, target: float, room_reading: float | None, state: _State,
+    def _aim(self, valve: str, room: Room, target: float, room_reading: float | None, state: _State,
              written: float | None, age: float) -> float:
         """What to write to this valve for a room target: the target itself, or — while
         the room is regulating on its own thermometer — the target shifted by how far
         the valve's thermometer reads from it. A compensated write stands for REAIM_S
-        unless the target itself moves."""
+        unless the target moves or the room starts or stops calling for heat: a shift
+        taken while the room was warm would keep its valve shut under a boiler that
+        just fired for it."""
         if not self._settings.compensate_valves or room_reading is None:
             return target
-        if written is not None and self._aimed.get(valve) == target and age < REAIM_S:
+        if written is not None and self._aimed.get(valve) == (target, room.demand) and age < REAIM_S:
             return written
         reading = state.value(valve, "temperature", max_age=self._settings.stale_after_s)
         own = float(reading) if isinstance(reading, int | float) else None
@@ -483,7 +485,7 @@ class HeatingController:
 
     async def _write_setpoint(self, valve: str, setpoint: float, target: float, room: Room) -> None:
         self._written[valve] = (setpoint, time.monotonic())
-        self._aimed[valve] = target
+        self._aimed[valve] = (target, room.demand)
         await self._send_setpoint(valve, setpoint, room)
         log.info("heating: %s → %.1f °C for %.1f °C (%s, %s)", valve, setpoint, target, room.name, room.profile)
 

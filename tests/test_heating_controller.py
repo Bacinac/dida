@@ -491,6 +491,20 @@ async def test_a_new_target_is_reaimed_at_once():
     assert [c.args["value"] for c in commands(bus, VALVE)] == [18.0]
 
 
+async def test_a_room_that_starts_calling_is_reaimed_at_once():
+    """Aimed while the room was warm, the valve sits shut; once the room calls and the
+    boiler fires, waiting out the re-aim interval would burn gas past a closed valve."""
+    pool = house({(SENSOR, "temperature"): (21.5, 60), (VALVE, "temperature"): (19.5, 60)})
+    ctrl, bus = await run(pool)
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [19.0]
+    pool.state[(VALVE, "target_temperature")] = (19.0, 30)
+    pool.state[(SENSOR, "temperature")] = (20.5, 30)
+    bus.commands.clear()
+    await ctrl.tick()
+    assert ctrl._rooms[0].demand is True
+    assert [c.args["value"] for c in commands(bus, VALVE)] == [20.0]
+
+
 async def test_a_deaf_valve_is_reported_even_while_its_aim_moves():
     """Re-aiming must not launder a valve that never took the last write."""
     pool = house({(VALVE, "temperature"): (15.0, 60)})

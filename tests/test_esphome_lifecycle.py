@@ -271,6 +271,34 @@ async def test_every_press_reaches_the_bus_while_a_repeated_state_does_not():
     assert a._bus.states == [("button", "press"), ("button", "press"), ("on_off", True)]
 
 
+async def test_an_unexposed_entity_is_held_and_published_once_exposed_again():
+    """Exposing an entity again must fill it at once: a light that does not change
+    for days would otherwise show its months-old value until someone switches it."""
+    from types import SimpleNamespace
+
+    from dida_adapter_esphome.mapping import map_entity
+
+    class _Bus:
+        def __init__(self) -> None:
+            self.states: list = []
+
+        async def publish_state(self, update) -> None:
+            self.states.append((update.entity_id, update.capability, update.value))
+
+    a = _adapter()
+    a._bus = _Bus()
+    conn = _Conn("toilet")
+    conn.entities = {2: map_entity(type("SwitchInfo", (), {"key": 2, "object_id": "relay"})())}
+    a._unexposed = {"esphome:toilet:relay"}
+    a._on_state(conn, SimpleNamespace(key=2, state=True))
+    await asyncio.sleep(0)
+    assert a._bus.states == []
+    a._unexposed = set()
+    a._republish({"esphome:toilet:relay"})
+    await asyncio.sleep(0)
+    assert a._bus.states == [("esphome:toilet:relay", "on_off", True)]
+
+
 async def test_dropping_a_node_that_is_not_there_is_harmless():
     """The reconcile calls drop-then-add for an edited node, so the drop runs
     against a key that may not exist yet."""

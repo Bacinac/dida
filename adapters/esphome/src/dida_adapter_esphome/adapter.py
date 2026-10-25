@@ -392,8 +392,6 @@ class EsphomeAdapter:
         if em is None:
             return
         entity_id = _entity_id(conn.name, em.object_id)
-        if entity_id in self._unexposed:
-            return  # user turned this entity off — don't read/publish its state
         device_key = entity_id.split(":")[1]
         ts = time.time_ns()
         for cap, value, unit in decode_state(em, state):
@@ -404,6 +402,10 @@ class EsphomeAdapter:
                 continue
             self._state[(entity_id, cap)] = value
             self._unit[(entity_id, cap)] = unit
+            if entity_id in self._unexposed:
+                # Held, not published: exposing it again republishes this value, and
+                # a toggle sent to it still knows which way to go.
+                continue
             spawn(self._bus.publish_state(
                 StateUpdate(entity_id=entity_id, capability=cap, value=value,
                             adapter=NAMESPACE, ts_ns=ts, unit=unit, name=em.name or None,

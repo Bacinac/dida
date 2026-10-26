@@ -624,7 +624,8 @@ class MqttAdapter:
                                           current=self._facet_bool.get(command.entity_id))
             else:
                 dev_slug = rest
-                payload = command_to_mqtt(command.capability, command.command, command.args)
+                payload = command_to_mqtt(command.capability, command.command, command.args,
+                                          self._exposes.get(dev_slug, {}))
         except (CapabilityError, KeyError, ValueError) as exc:
             raise CommandRejected(f"bad command: {exc}") from exc
         friendly = self._friendly.get(dev_slug, dev_slug)

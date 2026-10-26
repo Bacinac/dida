@@ -96,8 +96,10 @@ _FIELD_MAP: dict[str, tuple[CapabilityKind, Callable[[object], Value | None]]] =
     # (internal MCU temp) is deliberately NOT mapped — it's not the room reading.
     "local_temperature": (CapabilityKind.TEMPERATURE, _number),
     # TRV/thermostat setpoint (z2m already in °C) — the one climate control worth
-    # surfacing; renders as a number input, no enum-options plumbing needed.
+    # surfacing; renders as a number input, no enum-options plumbing needed. Tuya
+    # heads name it `current_`, ZCL thermostats (Sonoff) `occupied_`; a device has one.
     "current_heating_setpoint": (CapabilityKind.TARGET_TEMPERATURE, _number),
+    "occupied_heating_setpoint": (CapabilityKind.TARGET_TEMPERATURE, _number),
     "humidity": (CapabilityKind.HUMIDITY, _number),
     "illuminance_lux": (CapabilityKind.ILLUMINANCE, _number),
     "illuminance": (CapabilityKind.ILLUMINANCE, _number),
@@ -167,8 +169,12 @@ def build_state_updates(payload: dict) -> list[tuple[str, Value, str | None]]:
     return out
 
 
-def command_to_mqtt(capability: str, command: str, args: dict) -> dict:
-    """Map a validated capability command to a z2m `set` payload."""
+_SETPOINT_FIELDS = tuple(f for f, (kind, _c) in _FIELD_MAP.items() if kind is CapabilityKind.TARGET_TEMPERATURE)
+
+
+def command_to_mqtt(capability: str, command: str, args: dict, exposes: dict[str, Expose]) -> dict:
+    """Map a validated capability command to a z2m `set` payload. `exposes` is the
+    device's definition: a setpoint is written to the field the device actually has."""
     if capability == CapabilityKind.ON_OFF.value:
         return {"state": {"turn_on": "ON", "turn_off": "OFF", "toggle": "TOGGLE"}[command]}
     if capability == CapabilityKind.BRIGHTNESS.value:  # canonical 0..100 -> z2m 0..254
@@ -182,7 +188,10 @@ def command_to_mqtt(capability: str, command: str, args: dict) -> dict:
     if capability == CapabilityKind.LOCK.value:
         return {"state": {"lock": "LOCK", "unlock": "UNLOCK"}[command]}
     if capability == CapabilityKind.TARGET_TEMPERATURE.value:  # set_temperature {value: °C}
-        return {"current_heating_setpoint": float(args["value"])}
+        field = next((f for f in _SETPOINT_FIELDS if f in exposes), None)
+        if field is None:
+            raise ValueError("device exposes no heating setpoint")
+        return {field: float(args["value"])}
     raise ValueError(f"no mqtt mapping for {capability}/{command}")
 
 

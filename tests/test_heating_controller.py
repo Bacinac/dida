@@ -634,6 +634,110 @@ async def test_window_pause_off_switches_the_valve_detection_off_too():
     assert [c.command for c in commands(bus, f"{VALVE}:window_detection")] == ["turn_off"]
 
 
+# A Sonoff head: no presets, its programme is a system mode, and it exposes an opening
+# limit, a PID, an external-thermometer input and a fault register.
+SONOFF = {
+    (f"{VALVE}:system_mode", "enum"): ("auto", 60),
+    (f"{VALVE}:system_mode", "enum_options"): ('["off", "auto", "heat"]', 60),
+    (f"{VALVE}:heating_valve_position", "number"): (50.0, 60),
+    (f"{VALVE}:heating_valve_position", "number_options"): ('{"min": 0, "max": 100, "step": 1}', 60),
+    (f"{VALVE}:smart_temperature_control", "boolean"): (True, 60),
+    (f"{VALVE}:temperature_sensor_select", "enum"): ("local_temperature", 60),
+    (f"{VALVE}:temperature_sensor_select", "enum_options"):
+        ('["local_temperature", "remote_temperature", "remote_source_offline"]', 60),
+    (f"{VALVE}:external_temperature_input", "number_options"): ('{"min": 0, "max": 99.9, "step": 0.1}', 60),
+    (f"{VALVE}:fault_status", "text"): ("none", 60),
+}
+
+
+def options(bus, facet):
+    return [c.args.get("value", c.command) for c in commands(bus, f"{VALVE}:{facet}")]
+
+
+async def test_a_head_without_presets_is_held_in_heat_not_on_its_programme():
+    _, bus = await run(house(SONOFF))
+    assert options(bus, "system_mode") == ["heat"]
+
+
+async def test_a_head_with_presets_is_held_by_its_preset_alone():
+    pool = house({(f"{VALVE}:preset", "enum"): ("manual", 60),
+                  (f"{VALVE}:system_mode", "enum"): ("auto", 60),
+                  (f"{VALVE}:system_mode", "enum_options"): ('["heat", "auto", "off"]', 60)})
+    _, bus = await run(pool)
+    assert commands(bus, f"{VALVE}:system_mode") == [], "a Tuya head's mode follows its preset"
+
+
+async def test_a_head_opens_fully_while_heating_with_its_pid_off():
+    _, bus = await run(house(SONOFF))
+    assert options(bus, "heating_valve_position") == [H.HEATING_VALVE_POSITION]
+    smart = commands(bus, f"{VALVE}:smart_temperature_control")
+    assert [(c.command, c.args) for c in smart] == [("turn_off", {})]
+
+
+async def test_the_room_reading_is_fed_to_a_head_that_takes_one():
+    ctrl, bus = await run(house(SONOFF))
+    assert options(bus, "external_temperature_input") == [19.0]
+    assert options(bus, "temperature_sensor_select") == ["remote_temperature"]
+
+    ctrl._pool.state[(f"{VALVE}:external_temperature_input", "number")] = (19.0, 5)
+    bus.commands.clear()
+    await ctrl.tick()
+    assert options(bus, "external_temperature_input") == [], "an echoed, recent reading is not resent"
+
+    ctrl._sent[f"{VALVE}:external_temperature_input"] = time.monotonic() - H.FEED_S - 1
+    await ctrl.tick()
+    assert options(bus, "external_temperature_input") == [19.0], "but it is refreshed before the head gives up on it"
+
+
+async def test_a_moving_room_reading_is_fed_again():
+    ctrl, bus = await run(house(SONOFF))
+    ctrl._pool.state[(f"{VALVE}:external_temperature_input", "number")] = (19.0, 5)
+    ctrl._pool.state[(SENSOR, "temperature")] = (19.0 + H.FEED_DELTA, 5)
+    ctrl._sent[f"{VALVE}:external_temperature_input"] = time.monotonic() - H.RESEND_S - 1
+    bus.commands.clear()
+    await ctrl.tick()
+    assert options(bus, "external_temperature_input") == [19.2]
+
+
+async def test_a_head_in_a_room_without_a_thermometer_uses_its_own():
+    pool = house({**SONOFF, (f"{VALVE}:temperature_sensor_select", "enum"): ("remote_temperature", 60),
+                  (VALVE, "temperature"): (19.0, 60)},
+                 entities=[(VALVE, 7, ["target_temperature", "temperature"]), (BOILER, 17, ["on_off"])])
+    _, bus = await run(pool)
+    assert options(bus, "temperature_sensor_select") == ["local_temperature"]
+    assert options(bus, "external_temperature_input") == []
+
+
+async def test_a_sensor_vocabulary_we_do_not_know_is_a_valve_error_not_a_crash():
+    pool = house({**SONOFF, (f"{VALVE}:temperature_sensor_select", "enum"): ("internal", 60),
+                  (f"{VALVE}:temperature_sensor_select", "enum_options"):
+                      ('["internal", "external", "external_2", "external_3"]', 60)})
+    _, bus = await run(pool)
+    assert options(bus, "temperature_sensor_select") == []
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
+    assert commands(bus, BOILER), "the rest of the tick still runs"
+
+
+async def test_a_fault_the_head_reports_is_a_valve_error():
+    _, bus = await run(house({**SONOFF, (f"{VALVE}:fault_status", "text"): ("valve_adjustment_issue_detected", 60)}))
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
+    _, bus = await run(house(SONOFF))
+    assert published(bus, "heating:room:7", "text") != H.ST_VALVE_ERROR
+
+
+async def test_a_setting_the_head_will_not_take_is_a_valve_error():
+    ctrl, _ = await run(house(SONOFF))
+    ctrl._written[f"{VALVE}:heating_valve_position"] = (H.HEATING_VALVE_POSITION, time.monotonic() - H.VERIFY_S - 1)
+    ctrl._bus = bus = FakeBus()
+    await ctrl.tick()
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
+
+
+async def test_a_sonoff_heads_window_detection_follows_the_room_too():
+    _, bus = await run(house({**SONOFF, (f"{VALVE}:open_window", "boolean"): (True, 60)}))
+    assert [c.command for c in commands(bus, f"{VALVE}:open_window")] == ["turn_off"]
+
+
 # A Monday in a Zagreb winter, so "half five in the morning" means that here too.
 def monday_at(hour: int, minute: int = 0) -> float:
     from datetime import datetime

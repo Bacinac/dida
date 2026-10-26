@@ -1520,7 +1520,7 @@ export const en = {
 	'heating.status.off': 'Off',
 	'heating.status.stale': 'No fresh reading',
 	'heating.status.no_sensor': 'No sensor',
-	'heating.status.valve_error': 'Valve not responding',
+	'heating.status.valve_error': 'Valve fault',
 	'heating.rooms': 'Rooms',
 	'heating.noRooms': 'No room has a thermostatic valve.',
 	'heating.target': 'Target',

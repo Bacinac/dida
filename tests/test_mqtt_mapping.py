@@ -83,19 +83,19 @@ def test_build_state_updates():
 
 # --- command_to_mqtt: canonical -> z2m set payload --------------------------
 def test_command_to_mqtt():
-    assert command_to_mqtt("on_off", "turn_on", {}) == {"state": "ON"}, "turn_on -> state ON"
-    assert command_to_mqtt("brightness", "set_brightness", {"value": 100}) == {"brightness": 254}, \
+    assert command_to_mqtt("on_off", "turn_on", {}, {}) == {"state": "ON"}, "turn_on -> state ON"
+    assert command_to_mqtt("brightness", "set_brightness", {"value": 100}, {}) == {"brightness": 254}, \
         "brightness 100% -> 254"
-    assert command_to_mqtt("brightness", "set_brightness", {"value": 50}) == {"brightness": 127}, \
+    assert command_to_mqtt("brightness", "set_brightness", {"value": 50}, {}) == {"brightness": 127}, \
         "brightness 50% -> 127"
-    assert command_to_mqtt("color_temp", "set_color_temp", {"value": 4000}) == {"color_temp": 250}, \
+    assert command_to_mqtt("color_temp", "set_color_temp", {"value": 4000}, {}) == {"color_temp": 250}, \
         "color_temp 4000 K -> 250 mireds"
-    assert command_to_mqtt("open_close", "set_position", {"value": 50}) == {"position": 50}, \
+    assert command_to_mqtt("open_close", "set_position", {"value": 50}, {}) == {"position": 50}, \
         "set_position 50 -> position 50"
-    assert command_to_mqtt("lock", "lock", {}) == {"state": "LOCK"}, "lock -> state LOCK"
+    assert command_to_mqtt("lock", "lock", {}, {}) == {"state": "LOCK"}, "lock -> state LOCK"
 
     # round-trip: a brightness set command, sent to z2m and read back, returns the value.
-    sent = command_to_mqtt("brightness", "set_brightness", {"value": 80})
+    sent = command_to_mqtt("brightness", "set_brightness", {"value": 80}, {})
     assert _brightness(sent["brightness"]) == 80, "brightness command round-trips (80% -> 203 -> 80%)"
 
 
@@ -148,14 +148,23 @@ def test_build_state_updates_skips_and_extras():
 
 # --- command_to_mqtt: cover/lock/temperature + the loud raise ----------------
 def test_command_to_mqtt_cover_temp_and_raise():
-    assert command_to_mqtt("open_close", "open", {}) == {"state": "OPEN"}
-    assert command_to_mqtt("open_close", "close", {}) == {"state": "CLOSE"}
-    assert command_to_mqtt("open_close", "stop", {}) == {"state": "STOP"}
-    assert command_to_mqtt("target_temperature", "set_temperature", {"value": 21.5}) \
-        == {"current_heating_setpoint": 21.5}, "setpoint °C -> current_heating_setpoint"
+    assert command_to_mqtt("open_close", "open", {}, {}) == {"state": "OPEN"}
+    assert command_to_mqtt("open_close", "close", {}, {}) == {"state": "CLOSE"}
+    assert command_to_mqtt("open_close", "stop", {}, {}) == {"state": "STOP"}
+    tuya = {"current_heating_setpoint": Expose(type="numeric", access=7)}
+    zcl = {"occupied_heating_setpoint": Expose(type="numeric", access=7)}
+    assert command_to_mqtt("target_temperature", "set_temperature", {"value": 21.5}, tuya) \
+        == {"current_heating_setpoint": 21.5}, "Tuya head -> current_heating_setpoint"
+    assert command_to_mqtt("target_temperature", "set_temperature", {"value": 21.5}, zcl) \
+        == {"occupied_heating_setpoint": 21.5}, "ZCL head (Sonoff) -> occupied_heating_setpoint"
+    with pytest.raises(ValueError):
+        command_to_mqtt("target_temperature", "set_temperature", {"value": 21.5}, {})
+    assert [(c, v) for c, v, _ in build_state_updates({"occupied_heating_setpoint": 21})] \
+        == [("target_temperature", 21.0)], "a ZCL head's setpoint reads as its target, not a facet"
+    assert build_generic_updates({"occupied_heating_setpoint": 21}, zcl) == []
     # a capability with no mqtt mapping raises (dropped loud, never a bogus publish)
     with pytest.raises(ValueError):
-        command_to_mqtt("temperature", "set", {})
+        command_to_mqtt("temperature", "set", {}, {})
 
 
 # --- Expose.writable + parse_exposes ----------------------------------------

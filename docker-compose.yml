@@ -225,7 +225,7 @@ services:
   #   3) docker compose --profile zigbee up -d zigbee2mqtt
   zigbee2mqtt:
     profiles: ["zigbee"]
-    image: ghcr.io/koenkk/zigbee2mqtt:2.13.0
+    image: ghcr.io/koenkk/zigbee2mqtt:2.14.2
     container_name: dida-zigbee2mqtt
     security_opt:
       - "no-new-privileges:true"

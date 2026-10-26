@@ -1520,7 +1520,7 @@ export const hr = {
 	'heating.status.off': 'Isključeno',
 	'heating.status.stale': 'Nema svježeg očitanja',
 	'heating.status.no_sensor': 'Nema senzora',
-	'heating.status.valve_error': 'Ventil ne prihvaća naredbu',
+	'heating.status.valve_error': 'Kvar ventila',
 	'heating.rooms': 'Prostorije',
 	'heating.noRooms': 'Nijedna prostorija nema termostatski ventil.',
 	'heating.target': 'Cilj',

@@ -73,6 +73,20 @@ STEP = 0.5
 # own thermometer on the radiator cannot reach either way. Shut is a real setpoint,
 # not a hold, so a shut valve still opens by itself to guard against frost.
 OPEN_SETPOINT, SHUT_SETPOINT = 28.0, 10.0
+# A head that opens its valve to a set percentage while it heats is held fully open:
+# an open room gets the whole radiator.
+HEATING_VALVE_POSITION = 100.0
+# The room's reading fed to a head that regulates on an external one: resent once it
+# moves this far, and this often regardless — a head whose feed goes quiet falls
+# back to its own thermometer on the radiator.
+FEED_DELTA, FEED_S = 0.2, 600.0
+# A valve's own facets the controller reads. Window detection is `window_detection`
+# on a Tuya head and `open_window` on a Sonoff one.
+WINDOW_DETECTION = ("window_detection", "open_window")
+VALVE_FACETS = ("window_open", "preset", "system_mode", *WINDOW_DETECTION,
+                "min_temperature", "max_temperature", "heating_valve_position",
+                "smart_temperature_control", "temperature_sensor_select",
+                "external_temperature_input", "fault_status")
 
 # Room status, published as the room entity's `text`. One vocabulary, English like
 # every other adapter descriptor — the UI translates it.
@@ -81,7 +95,7 @@ ST_SUMMER = "summer"      # outdoor temperature above the cutoff
 ST_WINDOW = "window"      # a window is open here
 ST_STALE = "stale"        # no fresh room reading — refusing to heat blind
 ST_NO_SENSOR = "no_sensor"
-ST_VALVE_ERROR = "valve_error"  # a valve won't take (or won't report) its setpoint
+ST_VALVE_ERROR = "valve_error"  # a valve won't take a setting, or reports a fault of its own
 ST_HEATING = "heating"
 ST_WAITING = "waiting"    # calls for heat, but the boiler is not running (resting, no quorum, or not its call)
 ST_PREHEAT = "preheat"    # climbing early so it ARRIVES at the scheduled temperature
@@ -142,6 +156,7 @@ class HeatingController:
         # Valve settings already reported as not echoed — logged once, not every
         # tick, so a dead TRV doesn't drown the log.
         self._valve_errors: set[str] = set()
+        self._faults: dict[str, str] = {}  # per valve: the fault it reports, logged once
         self._boiler_on: bool | None = None
         self._boiler_since = 0.0  # epoch seconds of the last boiler transition
         self._master_off_logged = False  # logged the "off while running" warning once
@@ -446,7 +461,10 @@ class HeatingController:
             await self._converge(room, valve, "target_temperature", "set_temperature",
                                  self._clamp(valve, want, state), state)
             await self._hold_manual(valve, state, room)
+            await self._hold_valve_limits(valve, state, room)
+            await self._feed_temperature(valve, state, room)
             await self._sync_window_detection(valve, state, room)
+            self._check_fault(valve, state, room)
 
     async def _converge(self, room: Room, entity_id: str, capability: str, command: str,
                         want: object, state: _State) -> None:
@@ -476,7 +494,8 @@ class HeatingController:
 
     async def _send(self, room: Room, entity_id: str, capability: str, command: str, want: object) -> None:
         self._sent[entity_id] = time.monotonic()
-        await self._command(entity_id, capability, command, {"value": want}, room)
+        await self._command(entity_id, capability, command,
+                            {"value": want} if command.startswith("set_") else {}, room)
 
     def _drive_setpoints(self, valve: str, state: _State) -> tuple[float, float]:
         return self._clamp(valve, OPEN_SETPOINT, state), self._clamp(valve, SHUT_SETPOINT, state)
@@ -495,16 +514,72 @@ class HeatingController:
     async def _hold_manual(self, valve: str, state: _State, room: Room) -> None:
         """A TRV carries its own weekly programme. Left in a scheduled preset it will
         overwrite our setpoint at its next internal step — two controllers, one valve,
-        and the house drifts. Manual is what makes DIDA the only writer."""
+        and the house drifts. Manual is what makes DIDA the only writer. A head without
+        presets runs its programme as system mode `auto`, and `heat` is its manual."""
         if not self._settings.force_manual:
             return
         preset = state.value(f"{valve}:preset", "enum")
-        if isinstance(preset, str) and preset and preset != "manual":
-            options = state.value(f"{valve}:preset", "enum_options")
-            if isinstance(options, str) and "manual" not in options:
-                return
-            log.info("heating: %s preset %r → manual", valve, preset)
-            await self._command(f"{valve}:preset", "enum", "set_option", {"value": "manual"}, room)
+        if isinstance(preset, str) and preset:
+            if preset != "manual":
+                options = state.value(f"{valve}:preset", "enum_options")
+                if isinstance(options, str) and "manual" not in options:
+                    return
+                log.info("heating: %s preset %r → manual", valve, preset)
+                await self._command(f"{valve}:preset", "enum", "set_option", {"value": "manual"}, room)
+            return
+        mode = f"{valve}:system_mode"
+        if isinstance(state.value(mode, "enum"), str) and "heat" in (_options(state, mode, "enum") or ()):
+            await self._converge(room, mode, "enum", "set_option", "heat", state)
+
+    async def _hold_valve_limits(self, valve: str, state: _State, room: Room) -> None:
+        """A head that opens its valve only part-way while heating, or modulates it by
+        a PID of its own, is a second controller between our "open" and the radiator.
+        Held fully open, PID off — the PID ignores the opening limit altogether."""
+        position = f"{valve}:heating_valve_position"
+        if _options(state, position, "number") is not None:
+            await self._converge(room, position, "number", "set_value", HEATING_VALVE_POSITION, state)
+        smart = f"{valve}:smart_temperature_control"
+        if isinstance(state.value(smart, "boolean"), bool):
+            await self._converge(room, smart, "boolean", "turn_off", False, state)
+
+    async def _feed_temperature(self, valve: str, state: _State, room: Room) -> None:
+        """A head that takes an external reading is given the room's: its own
+        thermometer sits on the radiator, so an open valve would throttle itself long
+        before the room is warm, and a head regulating by itself (parked at frost,
+        or with DIDA gone) would do so on the radiator. Without a fresh room reading
+        it is switched back to its own."""
+        select, feed = f"{valve}:temperature_sensor_select", f"{valve}:external_temperature_input"
+        limits = _options(state, feed, "number")
+        if not isinstance(limits, dict) or _options(state, select, "enum") is None:
+            return
+        temperature = self._mean_temperature(room.sensors, state)
+        if temperature is not None:
+            want = round(min(max(temperature, limits.get("min", temperature)),
+                             limits.get("max", temperature)), 1)
+            fed = state.value(feed, "number")
+            since = time.monotonic() - self._sent.get(feed, 0.0)
+            moved = not isinstance(fed, int | float) or round(abs(float(fed) - want), 1) >= FEED_DELTA
+            if since >= FEED_S or (moved and since >= RESEND_S):
+                self._sent[feed] = time.monotonic()
+                await self._command(feed, "number", "set_value", {"value": want}, room)
+        source = "remote_temperature" if temperature is not None else "local_temperature"
+        if source not in _options(state, select, "enum"):
+            room.status = ST_VALVE_ERROR
+            if select not in self._valve_errors:
+                self._valve_errors.add(select)
+                log.error("heating: %s offers no %r — unknown sensor vocabulary", select, source)
+            return
+        await self._converge(room, select, "enum", "set_option", source, state)
+
+    def _check_fault(self, valve: str, state: _State, room: Room) -> None:
+        fault = state.value(f"{valve}:fault_status", "text")
+        if not isinstance(fault, str) or fault in ("", "none"):
+            self._faults.pop(valve, None)
+            return
+        room.status = ST_VALVE_ERROR
+        if self._faults.get(valve) != fault:
+            self._faults[valve] = fault
+            log.error("heating: %s reports a fault: %s", valve, fault)
 
     async def _sync_window_detection(self, valve: str, state: _State, room: Room) -> None:
         """A TRV's own window detection is what makes the room's window-pause mean
@@ -516,11 +591,12 @@ class HeatingController:
         # is a second controller closing the radiator behind our back.
         own_detection = self._settings.window_detect and bool(room.sensors)
         want = room.cfg.window_pause and not room.contacts and not own_detection
-        current = state.value(f"{valve}:window_detection", "boolean")
-        if isinstance(current, bool) and current is not want:
-            log.info("heating: %s window detection → %s (%s)", valve, "on" if want else "off", room.name)
-            await self._command(f"{valve}:window_detection", "boolean",
-                                "turn_on" if want else "turn_off", {}, room)
+        for field in WINDOW_DETECTION:
+            current = state.value(f"{valve}:{field}", "boolean")
+            if isinstance(current, bool) and current is not want:
+                log.info("heating: %s window detection → %s (%s)", valve, "on" if want else "off", room.name)
+                await self._command(f"{valve}:{field}", "boolean",
+                                    "turn_on" if want else "turn_off", {}, room)
 
     async def _drive_boiler(self, want: bool, state: _State, now: float) -> None:
         settings = self._settings
@@ -638,9 +714,8 @@ class HeatingController:
             ids.update(room.contacts)
             ids.update(room.presence)
             for valve in room.valves:
-                ids.update((valve, f"{valve}:window_open", f"{valve}:preset",
-                            f"{valve}:window_detection",
-                            f"{valve}:min_temperature", f"{valve}:max_temperature"))
+                ids.add(valve)
+                ids.update(f"{valve}:{field}" for field in VALVE_FACETS)
         for eid in (self._settings.boiler, self._settings.outdoor, self._settings.away_helper):
             if eid:
                 ids.add(eid)
@@ -708,6 +783,16 @@ def _echoes(reported: object, want: object) -> bool:
     if isinstance(want, float):
         return isinstance(reported, int | float) and abs(float(reported) - want) < STEP / 2
     return reported == want
+
+
+def _options(state: _State, entity_id: str, capability: str) -> object:
+    """A facet's published limits — the `number_options` dict or `enum_options` list —
+    or None when the device does not expose that facet at all."""
+    raw = state.value(entity_id, f"{capability}_options")
+    try:
+        return json.loads(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return None
 
 
 def _json(raw: str) -> object:

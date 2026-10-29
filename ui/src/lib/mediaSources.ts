@@ -9,7 +9,7 @@
 // registry (areas.media_config) stays the single source of truth for the mapping.
 
 import { api, type MediaSource } from "#lib/api.js";
-import { isActive } from "#lib/media.js";
+import { isActive, transport } from "#lib/media.js";
 import { devices, type Device } from "#lib/store.svelte.js";
 
 /** A registry source resolved against live devices, ready for the widget. */
@@ -156,6 +156,9 @@ export async function selectSource(rs: ResolvedSource): Promise<void> {
     if (s.zone_input) {
       await api.sendCommand({ entity_id: s.zone, capability: "source", command: "set_source", args: { value: s.zone_input } });
     }
+  }
+  if (rs.player && !["playing", "buffering"].includes(transport(rs.player))) {
+    await api.sendCommand({ entity_id: rs.player.entityId, capability: "media_transport", command: "play" });
   }
 }
 

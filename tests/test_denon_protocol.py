@@ -194,3 +194,50 @@ async def test_the_retry_stops_with_the_connection(monkeypatch):
     monkeypatch.setattr(mod.asyncio, "sleep", connection_drops)
     await a._interrogate()
     assert receiver.sent.count("SSFUN ?") == 1, "a dead connection is not asked again"
+
+
+# --- mute dropped in standby ---------------------------------------------------------
+
+
+class _UnmutedReceiver:
+    """A Marantz whose zones came out of standby unmuted without pushing MUOFF."""
+
+    def __init__(self, adapter) -> None:
+        self.adapter = adapter
+        self.sent: list[str] = []
+        self._pending: list[str] = []
+
+    def write(self, data: bytes) -> None:
+        cmd = data.decode().strip()
+        self.sent.append(cmd)
+        if cmd in ("MU?", "Z2MU?"):
+            self._pending.append(cmd[:-1] + "OFF")
+
+    async def drain(self) -> None:
+        frames, self._pending = self._pending, []
+        for frame in frames:
+            await self.adapter._on_line(frame)
+
+
+async def test_a_waking_zone_reports_the_mute_it_really_has(monkeypatch):
+    import asyncio
+
+    import dida_adapter_denon.adapter as mod
+
+    monkeypatch.setattr(mod, "MUTE_REQUERY_SECONDS", 0)
+    a = mod.DenonAdapter()
+    a._bus = _StateBus()
+    a._main = mod.Zone("denon:marantz_main", "Marantz")
+    a._zone2 = mod.Zone("denon:marantz_zone2", "Marantz Zone 2")
+    a._writer = _UnmutedReceiver(a)
+    a._pw_on = True
+    for zone in (a._main, a._zone2):
+        zone.last.update(on_off=False, mute=True)
+
+    await a._on_line("ZMON")
+    await a._on_line("Z2ON")
+    await a._on_line("PWON")
+    await asyncio.sleep(0.05)
+
+    assert a._writer.sent == ["MU?", "Z2MU?"], "only a zone that just woke is asked"
+    assert a._main.last["mute"] is False and a._zone2.last["mute"] is False

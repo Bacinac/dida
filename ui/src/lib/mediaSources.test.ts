@@ -81,6 +81,14 @@ describe("picking a source", () => {
     ]);
   });
 
+  it("turning a player source on resumes the player it paused when turned off", async () => {
+    house("PowerOff", { on: false, input: "MUSIC" }, "stopped");
+    await selectSource(resolvedSources(17).find((s) => s.src.key === "zen")!);
+    expect(api.sendCommand.mock.calls.at(-1)![0]).toEqual(
+      { entity_id: "opus:dac", capability: "media_transport", command: "play" },
+    );
+  });
+
   it("a source without a declared input leaves the amp to Harmony", async () => {
     house("PowerOff", { on: false, input: "MUSIC" }, "stopped");
     await selectSource(resolvedSources(17).find((s) => s.src.key === "shield")!);

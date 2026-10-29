@@ -57,6 +57,9 @@ PROBE_DEADLINE = 60.0
 # input renamed MUSIC) and every named source is refused, so keep asking.
 SOURCE_RETRY_SECONDS = 10.0
 SOURCE_SETTLE_SECONDS = 1.5  # the table arrives as a burst of frames after the query
+# Standby clears a zone's mute without a MUOFF frame, so a waking zone is asked again;
+# a stale "muted" would turn the next toggle into an unmute of an audible zone.
+MUTE_REQUERY_SECONDS = 1.0
 _UNITS = {"volume": "%"}
 
 # Projector power runs over IR (unacknowledged), so we verify each transition
@@ -364,14 +367,25 @@ class DenonAdapter:
         return self._code_to_label.get(code, code)
 
     async def _emit_main_power(self) -> None:
-        await self._publish(self._main, "on_off", self._pw_on and self._zm_on)
+        on = self._pw_on and self._zm_on
+        self._requery_mute_on_wake(self._main, on, "MU?")
+        await self._publish(self._main, "on_off", on)
 
     async def _emit_zone2_power(self) -> None:
         on = self._pw_on and self._z2_on
+        self._requery_mute_on_wake(self._zone2, on, "Z2MU?")
         await self._publish(self._zone2, "on_off", on)
         # Zone 2 (patio) is audio-only — its power stands in for "audio playing" so the
         # floor plan can flag the patio, mirroring the main zone's video flag.
         await self._publish(self._zone2, "media_transport", "playing" if on else "stopped")
+
+    def _requery_mute_on_wake(self, zone: Zone, on: bool, query: str) -> None:
+        if on and zone.last.get("on_off") is False:
+            spawn(self._requery_mute(query), log=log, name="denon mute requery")
+
+    async def _requery_mute(self, query: str) -> None:
+        await asyncio.sleep(MUTE_REQUERY_SECONDS)
+        await self._send(query)
 
     async def _publish(self, zone: Zone, capability: str, value: object) -> None:
         if zone.last.get(capability) == value:

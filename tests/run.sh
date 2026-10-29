@@ -112,10 +112,10 @@ PP_JOURNAL="$CORE:/w/services/journal/src"
 # our packages from the working tree via PYTHONPATH, so they pass while the running
 # containers still import yesterday's dida_core (measured: a new core symbol gave
 # every service an ImportError at boot, with a green gate behind it). Rebuild the
-# base whenever core/ or the migrations moved. It is cached, so the no-op case costs
+# base whenever core/, the migrations or the pinned versions moved. It is cached, so the no-op case costs
 # about a second.
 base_built=$(docker image inspect dida/base:latest --format '{{.Created}}' 2>/dev/null || echo "")
-if [ -z "$base_built" ] || [ -n "$(find "$ROOT/core" "$ROOT/db/migrations" "$ROOT/ch/migrations" "$ROOT/docker/base.Dockerfile" -type f -newermt "$base_built" -print -quit 2>/dev/null)" ]; then
+if [ -z "$base_built" ] || [ -n "$(find "$ROOT/core" "$ROOT/db/migrations" "$ROOT/ch/migrations" "$ROOT/docker/base.Dockerfile" "$ROOT/docker/constraints.txt" -type f -newermt "$base_built" -print -quit 2>/dev/null)" ]; then
   echo "== core changed since dida/base was built — rebuilding it =="
   (cd "$ROOT" && docker compose --profile bases build base) || {
     echo "FAILED: dida/base rebuild failed — services would run stale core" >&2

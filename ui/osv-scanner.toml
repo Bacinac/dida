@@ -1,0 +1,8 @@
+# deepmerge has no fixed release (4.3.1 is its latest) and @sveltejs/vite-plugin-svelte
+# 7.3.1, the latest, still depends on it. Its one call merges our own svelte.config.js
+# into the plugin defaults at build time; no outside input reaches it. The date forces
+# a fresh look at upstream.
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-29
+reason = "deepmerge prototype poisoning; build-time merge of our own config only, no fixed release upstream"

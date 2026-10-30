@@ -92,8 +92,11 @@ async def stations(request: Request, user: AuthUser = Depends(current_user)) -> 
 async def art(request: Request, u: str = Query(..., max_length=2000),
               w: int = Query(320, ge=16, le=2000),
               user: AuthUser = Depends(current_user)) -> Response:
+    picture_id = opus.picture(u)
+    if picture_id is None:
+        raise HTTPException(404, "not a picture OPUS names")
     try:
-        upstream = await opus.art(request.app.state.pool, u, w)
+        upstream = await opus.art(request.app.state.pool, picture_id, w)
     except opus.OpusUnavailable as exc:
         raise _unavailable(exc) from exc
     if upstream.status_code >= 400:

@@ -73,3 +73,35 @@ async def test_an_unreachable_opus_is_502_not_a_traceback(monkeypatch):
     with pytest.raises(HTTPException) as e:
         await ph.photo_preview(CHECKSUM, _Request(), user=USER)
     assert e.value.status_code == 502
+
+
+@pytest.fixture
+def pictured(monkeypatch):
+    """Every picture that would be asked of OPUS, by its number."""
+    import httpx
+    from dida_api import opus_media
+    out: list[tuple[int, int]] = []
+
+    async def art(pool, picture_id, w):
+        out.append((picture_id, w))
+        return httpx.Response(200, content=b"jpeg", headers={"content-type": "image/jpeg"})
+    monkeypatch.setattr(opus_media.opus, "art", art)
+    return opus_media.art, out
+
+
+@pytest.mark.parametrize("u", ["/api/pictures/7", "http://192.168.1.102:8098/api/pictures/7?w=640"])
+async def test_an_opus_picture_is_asked_for_by_its_number(pictured, u):
+    route, out = pictured
+    answer = await route(_Request(), u=u, w=256, user=USER)
+    assert answer.body == b"jpeg"
+    assert out == [(7, 256)]
+
+
+@pytest.mark.parametrize("u", ["https://image.tmdb.org/t/p/w342/a.jpg", "/api/pictures/7/../../tv/control",
+                               "/api/art?u=x"])
+async def test_anything_else_never_reaches_opus(pictured, u):
+    route, out = pictured
+    with pytest.raises(HTTPException) as refused:
+        await route(_Request(), u=u, w=256, user=USER)
+    assert refused.value.status_code == 404
+    assert out == []

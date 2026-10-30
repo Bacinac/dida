@@ -16,7 +16,9 @@ through as a path.
 from __future__ import annotations
 
 import logging
+import re
 import time
+from urllib.parse import urlsplit
 
 import httpx
 from dida_core import host_setting
@@ -161,13 +163,22 @@ def _station(s: dict) -> dict:
             "url": s.get("url") or "", "logo": s.get("image")}
 
 
-async def art(pool, u: str, w: int) -> httpx.Response:
-    """A picture through the player's own picture route, which is what keeps
-    the house from being an open proxy: the player fetches only what its
-    catalogue names."""
+_PICTURE = re.compile(r"^/api/pictures/(\d+)$")
+
+
+def picture(u: str) -> int | None:
+    """The OPUS picture an address names, whichever OPUS origin it was written
+    for: a list hands out the path, a device what it was given to fetch."""
+    found = _PICTURE.match(urlsplit(u).path)
+    return int(found.group(1)) if found else None
+
+
+async def art(pool, picture_id: int, w: int) -> httpx.Response:
+    """An OPUS picture by its number, which is all the house can ask for: the
+    house is no open proxy."""
     http = await _http(pool)
     try:
-        return await http.get("/art", params={"u": u, "w": w})
+        return await http.get(f"/pictures/{picture_id}", params={"w": w})
     except httpx.HTTPError as exc:
         raise OpusUnavailable(f"OPUS did not answer for a picture: {exc}") from exc
 

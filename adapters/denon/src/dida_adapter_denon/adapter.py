@@ -462,11 +462,9 @@ class DenonAdapter:
             # HDMI output routing WITH verified projector power — the projector is on
             # IR (unacknowledged), so we confirm each transition against the receiver's
             # output HDMI sync and retry the press until it takes (see _projector_*).
-            # "projector" = Monitor 2 (forced 1080p, its EDID is unreliable) + power ON;
-            # "tv" = power the projector OFF, then Monitor 1 with AUTO so the receiver
-            # outputs the TV's native 4K(60/50). Spawned so the ~40s verify loop runs
-            # in the background (overlapping the screen travel) and never blocks command
-            # handling.
+            # "projector" = Monitor 2 + power ON; "tv" = power the projector OFF, then
+            # Monitor 1. Spawned so the ~40s verify loop runs in the background
+            # (overlapping the screen travel) and never blocks command handling.
             mode = str(args.get("value", ""))
             if mode == "projector":
                 self._start_projector(self._projector_on())
@@ -492,7 +490,6 @@ class DenonAdapter:
 
     async def _projector_on(self) -> None:
         await self._send("VSMONI2")
-        await self._send("VSSCH10P")
         for attempt in range(1, PROJ_ATTEMPTS + 1):
             await self._press_projector()
             log.info("denon: projector ON attempt %d/%d — waiting %.0fs for sync",
@@ -522,7 +519,6 @@ class DenonAdapter:
         if not ok:
             log.error("denon: projector OFF failed after %d attempts (still synced)", PROJ_ATTEMPTS)
         await self._send("VSMONI1")
-        await self._send("VSSCHAUTO")
         # Big-screen teardown, powered off LAST — AFTER the projector-off verify, since a
         # powered-off amp drops HDMI sync and would else read as a false "projector off".
         # Tear down THROUGH Harmony so its activity state follows reality: the physical

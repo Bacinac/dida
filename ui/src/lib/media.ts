@@ -42,7 +42,14 @@ export const isActive = (d: Device): boolean => ["playing", "paused", "buffering
 export const mediaTitle = (d: Device): string | null => str(d, "media_title");
 export const mediaArtist = (d: Device): string | null => str(d, "media_artist");
 export const mediaAlbum = (d: Device): string | null => str(d, "media_album");
-export const mediaArt = (d: Device): string | null => str(d, "media_art");
+// A picture OPUS names reaches a device as the whole LAN address it fetches from,
+// which a page served over https may not load; it is asked of DIDA's own proxy, so
+// the browser never meets OPUS. Any other device's picture is drawn as given.
+const OPUS_PICTURE = /^(?:https?:\/\/[^/]+)?\/api\/pictures\/\d+(?:\?|$)/;
+export const mediaArt = (d: Device): string | null => {
+  const art = str(d, "media_art");
+  return art && OPUS_PICTURE.test(art) ? api.opusArt(art, 640) : art;
+};
 export const mediaQuality = (d: Device): string | null => str(d, "media_quality");
 export const mediaSource = (d: Device): string | null => str(d, "media_source");
 // The play queue the adapter exposes — universal across sources.

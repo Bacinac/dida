@@ -5,7 +5,7 @@
 // walks away from the music.
 import { describe, expect, it } from "vitest";
 import {
-  fmtTime, gradient, isActive, isAvrZone, isMediaPlayer, isPlaying, mediaDuration,
+  fmtTime, gradient, isActive, isAvrZone, isMediaPlayer, isPlaying, mediaArt, mediaDuration,
   mediaMuted, mediaQueue, mediaVolume, positionBase, sourceOptions, sourceValue,
   transport,
 } from "#lib/media.js";
@@ -165,5 +165,19 @@ describe("AVR source selection", () => {
   it("the current source is null when unset, so nothing is preselected", () => {
     expect(sourceValue(dev({ source: "MUSIC" }))).toBe("MUSIC");
     expect(sourceValue(dev({}))).toBeNull();
+  });
+});
+
+describe("the cover a player shows", () => {
+  it("a picture OPUS names is asked of DIDA, whatever address the device was handed", () => {
+    expect(mediaArt(dev({ media_art: "http://192.168.1.102:8098/api/pictures/7?w=640" })))
+      .toBe("/api/opus/art?u=http%3A%2F%2F192.168.1.102%3A8098%2Fapi%2Fpictures%2F7%3Fw%3D640&w=640");
+    expect(mediaArt(dev({ media_art: "/api/pictures/7" }))).toBe("/api/opus/art?u=%2Fapi%2Fpictures%2F7&w=640");
+  });
+
+  it("any other device's picture is drawn as it came", () => {
+    expect(mediaArt(dev({ media_art: "http://volumio.local/albumart?path=x" }))).toBe("http://volumio.local/albumart?path=x");
+    expect(mediaArt(dev({ media_art: "https://x/api/pictures/7/../../tv" }))).toBe("https://x/api/pictures/7/../../tv");
+    expect(mediaArt(dev({ media_art: "" }))).toBeNull();
   });
 });

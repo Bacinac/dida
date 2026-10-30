@@ -495,8 +495,8 @@ class DenonAdapter:
             log.info("denon: projector ON attempt %d/%d — waiting %.0fs for sync",
                      attempt, PROJ_ATTEMPTS, PROJ_ON_WAIT)
             await asyncio.sleep(PROJ_ON_WAIT)
-            if await self._read_output_sync():
-                log.info("denon: projector ON confirmed (output synced)")
+            if sig := await self._read_output_sync():
+                log.info("denon: projector ON confirmed (output %s)", sig)
                 return
             log.warning("denon: projector ON attempt %d — no output sync, retrying", attempt)
         log.error("denon: projector ON failed after %d attempts (no output sync)", PROJ_ATTEMPTS)

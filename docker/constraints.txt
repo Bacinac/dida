@@ -73,7 +73,7 @@ propcache==0.5.2
 protobuf==7.35.1
 pure-python-adb==0.3.0.dev0
 py-vapid==1.9.4
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1-modules==0.4.2
 pycares==5.0.1
 pychromecast==14.0.10

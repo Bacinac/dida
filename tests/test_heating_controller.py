@@ -343,6 +343,20 @@ async def test_a_valve_that_never_echoes_is_reported_faulty():
     await ctrl.tick()
     assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
     assert [c.command for c in commands(bus, VALVE)] == ["set_temperature"], "and it is retried"
+    await ctrl.tick()
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR, \
+        "broken between retries too, not for one tick every quarter hour"
+
+
+async def test_a_faulty_valve_that_takes_the_setting_is_healthy_again():
+    pool = house()
+    ctrl, bus = await run(pool)
+    ctrl._written[VALVE] = (H.OPEN_SETPOINT, time.monotonic() - H.VERIFY_S - 1)
+    await ctrl.tick()
+    assert published(bus, "heating:room:7", "text") == H.ST_VALVE_ERROR
+    pool.state[(VALVE, "target_temperature")] = (H.OPEN_SETPOINT, 60)
+    await ctrl.tick()
+    assert published(bus, "heating:room:7", "text") == H.ST_WAITING
 
 
 @pytest.mark.parametrize("published_before,calling", [(True, True), (False, False), (None, False)])

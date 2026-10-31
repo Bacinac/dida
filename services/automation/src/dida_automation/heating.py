@@ -477,6 +477,8 @@ class HeatingController:
         if _echoes(reported, want):
             self._valve_errors.discard(entity_id)
             return
+        if entity_id in self._valve_errors:
+            room.status = ST_VALVE_ERROR
         if written == want and now - since < VERIFY_S:
             if entity_id not in self._valve_errors and now - self._sent.get(entity_id, 0.0) >= RESEND_S:
                 await self._send(room, entity_id, capability, command, want)

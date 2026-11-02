@@ -39,7 +39,7 @@
 </script>
 
 <Field label={t("heating.schedule")}
-  hint={slots.length ? undefined : (inheritLabel ?? t("heating.scheduleEmpty"))}>
+  hint={slots.length ? t("heating.scheduleHint") : (inheritLabel ?? t("heating.scheduleEmpty"))}>
   <div class="space-y-2">
     {#each ordered as { s, i } (i)}
       <div class="flex flex-wrap items-center gap-1.5 rounded border border-dida-border bg-dida-panel-2 p-2">

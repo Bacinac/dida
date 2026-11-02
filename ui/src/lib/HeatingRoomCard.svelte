@@ -194,10 +194,13 @@
       <!-- Empty = the house schedule. A room only carries one when it disagrees. -->
       <HeatingSchedule bind:slots={draft.schedule} inheritLabel={t("heating.scheduleFromHouse")} />
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-start gap-2">
         <Toggle size="small" checked={draft.window_pause} onclick={() => (draft.window_pause = !draft.window_pause)}
           label={t("heating.windowPause")} />
-        <span class="text-m">{t("heating.windowPause")}</span>
+        <div>
+          <p class="text-m">{t("heating.windowPause")}</p>
+          <p class="text-xs text-dida-text-faint">{t("heating.windowPauseHint")}</p>
+        </div>
       </div>
 
       <SaveButton size="small" {dirty} saving={busy} onclick={save} />

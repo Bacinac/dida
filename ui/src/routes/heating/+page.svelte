@@ -110,7 +110,7 @@
         <Field label={t("heating.boiler")} hint={t("heating.boilerHint")}>
           <EntityPicker bind:value={draft.boiler} items={relayItems} placeholder={t("heating.pickBoiler")} />
         </Field>
-        <Field label={t("heating.outdoorSensor")}>
+        <Field label={t("heating.outdoorSensor")} hint={t("heating.outdoorSensorHint")}>
           <EntityPicker bind:value={draft.outdoor} items={outdoorItems} placeholder={t("heating.pickOutdoor")} />
         </Field>
         <Field label={t("heating.summerCutoff")} hint={t("heating.summerCutoffHint")}>
@@ -150,17 +150,17 @@
           <Field label={t("heating.hysteresis")} hint={t("heating.hysteresisHint")}>
             <input type="number" step="0.1" bind:value={draft.hysteresis} />
           </Field>
-          <Field label={t("heating.deadband")}>
+          <Field label={t("heating.deadband")} hint={t("heating.deadbandHint")}>
             <input type="number" step="0.1" bind:value={draft.deadband} />
           </Field>
           <Field label={t("heating.minCalling")} hint={t("heating.minCallingHint")}>
             <input type="number" step="1" min="1" max="20" bind:value={draft.min_calling}
               />
           </Field>
-          <Field label={t("heating.minOn")} hint={t("heating.cyclingHint")}>
+          <Field label={t("heating.minOn")} hint={t("heating.minOnHint")}>
             <input type="number" step="30" bind:value={draft.min_on_s} />
           </Field>
-          <Field label={t("heating.minOff")}>
+          <Field label={t("heating.minOff")} hint={t("heating.minOffHint")}>
             <input type="number" step="30" bind:value={draft.min_off_s} />
           </Field>
           <Field label={t("heating.frost")} hint={t("heating.frostHint")}>
@@ -184,36 +184,48 @@
             <input type="number" step="0.1" min="0" max="2" bind:value={draft.frost_per_degree}
               />
           </Field>
-          <div class="flex items-center gap-2 self-end">
+          <div class="flex items-start gap-2 self-end">
             <Toggle size="small" checked={draft.preheat}
               onclick={() => (draft && (draft.preheat = !draft.preheat))}
               label={t("heating.preheat")} />
-            <span class="text-m">{t("heating.preheat")}</span>
+            <div>
+              <p class="text-m">{t("heating.preheat")}</p>
+              <p class="text-xs text-dida-text-faint">{t("heating.preheatToggleHint")}</p>
+            </div>
           </div>
           <Field label={t("heating.windowDrop")} hint={t("heating.windowDropHint")}>
             <input type="number" step="0.1" bind:value={draft.window_drop} />
           </Field>
-          <Field label={t("heating.windowMinutes")}>
+          <Field label={t("heating.windowMinutes")} hint={t("heating.windowMinutesHint")}>
             <input type="number" step="1" min="2" max="60" bind:value={draft.window_minutes}
               />
           </Field>
-          <div class="flex items-center gap-2 self-end">
+          <div class="flex items-start gap-2 self-end">
             <Toggle size="small" checked={draft.window_detect}
               onclick={() => (draft && (draft.window_detect = !draft.window_detect))}
               label={t("heating.windowDetect")} />
-            <span class="text-m">{t("heating.windowDetect")}</span>
+            <div>
+              <p class="text-m">{t("heating.windowDetect")}</p>
+              <p class="text-xs text-dida-text-faint">{t("heating.windowDetectHint")}</p>
+            </div>
           </div>
-          <div class="flex items-center gap-2 self-end">
+          <div class="flex items-start gap-2 self-end">
             <Toggle size="small" checked={draft.force_manual}
               onclick={() => (draft && (draft.force_manual = !draft.force_manual))}
               label={t("heating.forceManual")} />
-            <span class="text-m">{t("heating.forceManual")}</span>
+            <div>
+              <p class="text-m">{t("heating.forceManual")}</p>
+              <p class="text-xs text-dida-text-faint">{t("heating.forceManualHint")}</p>
+            </div>
           </div>
-          <div class="flex items-center gap-2 self-end">
+          <div class="flex items-start gap-2 self-end">
             <Toggle size="small" checked={draft.require_open_valve}
               onclick={() => (draft && (draft.require_open_valve = !draft.require_open_valve))}
               label={t("heating.requireOpenValve")} />
-            <span class="text-m">{t("heating.requireOpenValve")}</span>
+            <div>
+              <p class="text-m">{t("heating.requireOpenValve")}</p>
+              <p class="text-xs text-dida-text-faint">{t("heating.requireOpenValveHint")}</p>
+            </div>
           </div>
         </div>
       {/if}

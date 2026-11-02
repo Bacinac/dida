@@ -7,6 +7,7 @@ translation is tested without a player or a bus."""
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import parse_qs, urlsplit
 
 NAMESPACE = "opus"
@@ -173,13 +174,24 @@ def order_from_queue(args: dict) -> dict | None:
     return {"tracks": tracks, "start": max(0, min(start, len(tracks) - 1))}
 
 
+_PICTURE = re.compile(r"^/api/pictures/\d+$")
+
+
+def _picture(address: object) -> str | None:
+    """The player vets a cover as the bare path of a picture it names, while what
+    it hands out is that path on its LAN origin with a width — so it is reduced
+    to the path, and anything that is not one of its pictures is dropped."""
+    path = urlsplit(str(address or "")).path
+    return path if _PICTURE.match(path) else None
+
+
 def order_from_media(args: dict) -> dict | None:
     """A `play_media` command — a station — → the body of the player's `/play`."""
     uri = str(args.get("uri") or args.get("url") or "")
     if not uri.startswith("http"):
         return None
     return {"tracks": [{"id": -1, "title": str(args.get("title") or ""), "artist": "",
-                       "album": "", "cover_url": str(args.get("art") or "") or None,
+                       "album": "", "cover_url": _picture(args.get("art")),
                        "codec": None, "url": uri}], "start": 0}
 
 
@@ -210,7 +222,7 @@ def order_from_address(args: dict) -> tuple[str, dict] | None:
 
 
 def _track(row: dict, fallback_id: int) -> dict | None:
-    art = str(row.get("art") or row.get("cover_url") or "") or None
+    art = _picture(row.get("art") or row.get("cover_url"))
     base = {"title": str(row.get("title") or ""), "artist": str(row.get("artist") or ""),
             "album": str(row.get("album") or ""), "cover_url": art}
     raw = row.get("id")

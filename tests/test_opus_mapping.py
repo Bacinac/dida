@@ -59,12 +59,12 @@ def test_an_unknown_transport_is_not_passed_through():
 def test_a_queue_is_played_by_the_librarys_ids_not_by_its_tickets():
     queue = [
         {"id": 11731, "uri": "http://x/api/play/track/11731/stream?ticket=t", "title": "A",
-         "artist": "B", "album": "C", "art": "https://cdn/a.jpg", "codec": "flac"},
+         "artist": "B", "album": "C", "art": "http://x:8098/api/pictures/5?w=512", "codec": "flac"},
         {"id": 11732, "uri": "http://x/api/play/track/11732/stream?ticket=t", "title": "D"},
     ]
     order = order_from_queue({"queue": json.dumps(queue), "start": 1})
     assert order == {"tracks": [
-        {"id": 11731, "title": "A", "artist": "B", "album": "C", "cover_url": "https://cdn/a.jpg",
+        {"id": 11731, "title": "A", "artist": "B", "album": "C", "cover_url": "/api/pictures/5",
          "codec": "flac", "url": None},
         {"id": 11732, "title": "D", "artist": "", "album": "", "cover_url": None, "codec": None, "url": None},
     ], "start": 1}
@@ -90,11 +90,17 @@ def test_a_broken_queue_is_nothing_to_play():
 
 
 def test_a_station_played_as_media_carries_its_address_and_face():
-    order = order_from_media({"uri": "https://s/x.mp3", "title": "Radio 101", "art": "https://s/logo.png"})
+    order = order_from_media({"uri": "https://s/x.mp3", "title": "Radio 101", "art": "/api/pictures/7"})
     assert order == {"tracks": [{"id": -1, "title": "Radio 101", "artist": "", "album": "",
-                                 "cover_url": "https://s/logo.png", "codec": None,
+                                 "cover_url": "/api/pictures/7", "codec": None,
                                  "url": "https://s/x.mp3"}], "start": 0}
     assert order_from_media({"uri": "file:///etc/passwd"}) is None
+
+
+def test_a_cover_the_player_handed_out_goes_back_as_the_path_it_vets():
+    given = {"uri": "https://s/x.mp3", "art": "http://192.0.2.14:8098/api/pictures/11097?w=512"}
+    assert order_from_media(given)["tracks"][0]["cover_url"] == "/api/pictures/11097"
+    assert order_from_media({**given, "art": "https://elsewhere/logo.png"})["tracks"][0]["cover_url"] is None
 
 
 def test_the_controls_are_what_the_mailbox_obeys():

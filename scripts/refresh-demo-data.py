@@ -475,6 +475,12 @@ def anonymise() -> None:
     stmts.append("DELETE FROM app_settings WHERE key = 'app_url';")
     stmts.append("DELETE FROM adapter_config WHERE adapter = 'cloudflare' AND key = 'zone';")
 
+    # 0b. A cast device reports the artwork URL its sender handed it, and from OPUS
+    # that URL is on the family domain. A rewritten host is only a broken picture.
+    for d in _A.get("domains", []):
+        stmts.append(f"DELETE FROM current_state WHERE value::text ILIKE '%{d}%' "  # noqa: S608
+                     "AND entity_id NOT LIKE 'cloudflare:%';")
+
     # 0c. A reverse-DNS application id carries the family domain with its labels
     # inverted, so `_host_re` — which reads forward — never sees it. Left alone it
     # reaches the demo inside ordinary state: the living-room TV publishes its

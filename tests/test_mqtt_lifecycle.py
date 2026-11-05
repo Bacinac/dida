@@ -508,9 +508,10 @@ async def test_the_reason_is_a_sentence_not_four_hundred_characters_of_zcl():
 
 @pytest.mark.parametrize("code,expect", [
     ("MAC_NO_ACK", "device did not respond"),
-    ("NO_NETWORK_ROUTE", "no route to the device"),
+    ("NWK_NO_ROUTE", "no route to the device"),
     ("MAC_CHANNEL_ACCESS_FAILURE", "the radio channel was busy"),
     ("MAC_TRANSACTION_EXPIRED", "the device did not wake in time"),
+    ("SRSP - AF - dataRequest after 6000ms", "the coordinator did not answer"),
     ("Timeout waiting for response", "timed out"),
 ])
 async def test_each_radio_failure_is_named_in_words(code, expect):
@@ -519,6 +520,32 @@ async def test_each_radio_failure_is_named_in_words(code, expect):
     ev = await _journalled(_adapter(), [_log(
         f"z2m: Publish 'set' 'state' to 'Lamp' failed: 'Error: ... ({code}) ...'")])
     assert ev[0]["message"] == f"Lamp: {expect}"
+
+
+def _zcl(inner):
+    return ("z2m: Publish 'set' 'state' to 'Lamp' failed: 'Error: ZCL command "
+            "0xb43522fffe87b275/1 genOnOff.on({}, {\"timeout\":10000,\"disableResponse\":false,"
+            f"\"disableRecovery\":false}}) failed ({inner})'")
+
+
+@pytest.mark.parametrize("inner,expect", [
+    ("Data request failed with error: 'NWK_NO_ROUTE' (0xcd)", "no route to the device"),
+    ("SRSP - AF - dataRequest after 6000ms", "the coordinator did not answer"),
+    ("Timeout after 10000ms [address=12487 endpoint=1 clusterId=6 cmdId=11 tsn=78]", "timed out"),
+    ("Status 'INVALID_VALUE'", "Status 'INVALID_VALUE'"),
+])
+async def test_the_reason_comes_from_the_error_not_from_the_options_it_quotes(inner, expect):
+    """Every ZCL error quotes `"timeout":10000`. Read case-blind, that named 299
+    failures in a week "timed out", whatever had actually gone wrong."""
+    ev = await _journalled(_adapter(), [_log(_zcl(inner))])
+    assert ev[0]["message"] == f"Lamp: {expect}"
+
+
+async def test_a_command_replaced_while_it_waited_is_not_a_failed_one():
+    """A sleeping head holds its writes in a queue and a newer one takes the older
+    one's place. Nothing refused anything, and the newest reports its own outcome."""
+    nested = "ZCL command 0xa4c1387c3ce21de8/1 failed (Request superseded)"
+    assert await _journalled(_adapter(), [_log(_zcl(nested))]) == []
 
 
 async def test_an_unrecognised_reason_is_passed_through_truncated():

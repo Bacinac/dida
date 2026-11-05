@@ -54,24 +54,29 @@ NAMESPACE = "mqtt"
 # showing the last one it knew and the person who pressed the button is told
 # nothing at all. Measured on the Cabin installation — three lights, nine presses,
 # not one word anywhere in DIDA.
+_SUPERSEDED = "Request superseded"
 _SET_FAILED = re.compile(r"Publish 'set'.*? to '([^']+)' failed:\s*(.*)", re.S)
 
 # The raw tail is 400+ characters of ZCL internals. What a person needs is which
 # device and why, in that order; the rest belongs in the log, not the timeline.
 _REASONS = (
     ("MAC_NO_ACK", "device did not respond"),
-    ("NO_NETWORK_ROUTE", "no route to the device"),
+    ("NWK_NO_ROUTE", "no route to the device"),
     ("MAC_CHANNEL_ACCESS_FAILURE", "the radio channel was busy"),
     ("MAC_TRANSACTION_EXPIRED", "the device did not wake in time"),
+    ("SRSP", "the coordinator did not answer"),
     ("Timeout", "timed out"),
 )
 
 
 def _failure_reason(tail: str) -> str:
+    # Case-sensitive: every ZCL error quotes its options as {"timeout":10000,...}, which
+    # a case-blind "Timeout" would read as the reason for all of them.
     for token, human in _REASONS:
-        if token.lower() in tail.lower():
+        if token in tail:
             return human
-    return (tail.strip().strip("'")[:120] or "rejected by zigbee2mqtt")
+    innermost = tail.rpartition("failed (")[2].strip().removeprefix("'").removesuffix("'")
+    return innermost.rstrip(")")[:120] or "rejected by zigbee2mqtt"
 
 
 class MqttAdapter:
@@ -295,10 +300,13 @@ class MqttAdapter:
         if not m:
             return
         friendly, tail = m.group(1), m.group(2)
+        if _SUPERSEDED in tail:
+            log.info("mqtt: %s: a newer command replaced one still waiting", friendly)
+            return
         dev_slug = slug(friendly, default="dev")
         entity_id = f"{NAMESPACE}:{dev_slug}"
         reason = _failure_reason(tail)
-        log.warning("mqtt: %s refused the command — %s", friendly, reason)
+        log.warning("mqtt: %s: command failed — %s", friendly, reason)
         await emit_journal(
             self._bus, "command_failed", entity_id=entity_id, device_key=dev_slug,
             source=f"adapter:{NAMESPACE}", severity="error",

@@ -20,6 +20,7 @@ what.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 
 import pytest
@@ -274,3 +275,30 @@ async def test_a_missing_log_store_is_reported():
     with pytest.raises(HTTPException) as e:
         await mod.app_logs(req, _admin=ADMIN)
     assert e.value.status_code == 503
+
+
+def test_clickhouse_that_is_still_booting_is_retried_until_it_answers(monkeypatch):
+    from types import SimpleNamespace
+
+    from dida_api import app as app_mod
+
+    client = object()
+    attempts = [ConnectionRefusedError("still booting"), ConnectionRefusedError("still booting"), client]
+
+    async def fake_client():
+        outcome = attempts.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(app_mod, "ch_client", fake_client)
+    monkeypatch.setattr(app_mod.asyncio, "sleep", no_wait)
+    target = SimpleNamespace(state=SimpleNamespace(ch=None))
+
+    asyncio.run(app_mod.connect_clickhouse(target))
+
+    assert target.state.ch is client, "the history store is reachable once ClickHouse answers"
+    assert attempts == [], "a refused connection does not end the attempts"

@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-import clickhouse_connect
 from anthropic import APIError
 from dida_core import (
     CORE,
@@ -18,6 +17,7 @@ from dida_core import (
     CapabilityError,
     apply_migrations,
     attach_log_bus,
+    ch_client,
     jsonb_init,
     pg_pool,
     set_app_setting,
@@ -121,6 +121,23 @@ Scalar = bool | int | float | str
 
 _DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+CLICKHOUSE_RETRY_S = 10
+
+
+async def connect_clickhouse(app: FastAPI) -> None:
+    # After a host reboot Docker starts every container at once, whatever
+    # depends_on says, so ClickHouse is often still booting when the API is.
+    while app.state.ch is None:
+        try:
+            app.state.ch = await ch_client()
+        except Exception:
+            log.warning(
+                "clickhouse not ready; /history answers 503, retrying in %d s",
+                CLICKHOUSE_RETRY_S, exc_info=True,
+            )
+            await asyncio.sleep(CLICKHOUSE_RETRY_S)
+    log.info("clickhouse client connected")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,19 +150,8 @@ async def lifespan(app: FastAPI):
     await bootstrap_admin_if_empty(app.state.pool, state_dir, env_prefix="DIDA")
     await ensure_wallpanel(app.state.pool)  # living-room display auto-login user + token
     await push.ensure_vapid(app.state.pool)  # web-push keypair on first boot
-    # ClickHouse client for history queries. Best-effort: a CH blip must not
-    # take down the API, so /history handles a missing client with a 503.
-    try:
-        app.state.ch = await clickhouse_connect.get_async_client(
-            host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),
-            port=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-            username=os.environ.get("CLICKHOUSE_USER", "dida"),
-            password=os.environ["CLICKHOUSE_PASSWORD"],  # no default — fail loud
-            database=os.environ.get("CLICKHOUSE_DB", "dida"),
-        )
-    except Exception:
-        log.exception("clickhouse client init failed; /history will 503 until it recovers")
-        app.state.ch = None
+    app.state.ch = None
+    ch_task = asyncio.create_task(connect_clickhouse(app))
     # The assistant's client is built lazily from the stored key, so the key can be
     # replaced on Settings → AI without an API restart.
     app.state.hub = Hub()
@@ -166,8 +172,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        ch_task.cancel()
         backup_task.cancel()
         alert_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await ch_task
         with suppress(asyncio.CancelledError):
             await backup_task
         with suppress(asyncio.CancelledError):

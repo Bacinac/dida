@@ -32,7 +32,9 @@ fi
 CF_TOKEN_FILE="${DIDA_CF_TOKEN:-$ROOT/.cf-token}"
 CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-3e7a41dadfd065fac67c6922c3f3b43e}"
 PROJECT="${DIDA_DEMO_PROJECT:-dida-demo}"
-WORK="$(mktemp -d)"
+# Not /tmp: a sandboxed shell has a private /tmp, and the daemon would mount its
+# own directory of that name, so the recorder's output never reaches this script.
+WORK="$(mktemp -d "$ROOT/.git/demo.XXXXXX")"
 # The build/deploy containers write as root, so hand the cleanup to a container
 # too — a plain rm -rf here fails on their files and leaves the tree behind.
 ENGINE_HELD=0

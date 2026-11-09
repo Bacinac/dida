@@ -121,15 +121,23 @@ def main() -> int:
         # Deliberately not "did it reach networkidle": the camera pages poll their
         # snapshots forever and never go idle, so they always time out while their
         # endpoints record perfectly well. Silence is the symptom, not the timeout.
+        #
+        # Networkidle can also come before the page has asked for anything, on a dev
+        # server still compiling after its restart, so the wait is for the first answer.
         failed: list[str] = []
         for r in ROUTES:
             for attempt in (1, 2):
                 before = len(seen)
                 with contextlib.suppress(Exception):     # a poll-forever page never settles
                     page.goto(f"{BASE}{r}", wait_until="networkidle", timeout=25000)
-                page.wait_for_timeout(1200)
+                waited = 0
+                while len(seen) == before and waited < 10000:
+                    page.wait_for_timeout(100)
+                    waited += 100
                 if len(seen) > before:
-                    print(f"  {r}: {len(fixtures)} recorded", flush=True)
+                    page.wait_for_timeout(1200)
+                    late = f" (first answer after {waited} ms)" if waited > 1200 else ""
+                    print(f"  {r}: {len(fixtures)} recorded{late}", flush=True)
                     break
                 print(f"  {r}: silent, attempt {attempt}/2", flush=True)
                 if attempt == 2:

@@ -78,6 +78,7 @@ from dida_core.events import (
     namespace_commands,
     publisher_of,
     reachability_subject,
+    reannounce_subject,
     state_subject,
     vouched,
 )
@@ -207,6 +208,7 @@ class Bus:
         self._nc: NATSClient | None = None
         self._speaks_for: set[str] = set()
         self._beat: asyncio.Task | None = None
+        self._announced: dict[str, EntityInfo] = {}
 
     async def connect(self) -> None:
         # Explicit connection callbacks: without them nats-py swallows handler
@@ -425,8 +427,30 @@ class Bus:
 
     async def publish_entity(self, info: EntityInfo) -> None:
         """Announce an entity's existence/metadata (catalog), no value."""
+        self._announced[info.entity_id] = info
         await self.nc.publish(entity_subject(info.adapter, info.entity_id), _encoder.encode(info))
         self.speaks_for(info.adapter)
+
+    async def reannounce(self, key: str) -> int:
+        """Repeat the last announcement of every entity of device `key`.
+
+        Kept here and not in the adapters because each of them remembers what it has
+        already announced, in its own way, and stays silent about it: a restored
+        device would otherwise wait for the adapter's next restart."""
+        infos = [i for i in self._announced.values() if key in (i.device, i.entity_id)]
+        for info in infos:
+            await self.publish_entity(info)
+        if infos:
+            log.info("re-announced %d entities of restored device %s", len(infos), key)
+        else:
+            log.warning("restored device %s was never announced by this process", key)
+        return len(infos)
+
+    async def subscribe_reannounce(self, namespace: str) -> None:
+        async def _cb(msg: Msg) -> None:
+            await self.reannounce(msg.data.decode())
+
+        await self.nc.subscribe(reannounce_subject(namespace), cb=_cb)
 
     def speaks_for(self, adapter: str) -> None:
         """Whoever publishes for a namespace vouches for it from then on: a

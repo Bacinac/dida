@@ -19,8 +19,10 @@ import asyncio
 
 import asyncpg
 import dida_api.app as appmod
+import msgspec
 from dida_core import apply_migrations, jsonb_init, pg_pool
 from dida_core.db import DELETE_DEVICE_ENTITIES
+from dida_core.events import DeviceRestored
 from home_core.auth import hash_password
 from httpx import ASGITransport, AsyncClient
 
@@ -132,8 +134,9 @@ async def test_devices_crud():
 
         r = await c.delete("/devices/removed/zztest:device")
         assert r.status_code == 204
-        assert appmod.app.state.bus.nc.published[-1] == ("dida.engine.restore", b"zztest:device"), \
-            "the engine is told, or the restore only takes effect at its next restart"
+        assert appmod.app.state.bus.nc.published[-1] == (
+            "dida.engine.restore", msgspec.msgpack.encode(DeviceRestored("zztest:device", "mqtt"))
+        ), "the engine is told, with the adapter it must ask to announce the device again"
         assert await pool.fetchval(
             "SELECT count(*) FROM removed_devices WHERE key = 'zztest:device'"
         ) == 0, "the tombstone is gone"

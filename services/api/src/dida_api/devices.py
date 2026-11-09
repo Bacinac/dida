@@ -7,7 +7,9 @@ brings the device back on its own.
 
 from __future__ import annotations
 
+import msgspec
 from dida_core.db import DELETE_DEVICE_ENTITIES
+from dida_core.events import DeviceRestored
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -95,18 +97,20 @@ async def removed_devices(request: Request, _admin: AuthUser = Depends(require_a
 async def restore_device(key: str, request: Request,
                          _admin: AuthUser = Depends(require_admin)) -> None:
     """Lift the block on a removed device. Nothing is re-created here — the
-    adapter re-announces the device on its next poll or reconnect, which is why
-    the block had to exist in the first place. A device whose adapter is gone
-    (uninstalled, unconfigured, unplugged) simply never returns.
+    engine lifts its block and asks the device's adapter to announce it again. A
+    device whose adapter is gone (uninstalled, unconfigured, unplugged) simply
+    never returns.
 
     The engine keeps the block in memory, so the row alone is not enough: tell it
     too, or the restore quietly does nothing until the next engine restart."""
-    deleted = await request.app.state.pool.execute(
-        "DELETE FROM removed_devices WHERE key = $1", key
+    row = await request.app.state.pool.fetchrow(
+        "DELETE FROM removed_devices WHERE key = $1 RETURNING adapter", key
     )
-    if deleted.endswith(" 0"):
+    if row is None:
         raise HTTPException(404, "not a removed device")
-    await request.app.state.bus.nc.publish("dida.engine.restore", key.encode())
+    await request.app.state.bus.nc.publish(
+        "dida.engine.restore", msgspec.msgpack.encode(DeviceRestored(key, row["adapter"]))
+    )
 
 
 @router.delete("/devices/{key}", status_code=204)

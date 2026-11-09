@@ -218,6 +218,33 @@ async def test_publish_entity_subject_and_payload():
     assert _entity_decoder.decode(payload) == info
 
 
+async def test_reannounce_repeats_the_latest_announcement_of_that_device_only():
+    bus, fake = make_bus()
+    stale = EntityInfo(entity_id="mqtt:trv", adapter="mqtt", capabilities=["temperature"], device="trv")
+    full = EntityInfo(entity_id="mqtt:trv", adapter="mqtt",
+                      capabilities=["temperature", "battery"], device="trv")
+    facet = EntityInfo(entity_id="mqtt:trv:lock", adapter="mqtt", capabilities=["binary"], device="trv")
+    other = EntityInfo(entity_id="mqtt:lamp", adapter="mqtt", capabilities=["on_off"], device="lamp")
+    lone = EntityInfo(entity_id="mqtt:lone", adapter="mqtt", capabilities=["on_off"])
+    for info in (stale, full, facet, other, lone):
+        await bus.publish_entity(info)
+
+    fake.published.clear()
+    await bus.subscribe_reannounce("mqtt")
+    subject, cb = fake.subscriptions[-1]
+    assert subject == "dida.reannounce.mqtt"
+    await cb(SimpleNamespace(data=b"trv"))
+    assert [_entity_decoder.decode(p) for _, p in fake.published] == [full, facet]
+
+    fake.published.clear()
+    assert await bus.reannounce("mqtt:lone") == 1, "a device without a device key is its entity"
+    assert [_entity_decoder.decode(p) for _, p in fake.published] == [lone]
+
+    fake.published.clear()
+    assert await bus.reannounce("never-seen") == 0
+    assert fake.published == []
+
+
 async def test_journal_reachability_and_logs_go_out_under_their_publisher():
     bus, fake = make_bus()
     await bus.publish_journal(JournalEvent(ts_ns=1, kind="online", source="adapter:mqtt"))

@@ -91,6 +91,10 @@ def entity_subject(adapter: str, entity_id: str) -> str:
     return f"{ENTITY_SUBJECT_PREFIX}.{publisher(adapter)}.{entity_id}"
 
 
+def reannounce_subject(adapter: str) -> str:
+    return f"dida.reannounce.{adapter}"
+
+
 def reachability_subject(adapter: str) -> str:
     return f"{REACHABILITY_SUBJECT}.{publisher(adapter)}"
 
@@ -151,6 +155,14 @@ class StateUpdate(msgspec.Struct, frozen=True, omit_defaults=True):
     # the source's clock (a device, another installation), and one running behind
     # made every trigger from it look stale.
     received_ns: int | None = None
+
+
+class DeviceRestored(msgspec.Struct, frozen=True):
+    """The user un-removed a device. `adapter` is who owned it, None if the removal
+    found no entity to read that from."""
+
+    key: str
+    adapter: str | None = None
 
 
 class EntityInfo(msgspec.Struct, frozen=True, omit_defaults=True):

@@ -102,6 +102,7 @@ async def run_adapter(adapter) -> None:
         spawn(_run(), log=log, name=f"command {command.entity_id}")
 
     await bus.subscribe_commands(_dispatch, name)
+    await bus.subscribe_reannounce(name)
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

@@ -58,6 +58,9 @@ class _Bus:
     async def _subscribe(self, subject, cb):
         pass
 
+    async def subscribe_reannounce(self, namespace):
+        pass
+
     async def subscribe_commands(self, handler, namespace):
         self.handler = handler
 

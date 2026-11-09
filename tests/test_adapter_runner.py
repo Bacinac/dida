@@ -43,6 +43,9 @@ def _patch_collaborators(monkeypatch):
         def speaks_for(self, adapter):
             self.speaks = adapter
 
+        async def subscribe_reannounce(self, namespace):
+            pass
+
         async def subscribe_commands(self, handler, namespace):
             self.command_handler = handler
             self.command_namespace = namespace

@@ -65,7 +65,7 @@ def test_a_client_hears_only_what_is_addressed_to_it():
         perms = identity.permissions(name)
         heard = set(perms["subscribe"]["allow"]) - set(identity.HEARS.get(name, ()))
         assert heard == {f"dida.command.{name}.>", f"dida.status.{name}", f"dida.discover.{name}",
-                         f"dida.{name}.ctl", f"_INBOX.{name}.>"}
+                         f"dida.{name}.ctl", f"_INBOX.{name}.>", f"dida.reannounce.{name}"}
         assert perms["allow_responses"] is True
 
 

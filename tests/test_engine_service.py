@@ -33,8 +33,10 @@ import pathlib
 import signal
 import time
 
+import msgspec
 import pytest
 from dida_core import CORE, Bus, EntityInfo, StateUpdate, pg_pool
+from dida_core.events import DeviceRestored
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DIDA_NATS_URL"),
@@ -180,9 +182,17 @@ async def test_the_engine_service_answers_the_way_an_adapter_expects():
             "forget did not remove the rows"
 
         # --- and restore lets it come back.
-        await bus.nc.publish("dida.engine.restore", eid.encode())
+        asked: list[bytes] = []
+
+        async def _asked(msg) -> None:
+            asked.append(msg.data)
+
+        await bus.nc.subscribe("dida.reannounce.test", cb=_asked)
+        await bus.nc.publish("dida.engine.restore",
+                             msgspec.msgpack.encode(DeviceRestored(eid, "test")))
         await bus.nc.flush()
         await asyncio.sleep(0.5)
+        assert asked == [eid.encode()], "the adapter is asked to announce the device again"
         await bus.publish_state(StateUpdate(
             entity_id=eid, capability="temperature", value=22.0, adapter="test",
             ts_ns=time.time_ns()))

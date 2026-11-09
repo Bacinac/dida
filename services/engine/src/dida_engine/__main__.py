@@ -10,6 +10,7 @@ import signal
 import time
 
 import asyncpg
+import msgspec
 from dida_core import (
     CORE,
     ENGINE_EVENTS_SUBJECT,
@@ -31,7 +32,7 @@ from dida_core import (
 )
 from dida_core.db import DELETE_DEVICE_ENTITIES
 from dida_core.entity_identity import rewrite_entity_references
-from dida_core.events import HEARTBEAT_S
+from dida_core.events import HEARTBEAT_S, DeviceRestored, reannounce_subject
 from dida_core.journal import JournalKind
 from home_core.health import HealthMarker
 from home_core.tasks import spawn
@@ -348,15 +349,19 @@ class Engine:
         except Exception as exc:
             log.warning("forget %s: cleanup delete failed: %s", key, exc, exc_info=True)
 
-    async def on_restore(self, key: str) -> None:
+    async def on_restore(self, key: str, adapter: str | None = None) -> None:
         """The API un-removed a device. Dropping the tombstone row is not enough:
         the block is this in-memory set, so without this the key stays deaf until
         the engine happens to restart — which looks exactly like a restore that
-        silently did nothing. The device itself comes back on its adapter's next
-        announce; nothing is re-created here."""
+        silently did nothing. The device itself comes back when its adapter
+        repeats the announcement; nothing is re-created here."""
         self._removed.discard(key)
         await self._journal("restored", key, device_key=key, severity="notice",
                             message="device restored by the user")
+        # Asked from here, after the discard: sent any earlier, the announcement
+        # could reach the engine while the key is still blocked and be dropped.
+        if adapter:
+            await self._bus.publish_raw(reannounce_subject(adapter), key.encode())
 
     async def on_reachability(self, event: ReachabilityEvent) -> None:
         """An adapter's verdict on whether a device is reachable. Recorded on the
@@ -729,9 +734,12 @@ async def _on_forget(engine: Engine, msg) -> None:
 
 
 async def _on_restore(engine: Engine, msg) -> None:
-    key = msg.data.decode().strip()
-    if key:
-        await engine.on_restore(key)
+    try:
+        restored = msgspec.msgpack.decode(msg.data, type=DeviceRestored)
+    except msgspec.DecodeError as exc:
+        log.warning("dropping undecodable restore: %s", exc)
+        return
+    await engine.on_restore(restored.key, restored.adapter)
 
 
 async def _state_backlog(bus: Bus) -> int:

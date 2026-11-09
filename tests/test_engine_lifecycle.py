@@ -165,6 +165,30 @@ async def test_restore_unblocks_the_key_so_the_device_can_come_back():
     await pool.close()
 
 
+async def test_restore_asks_the_adapter_only_after_the_key_is_unblocked():
+    """The adapter's answer races this handler: asked before the discard, its
+    announcement can arrive while the key is still blocked and be dropped."""
+    pool, bus, eng = await _fresh()
+    key = PREFIX + "lamp"
+    asked = []
+
+    async def publish_raw(subject, payload):
+        asked.append((subject, payload, key in eng._removed))
+
+    bus.publish_raw = publish_raw
+    await eng.on_forget(key)
+    await eng.on_restore(key, "mqtt")
+    assert asked == [("dida.reannounce.mqtt", key.encode(), False)]
+
+    asked.clear()
+    await eng.on_forget(key)
+    await eng.on_restore(key)
+    assert asked == [], "no adapter on record, nobody to ask"
+
+    await _clean(pool)
+    await pool.close()
+
+
 async def test_restoring_a_key_that_was_never_removed_is_a_no_op():
     pool, _bus, eng = await _fresh()
     await eng.on_restore(PREFIX + "never")  # must not raise

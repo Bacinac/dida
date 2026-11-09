@@ -42,6 +42,7 @@ from dida_core.events import (
     logs_subject,
     namespace_commands,
     reachability_subject,
+    reannounce_subject,
     state_subject,
 )
 from dida_core.health import status_subject
@@ -126,6 +127,7 @@ def permissions(name: str) -> dict:
     subscribe = [
         namespace_commands(name), status_subject(name),
         f"dida.discover.{name}", f"dida.{name}.ctl", f"_INBOX.{name}.>",
+        reannounce_subject(name),
         *HEARS.get(name, ()),
     ]
     return {"publish": {"allow": publish}, "subscribe": {"allow": subscribe},

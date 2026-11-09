@@ -710,9 +710,8 @@ class DlnaAdapter:
 
     async def _cast_track(self, r: Renderer, t: dict) -> None:
         """Publish a track's optimistic metadata; when it carries no quality but
-        is an http stream, probe its headers for the real quality. Covers a plain
-        radio URL (ICY → 'MP3 192kbps') and a Tidal proxy URL (X-Stream-Quality →
-        'FLAC 44.1kHz/16bit'). Used on both a manual set and a gapless advance."""
+        is an http stream, probe its headers for the real quality (a radio URL's ICY
+        → 'MP3 192kbps'). Used on both a manual set and a gapless advance."""
         await self._apply_meta(r, t)
         url = str(t.get("uri") or t.get("url") or "")
         await self._set(r, "media_source", _source_of(url))  # origin → signal-path view
@@ -787,10 +786,7 @@ def _source_of(url: str) -> str:
 
 async def _stream_quality(url: str) -> str:
     """Probe a stream's headers → e.g. 'MP3 192kbps' or 'FLAC 44.1kHz/16bit'
-    ('' if unknown). A DIDA proxy (Tidal) states the exact quality of the file it
-    produced via `X-Stream-Quality`; trust that. Else infer codec+bitrate from
-    ICY/Content-Type (radio). Timeout is generous: a cold Tidal track holds the
-    response until the proxy has remuxed the whole FLAC (~5-8s)."""
+    ('' if unknown), inferred from ICY/Content-Type (radio)."""
     import aiohttp
 
     try:
@@ -799,9 +795,6 @@ async def _stream_quality(url: str) -> str:
             aiohttp.ClientSession(timeout=timeout) as s,
             s.get(url, headers={"Icy-MetaData": "1"}) as resp,
         ):
-            authoritative = resp.headers.get("X-Stream-Quality", "").strip()
-            if authoritative:
-                return authoritative
             ct = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
             br = (resp.headers.get("icy-br") or "").split(",")[0].strip()
             codec = CODEC.get(ct, ct.rsplit("/", 1)[-1].upper() if ct.startswith("audio/") else "")

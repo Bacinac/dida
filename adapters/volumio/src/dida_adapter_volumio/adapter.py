@@ -398,8 +398,8 @@ class VolumioAdapter:
     async def _queue_metadata(self, p: Player, state: dict, ours: bool) -> tuple[str, ...]:
         """A DIDA-cast queue: OUR per-track metadata is authoritative and keyed off
         the Volumio queue position, so it stays right as the queue auto-advances.
-        Essential for a tagless Tidal proxy FLAC (Volumio would report the uri as
-        the title); harmless for tagged local files (same values)."""
+        Essential for a tagless stream (Volumio would report the uri as the
+        title); harmless for tagged local files (same values)."""
         if not (ours and p.queue and not p.radio):
             return ()
         pos = state.get("position")
@@ -847,8 +847,8 @@ class VolumioAdapter:
                          ("media_album", "album"), ("media_art", "art"),
                          ("media_quality", "quality")):
             await self._set(p, cap, str(t.get(key) or ""))
-        # Classify the source from the cast URL (library / tidal / …) so the signal
-        # path and source badge are right — a queue play must not inherit 'radio'.
+        # Classify the source from the cast URL so the signal path and source
+        # badge are right — a queue play must not inherit 'radio'.
         await self._set(p, "media_source", source_of(str(t.get("uri") or t.get("url") or ""), "webradio"))
 
     # --- SSH actions (reboot / restart audio + MPD buffer) ----------------

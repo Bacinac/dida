@@ -122,7 +122,7 @@ class CapabilityKind(StrEnum):
     MEDIA_ALBUM = "media_album"
     MEDIA_ART = "media_art"  # album/station art URL
     MEDIA_QUALITY = "media_quality"  # human format string, e.g. "FLAC 44.1kHz/16bit"
-    MEDIA_SOURCE = "media_source"  # origin of the current stream: tidal/library/radio/url/external
+    MEDIA_SOURCE = "media_source"  # origin of the current stream: library/radio/url/external
     MEDIA_QUEUE = "media_queue"  # JSON {items:[{title,artist,art}], current:int} — the play queue
     MEDIA_DURATION = "media_duration"  # seconds (0/absent → live stream)
     MEDIA_POSITION = "media_position"  # seconds; published sparsely, UI extrapolates

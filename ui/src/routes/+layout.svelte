@@ -132,8 +132,6 @@
     }),
   );
   const navGroups = $derived<NavItem[][]>([
-    // Devices moved to Settings; Floor plan is home. MediaHub folds
-    // Players/Library/Tidal/Radio into one surface — no sub-nav.
     // The assistant is absent by design: it is a drawer opened from the header on
     // every page (TopBar), so it needs no nav slot on either breakpoint.
     [navPage("entry"), navPage("floorplan"), navPage("cameras"), navPage("media"), navPage("heating")],

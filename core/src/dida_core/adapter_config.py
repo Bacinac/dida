@@ -470,7 +470,7 @@ def decrypt_secret(
         # for a secret-blob adapter (esphome/tuya) that empty string reads as an
         # EMPTY device list, silently disconnecting every node. Raise so load()
         # propagates into the adapter's fail-loud handler. Other callers (owntracks,
-        # jellyfin, the UI config-read) keep the graceful '' + their own None-guard.
+        # the UI config-read) keep the graceful '' + their own None-guard.
         if raise_on_error:
             raise ConfigDecryptError(f"{adapter}.{key}: undecryptable (key rotated or value corrupt)") from exc
         log.error("adapter_config: could not decrypt %s.%s (key rotated or value corrupt)", adapter, key)

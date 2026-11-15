@@ -241,3 +241,88 @@ async def test_a_waking_zone_reports_the_mute_it_really_has(monkeypatch):
 
     assert a._writer.sent == ["MU?", "Z2MU?"], "only a zone that just woke is asked"
     assert a._main.last["mute"] is False and a._zone2.last["mute"] is False
+
+
+# --- volume lost while a zone wakes --------------------------------------------------
+
+
+class _ColdReceiver:
+    """A Marantz out of a night's standby: takes the volume, then reports one of its own,
+    or never hears the command at all."""
+
+    def __init__(self, adapter, reset_to: str | None, drops_first: bool) -> None:
+        self.adapter = adapter
+        self.reset_to = reset_to
+        self.drops_first = drops_first
+        self.volume = "26"
+        self.sent: list[str] = []
+        self._pending: list[str] = []
+
+    def write(self, data: bytes) -> None:
+        cmd = data.decode().strip()
+        self.sent.append(cmd)
+        if cmd == "ZMON":
+            self._pending.append("ZMON")
+        elif cmd == "MV?":
+            self._pending.append("MV" + self.volume)
+        elif cmd.startswith("MV") and cmd[2:].isdigit():
+            if self.drops_first:
+                self.drops_first = False
+                return
+            self.volume = cmd[2:]
+            self._pending.append(cmd)
+            if self.reset_to is not None:
+                self.volume, self.reset_to = self.reset_to, None
+                self._pending.append("MV" + self.volume)
+
+    async def drain(self) -> None:
+        frames, self._pending = self._pending, []
+        for frame in frames:
+            await self.adapter._on_line(frame)
+
+
+def _cold_adapter(monkeypatch, **receiver):
+    import dida_adapter_denon.adapter as mod
+
+    monkeypatch.setattr(mod, "WAKE_CHECKS", (0.01, 0.02))
+    a = mod.DenonAdapter()
+    a._bus = _StateBus()
+    a._main = mod.Zone("denon:marantz_main", "Marantz")
+    a._zone2 = mod.Zone("denon:marantz_zone2", "Marantz Zone 2")
+    a._writer = _ColdReceiver(a, **receiver)
+    a._main.last.update(on_off=False)
+    return a
+
+
+async def _wake_at_40(a):
+    import asyncio
+
+    await a._dispatch(a._main, False, "on_off", "turn_on", {})
+    await a._dispatch(a._main, False, "volume", "set_volume", {"value": 40})
+    await asyncio.sleep(0.1)
+
+
+async def test_a_waking_zone_that_reports_its_own_volume_is_set_again(monkeypatch):
+    a = _cold_adapter(monkeypatch, reset_to="00", drops_first=False)
+    await _wake_at_40(a)
+    assert a._writer.volume == "40"
+    assert a._writer.sent.count("MV40") == 2
+    assert a._main.last["volume"] == 40
+
+
+async def test_a_volume_the_waking_zone_never_heard_is_sent_again(monkeypatch):
+    a = _cold_adapter(monkeypatch, reset_to=None, drops_first=True)
+    await _wake_at_40(a)
+    assert a._writer.volume == "40"
+    assert a._main.last["volume"] == 40
+
+
+async def test_a_zone_already_on_keeps_a_volume_changed_after_the_set(monkeypatch):
+    import asyncio
+
+    a = _cold_adapter(monkeypatch, reset_to=None, drops_first=False)
+    a._main.last.update(on_off=True)
+    await a._dispatch(a._main, False, "volume", "set_volume", {"value": 40})
+    await a._on_line("MV30")
+    await asyncio.sleep(0.1)
+    assert a._writer.sent == ["MV40"], "an awake zone is never asked or overridden"

@@ -60,6 +60,13 @@ SOURCE_SETTLE_SECONDS = 1.5  # the table arrives as a burst of frames after the 
 # Standby clears a zone's mute without a MUOFF frame, so a waking zone is asked again;
 # a stale "muted" would turn the next toggle into an unmute of an audible zone.
 MUTE_REQUERY_SECONDS = 1.0
+# A zone waking from a long standby takes a volume and then, ~2-3 s later, reports
+# another one of its own (0 on the mornings of 11-15 Nov 2026), or drops the command
+# outright. A volume set while a zone wakes is held for this long: the zone is asked
+# again at each check and set again whenever it reports something else.
+WAKE_HOLD_SECONDS = 12.0
+WAKE_CHECKS = (3.0, 6.0, 9.0)
+WAKE_MAX_RESENDS = 3
 _UNITS = {"volume": "%"}
 
 # Projector power runs over IR (unacknowledged), so we verify each transition
@@ -91,6 +98,10 @@ class Zone:
         self.name = name
         self.vol_raw: float | None = None  # last raw master-volume value (0.0–98.0)
         self.last: dict[str, object] = {}
+        self.woke_at = float("-inf")
+        self.want_raw: int | None = None
+        self.want_until = 0.0
+        self.resends = 0
 
 
 class DenonAdapter:
@@ -331,6 +342,7 @@ class DenonAdapter:
             if raw is not None:
                 self._main.vol_raw = raw
                 await self._publish(self._main, "volume", vol_to_pct(raw))
+                await self._hold_volume(self._main, False, raw)
         elif s in ("MUON", "MUOFF"):
             await self._publish(self._main, "mute", s == "MUON")
         elif s.startswith("SI"):
@@ -347,6 +359,7 @@ class DenonAdapter:
             if raw is not None:
                 self._zone2.vol_raw = raw
                 await self._publish(self._zone2, "volume", vol_to_pct(raw))
+                await self._hold_volume(self._zone2, True, raw)
         elif rest.startswith(("SLP", "PS", "HPF", "QUICK", "CS", "CV", "FAVORITE", "SOUND", "STBY")):
             return  # zone-2 extras/settings we don't model. "PS" (not just "PSV") so the
             #         tone frames Z2PSBAS/Z2PSTRE aren't mis-parsed as a source; STBY =
@@ -381,7 +394,29 @@ class DenonAdapter:
 
     def _requery_mute_on_wake(self, zone: Zone, on: bool, query: str) -> None:
         if on and zone.last.get("on_off") is False:
+            zone.woke_at = time.monotonic()
             spawn(self._requery_mute(query), log=log, name="denon mute requery")
+
+    async def _hold_volume(self, zone: Zone, z2: bool, raw: float) -> None:
+        if zone.want_raw is None:
+            return
+        if time.monotonic() > zone.want_until:
+            zone.want_raw = None
+            return
+        if raw == zone.want_raw or zone.resends >= WAKE_MAX_RESENDS:
+            return
+        zone.resends += 1
+        log.warning("denon: %s woke at volume %s instead of %s, setting it again",
+                    zone.entity_id, raw, zone.want_raw)
+        await self._send(f"Z2{zone.want_raw:02d}" if z2 else f"MV{zone.want_raw:02d}")
+
+    async def _check_volume(self, zone: Zone, z2: bool, want: int) -> None:
+        start = time.monotonic()
+        for at in WAKE_CHECKS:
+            await asyncio.sleep(max(0.0, start + at - time.monotonic()))
+            if zone.want_raw != want:
+                return
+            await self._send("Z2?" if z2 else "MV?")
 
     async def _requery_mute(self, query: str) -> None:
         await asyncio.sleep(MUTE_REQUERY_SECONDS)
@@ -422,10 +457,17 @@ class DenonAdapter:
             on = {"turn_on": True, "turn_off": False}.get(
                 cmd, not bool(zone.last.get("on_off"))
             )
+            if on and not zone.last.get("on_off"):
+                zone.woke_at = time.monotonic()
             await self._send(("Z2ON" if on else "Z2OFF") if z2 else ("ZMON" if on else "ZMOFF"))
         elif cap == "volume":
+            zone.want_raw = None
             if cmd == "set_volume":
                 raw = pct_to_raw(int(args.get("value", 0)), self._mv_max)
+                now = time.monotonic()
+                if not zone.last.get("on_off") or now - zone.woke_at < WAKE_HOLD_SECONDS:
+                    zone.want_raw, zone.want_until, zone.resends = raw, now + WAKE_HOLD_SECONDS, 0
+                    spawn(self._check_volume(zone, z2, raw), log=log, name="denon volume check")
                 await self._send((f"Z2{raw:02d}") if z2 else (f"MV{raw:02d}"))
             elif cmd in ("volume_up", "volume_down"):
                 up = cmd == "volume_up"

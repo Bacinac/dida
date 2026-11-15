@@ -452,6 +452,19 @@ class DenonAdapter:
         except Exception as exc:
             raise CommandRejected(f"device refused: {exc}") from exc
 
+    async def _volume(self, zone: Zone, z2: bool, cmd: str, args: dict) -> None:
+        zone.want_raw = None
+        if cmd == "set_volume":
+            raw = pct_to_raw(int(args.get("value", 0)), self._mv_max)
+            now = time.monotonic()
+            if not zone.last.get("on_off") or now - zone.woke_at < WAKE_HOLD_SECONDS:
+                zone.want_raw, zone.want_until, zone.resends = raw, now + WAKE_HOLD_SECONDS, 0
+                spawn(self._check_volume(zone, z2, raw), log=log, name="denon volume check")
+            await self._send((f"Z2{raw:02d}") if z2 else (f"MV{raw:02d}"))
+        elif cmd in ("volume_up", "volume_down"):
+            up = cmd == "volume_up"
+            await self._send(("Z2UP" if up else "Z2DOWN") if z2 else ("MVUP" if up else "MVDOWN"))
+
     async def _dispatch(self, zone: Zone, z2: bool, cap: str, cmd: str, args: dict) -> None:
         if cap == "on_off":
             on = {"turn_on": True, "turn_off": False}.get(
@@ -461,17 +474,7 @@ class DenonAdapter:
                 zone.woke_at = time.monotonic()
             await self._send(("Z2ON" if on else "Z2OFF") if z2 else ("ZMON" if on else "ZMOFF"))
         elif cap == "volume":
-            zone.want_raw = None
-            if cmd == "set_volume":
-                raw = pct_to_raw(int(args.get("value", 0)), self._mv_max)
-                now = time.monotonic()
-                if not zone.last.get("on_off") or now - zone.woke_at < WAKE_HOLD_SECONDS:
-                    zone.want_raw, zone.want_until, zone.resends = raw, now + WAKE_HOLD_SECONDS, 0
-                    spawn(self._check_volume(zone, z2, raw), log=log, name="denon volume check")
-                await self._send((f"Z2{raw:02d}") if z2 else (f"MV{raw:02d}"))
-            elif cmd in ("volume_up", "volume_down"):
-                up = cmd == "volume_up"
-                await self._send(("Z2UP" if up else "Z2DOWN") if z2 else ("MVUP" if up else "MVDOWN"))
+            await self._volume(zone, z2, cmd, args)
         elif cap == "mute":
             on = {"mute": True, "unmute": False}.get(cmd, not bool(zone.last.get("mute")))
             await self._send(("Z2MUON" if on else "Z2MUOFF") if z2 else ("MUON" if on else "MUOFF"))

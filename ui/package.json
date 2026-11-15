@@ -23,15 +23,15 @@
     "typescript": "^6.0.3",
     "vite": "^8.3.0"
   },
-  "//typescript": "typescript is held at ^6, NOT ^7: @sveltejs/kit 3.1.0 (latest) declares peerOptional typescript ^6.0.0, and svelte-check 4.7.7 ^5.0.0 || ^6.0.0, so TS 7 (the native compiler) fails to resolve. Nothing else blocks it — raise this the moment kit widens that peer range. Verified 2026-10-24.",
+  "//typescript": "typescript is held at ^6, NOT ^7: @sveltejs/kit 3.2.0 (latest) declares peerOptional typescript ^6.0.0, and svelte-check 4.7.7 ^5.0.0 || ^6.0.0, so TS 7 (the native compiler) fails to resolve. Nothing else blocks it — raise this the moment kit widens that peer range. Verified 2026-11-15.",
   "//overrides": "runed: layerchart 2.9.1 (latest) pins ^0.37.1, whose optional @sveltejs/kit peer is ^2; runed 0.38.0's only breaking change is requiring SvelteKit 3 for runed/kit. Drop this once layerchart's own range reaches 0.38.",
   "overrides": {
     "runed": "^0.38.0"
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^6.0.0",
-    "@sveltejs/adapter-static": "^4.0.0",
-    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/adapter-node": "^6.0.1",
+    "@sveltejs/adapter-static": "^4.0.1",
+    "@sveltejs/kit": "^3.1.1",
     "@types/d3-shape": "^3.2.0",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^26.6.2",

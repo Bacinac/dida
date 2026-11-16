@@ -10,7 +10,8 @@ from zoneinfo import ZoneInfo
 import httpx
 from dida_core import AdapterConfig, Bus, Command, EntityInfo, FailureGate, StateUpdate
 from dida_core.broker import BrokerError
-from dida_core.people import digest
+from dida_core.dav import Dav, DavError
+from dida_core.people import digest, from_vcard
 
 from dida_adapter_contacts.google import read_book
 
@@ -77,7 +78,8 @@ class ContactsAdapter:
                 if not await self._connected():
                     # Not an error: an installation reading exports has no token and
                     # is working exactly as intended.
-                    self.status.idle(f"{total} people (not connected to Google)")
+                    where = "Ponistra" if self._ponistra() else "Google"
+                    self.status.idle(f"{total} people (not connected to {where})")
                     gate.reset()
                 else:
                     gate.ok(f"{total} people, {count} announced")
@@ -104,7 +106,16 @@ class ContactsAdapter:
             return False
         return self._synced_on != now.date().isoformat() and now.hour >= self._cfg.int("sync_hour", 4)
 
+    def _ponistra(self) -> bool:
+        return self._cfg.get("source", "google") == "ponistra"
+
+    def _ponistra_sign_in(self) -> tuple[str, str, str]:
+        return (self._cfg.get("ponistra_url"), self._cfg.get("ponistra_email"),
+                self._cfg.get("ponistra_password"))
+
     async def _connected(self) -> bool:
+        if self._ponistra():
+            return all(self._ponistra_sign_in())
         return bool(await self._refresh_token())
 
     async def _refresh_token(self) -> str:
@@ -131,6 +142,17 @@ class ContactsAdapter:
         return str(blob.get("refresh_token") or "")
 
     async def _sync(self, now: datetime, *, forced: bool = False) -> None:
+        if self._ponistra():
+            if not await self._connected():
+                return
+            self._syncing = True
+            try:
+                await self._store(now, await self._read_ponistra(), "ponistra", forced)
+            except DavError as exc:
+                raise RuntimeError(f"Ponistra CardDAV: {exc}") from exc
+            finally:
+                self._syncing = False
+            return
         token = await self._refresh_token()
         if not token:
             # Deliberately WITHOUT marking the day done. Doing that cost nothing on
@@ -145,25 +167,44 @@ class ContactsAdapter:
             book = await read_book(
                 self._cfg.get("client_id"), self._cfg.get("client_secret"), token
             )
-            # Prune: this read is complete (read_book pages to the end or raises),
-            # so a contact missing from it is a contact deleted in the book.
-            report = await self.broker.call("store_book", book=book, source="google", prune=True)
-            self._synced_on = now.date().isoformat()
-            report["at"] = now.isoformat(timespec="seconds")
-            await self.broker.call("set_setting", key="contacts_last_sync",
-                                   value=json.dumps(report, default=str))
-            if report["no_year"]:
-                # Reported, never invented — the year is the whole reason a birth
-                # date is kept, and these have none.
-                log.warning("contacts: %d birthday(s) with no year: %s",
-                            len(report["no_year"]),
-                            ", ".join(p["name"] for p in report["no_year"][:10]))
-            log.info("contacts: synced%s — %s", " (asked for)" if forced else "",
-                     {k: v for k, v in report.items() if k != "no_year"})
+            await self._store(now, book, "google", forced)
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Google People API: {exc}") from exc
         finally:
             self._syncing = False
+
+    async def _read_ponistra(self) -> list[dict]:
+        """The user's own address book: the first one in their CardDAV home (the
+        others are shared mailboxes' books, not the household's)."""
+        async with Dav(*self._ponistra_sign_in()) as dav:
+            books = await dav.collections("carddav")
+            if not books:
+                raise DavError("the sign-in reaches no address book")
+            return from_vcard(await dav.cards(books[0]))
+
+    async def _store(self, now: datetime, book: list[dict], source: str, forced: bool) -> None:
+        # Prune: the read is complete (it pages to the end or raises), so a contact
+        # missing from it is a contact deleted in the book. Ponistra replaces Google:
+        # what Google left behind and Ponistra did not take over goes with it.
+        report = await self.broker.call(
+            "store_book", book=book, source=source, prune=True,
+            retire="google" if source == "ponistra" else "")
+        self._synced_on = now.date().isoformat()
+        report["at"] = now.isoformat(timespec="seconds")
+        report["source"] = source
+        await self.broker.call("set_setting", key="contacts_last_sync",
+                               value=json.dumps(report, default=str))
+        if report["no_year"]:
+            # Reported, never invented — the year is the whole reason a birth
+            # date is kept, and these have none.
+            log.warning("contacts: %d birthday(s) with no year: %s",
+                        len(report["no_year"]),
+                        ", ".join(p["name"] for p in report["no_year"][:10]))
+        if report.get("kept"):
+            log.warning("contacts: %d announced person(s) are only in the old Google book "
+                        "— add them to Ponistra: %s", len(report["kept"]), ", ".join(report["kept"]))
+        log.info("contacts: synced from %s%s — %s", source, " (asked for)" if forced else "",
+                 {k: v for k, v in report.items() if k not in ("no_year", "kept")})
 
     # ── what the house needs today ────────────────────────────────────────────
 

@@ -115,6 +115,35 @@ async def test_only_a_complete_read_prunes():
     assert await pool.fetchval("SELECT count(*) FROM people") == 1
 
 
+async def test_ponistra_takes_over_the_google_book_and_keeps_only_the_announced_leftovers():
+    pool = await _fresh_pool()
+    await store_book(pool, [
+        _entry("Ana Horvat", datetime.date(1992, 6, 15), "people/c1"),
+        _entry("Marko Marić", datetime.date(2014, 6, 16), "people/c2"),
+        _entry("Iva Kovač", datetime.date(1980, 1, 2), "people/c3"),
+    ], source="google", prune=True)
+    await pool.execute("UPDATE people SET announce = true WHERE name IN ('Ana Horvat', 'Iva Kovač')")
+
+    report = await store_book(
+        pool, [_entry("Ana Horvat", datetime.date(1992, 6, 15), "uid-ana")],
+        source="ponistra", prune=True, retire="google",
+    )
+    rows = {r["name"]: r for r in await pool.fetch("SELECT name, source, contact_id, announce FROM people")}
+    # Taken over by name: the same row, now Ponistra's, the tick kept.
+    assert rows["Ana Horvat"]["source"] == "ponistra" and rows["Ana Horvat"]["announce"]
+    assert rows["Ana Horvat"]["contact_id"] == "uid-ana"
+    # Not in Ponistra and nobody announces him: no second copy left behind.
+    assert "Marko Marić" not in rows
+    # Not in Ponistra but announced: kept, and named so she can be added there.
+    assert rows["Iva Kovač"]["source"] == "google"
+    assert report["retired"] == 1 and report["kept"] == ["Iva Kovač"]
+
+    # An empty read retires nothing, as it prunes nothing.
+    report = await store_book(pool, [], source="ponistra", prune=True, retire="google")
+    assert report["retired"] == 0
+    assert await pool.fetchval("SELECT count(*) FROM people") == 2
+
+
 async def test_an_ambiguous_name_is_refused_not_guessed():
     pool = await _fresh_pool()
     await store_book(pool, [

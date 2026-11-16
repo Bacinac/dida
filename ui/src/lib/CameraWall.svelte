@@ -36,10 +36,12 @@
   interface Scene { label: string; state: string }
   interface Person { name: string; face: boolean }  // face = recognised by face (else body)
   interface NamedObject { name: string; kind: string }  // kind = "pet" | "vehicle"
+  interface Lamp { name: string; lit: boolean }
   interface Cam {
     id: string; name: string; stream: string; site: string;
     motion: boolean; count: number; klass: string;
     zones: Zone[]; scenes: Scene[]; people: Person[]; objects: NamedObject[]; hasEvents: boolean;
+    lamp: Lamp | null;
   }
 
   // One shared poll tick — cache-busts snapshots AND (referenced below) expires
@@ -90,12 +92,15 @@
           // says the place is taken, the floor plan's marker says whose car it is.
           .filter((o) => o.kind === "pet");
         const mo = d.caps["motion"], pc = d.caps["person_count"], oc = d.caps["object_class"];
+        const lampDev = list.find((l) => l.entityId === `${d.entityId}:light`);
+        const lit = lampDev?.caps["binary"]?.value;
         return {
           id: d.entityId, name: d.name, stream, site,
           motion: mo?.value === true && fresh(mo.updatedAt),
           count: typeof pc?.value === "number" ? (pc.value as number) : 0,
           klass: (typeof oc?.value === "string" && oc.value !== "none" && fresh(oc.updatedAt)) ? (oc.value as string) : "",
           zones, scenes, people, objects, hasEvents,
+          lamp: lampDev && typeof lit === "boolean" ? { name: lampDev.name, lit } : null,
         };
       })
       .filter((c) => c.stream)
@@ -281,6 +286,12 @@
   {/each}
 {/snippet}
 
+{#snippet lampTag(lamp: Lamp | null | undefined)}
+  {#if lamp}
+    <Tag onpicture tone="quiet" kind={lamp.lit ? "lit" : undefined}>💡 {tr(lamp.name)}</Tag>
+  {/if}
+{/snippet}
+
 <div bind:this={wallEl} class={wall ? "flex h-dvh flex-col bg-black p-2" : ""}>
   {#if wall}
     <!-- the wall is full screen: the frame's bar is not there to carry the way out -->
@@ -390,6 +401,7 @@
             {#if c.site}
               <Tag onpicture>📍 {c.site}</Tag>
             {/if}
+            {@render lampTag(c.lamp)}
           </div>
         </div>
       {/each}
@@ -408,6 +420,8 @@
         {#each c.scenes as s (s.label)}
           <Tag onpicture tone="quiet" kind={sceneLit(s.state) ? "lit" : undefined}>{tr(s.label)}</Tag>
         {/each}
+        <!-- `solo` is the Cam as it was when opened; the lamp changes under an open view. -->
+        {@render lampTag(cameras.find((x) => x.id === c.id)?.lamp)}
         <div class="ml-auto flex items-center gap-2">
           {#if c.hasEvents}
             <button type="button" onclick={() => openEvents(c)}

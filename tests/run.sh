@@ -495,7 +495,7 @@ $RUN dida/adapter-cloudflare:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/ada
 # calendar's recurrence math (test_calendar.py) — its own image: the suite imports
 # dida_adapter_calendar, which the api image does not carry.
 $RUN dida/adapter-calendar:latest -c "$INSTALL; export PYTHONPATH=$CORE:/w/adapters/calendar/src COVERAGE_FILE=/w/$COVN/.coverage.calendar; \
-  python -m pytest -q --no-header --cov=dida_adapter_calendar --cov=dida_core.schedules --cov-report= tests/test_calendar.py tests/test_calendar_lifecycle.py"
+  python -m pytest -q --no-header --cov=dida_adapter_calendar --cov=dida_core.schedules --cov-report= tests/test_calendar.py tests/test_calendar_lifecycle.py tests/test_calendar_away.py"
 
 # netmgr's VLAN reconcile primitives — its own image (dida_netmgr isn't in the api
 # image). The placeholder-vs-lease distinction and the dhclient host-name escaping

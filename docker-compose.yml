@@ -1570,11 +1570,11 @@ services:
       start_period: 20s
 
   adapter-contacts:
-    # The household's address book. Reads the contacts book (Google People API, or
-    # an export file) into `people` once a day and publishes contacts:birthdays —
+    # The household's address book. Reads the contacts book (Ponistra CardDAV, the
+    # Google People API, or an export file) into `people` once a day and publishes contacts:birthdays —
     # whether anyone has a birthday in the announce window, and who. DIDA is the
     # one reader in the house; OPUS Library asks it over HTTP rather than holding a
-    # second Google grant. Needs Postgres and the internet, no hardware.
+    # second grant. Needs the internet, no hardware.
     build:
       context: .
       dockerfile: adapters/contacts/Dockerfile

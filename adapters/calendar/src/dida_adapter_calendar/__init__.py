@@ -18,6 +18,10 @@ Definitions live in the table; the live value lives in current_state (single
 source of truth). Usable in automations as a condition, or as a trigger on the
 edge when it flips — automations add the time (a time trigger + this boolean as
 a condition), exactly like any device.
+
+`calendar:away` is the other thing a calendar knows: with a Ponistra calendar
+chosen in the settings (CalDAV, e-mail and app password), an event in it covering
+the moment means the household is away.
 """
 
 from __future__ import annotations

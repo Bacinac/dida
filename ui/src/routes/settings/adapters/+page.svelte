@@ -625,7 +625,8 @@
       (fld) =>
         !(c.adapter === "tuya" && fld.key === "config") &&
         !(c.adapter === "androidtv" && fld.key === "apps") &&
-        !(["frigate", "baba"].includes(c.adapter) && fld.key === "sites"), // sites get a per-location editor
+        !(["frigate", "baba"].includes(c.adapter) && fld.key === "sites") && // sites get a per-location editor
+        !(c.adapter === "contacts" && fld.group && fld.group.toLowerCase() !== (form.contacts?.source || "google")),
     );
   }
   // Candidates for an `entity` config field: the adapter's own devices, kept only
@@ -1562,7 +1563,7 @@
             >{t("smartthings.connect")}</Button>
           {/if}
         {/if}
-        {#if c.adapter === "contacts"}
+        {#if c.adapter === "contacts" && ctStatus?.source !== "ponistra"}
           {#if ctStatus?.connected}
             <span class="mr-auto flex items-center gap-1 text-s text-dida-ok">
               <span class="h-1.5 w-1.5 rounded-full bg-dida-ok"></span>{t("contacts.connected")}
@@ -1774,7 +1775,7 @@
         <!-- The tick is the only thing on this card a person decides, so it is the
              only thing the card explains. The address URI is setup, and disappears
              once there is nothing left to set up. -->
-        {#if !ctStatus?.connected}
+        {#if !ctStatus?.connected && ctStatus?.source !== "ponistra"}
           <p class="mt-3 text-s text-dida-text-faint">
             {t("contacts.redirectUri")}: <span class="font-mono">{ctStatus?.redirect_uri || "—"}</span>
           </p>
@@ -1789,6 +1790,12 @@
               removed: ctStatus.last_sync.removed,
             })}
           </p>
+          {#if ctStatus.last_sync.kept?.length}
+            <p class="mt-1 text-s text-dida-warn">
+              {t("contacts.kept", { count: ctStatus.last_sync.kept.length })}
+              {ctStatus.last_sync.kept.join(", ")}
+            </p>
+          {/if}
           {#if ctStatus.last_sync.no_year?.length}
             <!-- Reported, never invented: a day from the book plus a year from
                  anywhere else is a date nobody has ever held. -->

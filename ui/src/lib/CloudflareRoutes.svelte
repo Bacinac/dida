@@ -1,7 +1,7 @@
 <script lang="ts">
   // Settings → Cloudflare: CRUD over services.conf, the single ingress source. A save
   // writes that file and waits for the Proxmox host to apply it (Caddy, the tunnel,
-  // DNS, the router's split-DNS, the Homepage tile) — so the reply reflects what the
+  // DNS, the router's split-DNS) — so the reply reflects what the
   // ingress actually does, not what was merely stored. A rejected change is rolled
   // back on the host side. Routes are grouped by the origin host, alpha within.
   import { onMount } from "svelte";
@@ -12,7 +12,7 @@
   import { Section } from "#lib/ui/index.js";
 
   const blank = (): CloudflareRouteEdit =>
-    ({ hostname: "", service: "", serve: "both", opts: [], section: null, icon: null });
+    ({ hostname: "", service: "", serve: "both", opts: [] });
 
   const SERVE: CloudflareRoute["serve"][] = ["both", "lan", "wan"];
   const hasOpt = (r: { opts: string[] }, o: string): boolean => r.opts.includes(o);
@@ -110,7 +110,7 @@
   function startEdit(r: CloudflareRoute) {
     editing = r.hostname;
     draft = { hostname: r.hostname, service: r.service, serve: r.service.startsWith("ssh://") ? "wan" : r.serve,
-              opts: [...r.opts], section: r.section, icon: r.icon };
+              opts: [...r.opts] };
     draftSaved = JSON.stringify(draft);
   }
 
@@ -220,14 +220,6 @@
             {#each SERVE as s (s)}<option value={s}>{t(`cf.serve.${s}`)}</option>{/each}
           </select>
         </Field>
-        <Field label={t("cf.section")} id="cf-add-section">
-          <input id="cf-add-section" value={add.section ?? ""} oninput={(e) => (add.section = e.currentTarget.value || null)}
-                 placeholder={t("cf.sectionPh")} class="w-full" />
-        </Field>
-        <Field label={t("cf.icon")} id="cf-add-icon">
-          <input id="cf-add-icon" value={add.icon ?? ""} oninput={(e) => (add.icon = e.currentTarget.value || null)}
-                 placeholder={t("cf.iconPh")} class="w-full font-mono" />
-        </Field>
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-4">
         <label class="flex items-center gap-2 text-m text-dida-text-muted">
@@ -261,10 +253,6 @@
                   <select bind:value={draft.serve} class="w-full" disabled={draft.service.startsWith("ssh://")}>
                     {#each SERVE as s (s)}<option value={s}>{t(`cf.serve.${s}`)}</option>{/each}
                   </select>
-                  <input value={draft.section ?? ""} oninput={(e) => (draft.section = e.currentTarget.value || null)}
-                         placeholder={t("cf.sectionPh")} class="w-full" />
-                  <input value={draft.icon ?? ""} oninput={(e) => (draft.icon = e.currentTarget.value || null)}
-                         placeholder={t("cf.iconPh")} class="w-full font-mono" />
                 </div>
                 <div class="flex flex-wrap items-center gap-4">
                   <label class="flex items-center gap-2 text-m text-dida-text-muted">
@@ -283,7 +271,7 @@
                   <p class="truncate font-mono text-m font-semibold">{r.hostname}</p>
                   <p class="truncate font-mono text-s text-dida-text-muted">{r.service}</p>
                   <p class="mt-0.5 text-xs uppercase tracking-wide text-dida-text-faint">
-                    {[t(`cf.serve.${r.serve}`), hasOpt(r, "nochunk") ? t("cf.chunked") : "", r.section ?? ""].filter(Boolean).join(" · ")}
+                    {[t(`cf.serve.${r.serve}`), hasOpt(r, "nochunk") ? t("cf.chunked") : ""].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1.5">

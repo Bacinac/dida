@@ -95,6 +95,10 @@ async def _cfg(request: Request) -> dict:
         base = (await host_setting(request.app.state.pool, "app_url")).rstrip("/")
         redirect_uri = f"{base}/api/contacts/callback" if base else ""
     return {
+        "source": d.get("source") or "google",
+        "ponistra_url": (d.get("ponistra_url") or "").strip(),
+        "ponistra_signed": bool(d.get("ponistra_url") and d.get("ponistra_email")
+                                and d.get("ponistra_password")),
         "client_id": (d.get("client_id") or "").strip(),
         "client_secret": client_secret,
         "redirect_uri": redirect_uri,
@@ -120,9 +124,13 @@ async def status(request: Request, _admin: AuthUser = Depends(require_admin)) ->
         last = json.loads(raw) if raw else None
     except (ValueError, TypeError):
         last = None
+    ponistra = cfg["source"] == "ponistra"
     return {
-        "configured": bool(cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]),
-        "connected": cfg["connected"],
+        "source": cfg["source"],
+        "ponistra_url": cfg["ponistra_url"],
+        "configured": cfg["ponistra_signed"] if ponistra else
+            bool(cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"]),
+        "connected": cfg["ponistra_signed"] if ponistra else cfg["connected"],
         "redirect_uri": cfg["redirect_uri"],
         "people": await pool.fetchval("SELECT count(*) FROM people"),
         "announced": await pool.fetchval("SELECT count(*) FROM people WHERE announce"),

@@ -116,7 +116,7 @@ async def test_the_lamp_is_its_own_entity_beside_the_camera():
     state = await a._read_light(site, CAM)
     a._publish_light(CAM, *state)
     await _settle()
-    assert a._bus.entities == [(LAMP, ["on_off", "brightness"])]
+    assert a._bus.entities == [(LAMP, ["on_off", "brightness", "binary"])]
     assert classify_device_type(["on_off", "brightness"]) == "light"
     assert classify_device_type(["camera", "motion", "person_count", "object_class"]) != "light", \
         "the camera stays a camera — its own capabilities are untouched"
@@ -182,6 +182,33 @@ async def test_the_roster_prune_leaves_the_lamp_alone():
     await a._prune_stale()
     forgotten = [e for a in a.broker.asked("forget") for e in a.get("entity_ids", ())]
     assert forgotten == [f"baba:{CAM}:zone:gone"], "the zone goes, the lamp stays"
+
+
+@pytest.mark.asyncio
+async def test_burning_travels_apart_from_armed():
+    """`on` says the lamp is armed, not that it burns: an armed lamp sits dark until
+    the camera's own trigger, so the two values have to be able to disagree."""
+    a, site = _adapter(_Resp(200, {"on": True, "bright": 50, "lit": False}),
+                       _Resp(200, {"on": True, "bright": 50, "lit": True}))
+    a._publish_light(CAM, *await a._read_light(site, CAM))
+    await _settle()
+    assert (LAMP, "on_off", True) in a._bus.states
+    assert (LAMP, "binary", False) in a._bus.states, "armed and dark"
+    a._publish_light(CAM, *await a._read_light(site, CAM))
+    await _settle()
+    assert (LAMP, "binary", True) in a._bus.states, "and now burning"
+
+
+@pytest.mark.asyncio
+async def test_an_answer_without_lit_is_not_a_dark_lamp():
+    """A write's answer carries no `lit`, nor does an older BABA's read. Publishing
+    False for either would show a burning lamp as dark."""
+    a, site = _adapter(_Resp(200, {"on": True, "bright": 10}), _Resp(200, {"on": False, "bright": 0}))
+    a._publish_light(CAM, *await a._read_light(site, CAM))
+    await a.handle_command(_cmd("on_off", "turn_off"))
+    await _settle()
+    assert (LAMP, "on_off", False) in a._bus.states, "the write itself was mirrored"
+    assert [s for s in a._bus.states if s[1] == "binary"] == []
 
 
 @pytest.mark.asyncio

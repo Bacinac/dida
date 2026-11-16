@@ -933,8 +933,6 @@ class CloudflareRoute(BaseModel):
     service: str
     serve: str = "both"          # both = LAN + WAN | lan = split-DNS only | wan = tunnel only
     opts: list[str] = []         # nochunk — Proxmox' console needs unchunked responses
-    section: str | None = None   # Homepage section; without one no tile is created
-    icon: str | None = None
 
 
 @router.get("/cloudflare/routes")
@@ -947,8 +945,8 @@ async def cloudflare_routes(request: Request, _admin: AuthUser = Depends(require
 async def cloudflare_add_route(
     body: CloudflareRoute, request: Request, _admin: AuthUser = Depends(require_admin)
 ) -> dict:
-    """Add a route to services.conf; the host applies Caddy, the tunnel, DNS,
-    split-DNS and the Homepage tile, and the reply carries what it did."""
+    """Add a route to services.conf; the host applies Caddy, the tunnel, DNS and
+    split-DNS, and the reply carries what it did."""
     return await _cloudflare_ctl(request, {"action": "add", **body.model_dump()})
 
 
@@ -967,8 +965,8 @@ async def cloudflare_remove_route(
     hostname: str, request: Request, _admin: AuthUser = Depends(require_admin)
 ) -> dict:
     """Remove a route from services.conf. The Caddy vhost and the tunnel rule go with
-    it; the DNS record and the Homepage tile are left, since neither is safe to delete
-    on the strength of one absent row."""
+    it; the DNS record is left, since it is not safe to delete on the strength of one
+    absent row."""
     result = await _cloudflare_ctl(request, {"action": "remove", "hostname": hostname})
     # The route's entity mirrors the row that just went away, and the adapter only
     # ever publishes routes that still exist — so without this the entity lingers

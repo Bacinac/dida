@@ -40,6 +40,11 @@ _CLOUD_POLL = 60
 # the full status. Only reopening the socket recovers it.
 _STALE_REOPEN = 3
 
+# Some devices (the patio heater) keep reporting the previous value for minutes
+# after a set_value. A commanded value therefore stands until the device reports
+# it back, and only this long after the command does a contradicting poll win.
+_CONFIRM_SECONDS = 300
+
 
 def _dp_spec(spec: object) -> tuple[str, list | None, list | None, str | None]:
     """A device's dps entry is either a plain capability string, or a dict
@@ -161,10 +166,9 @@ class TuyaAdapter:
         self._locks: dict[str, asyncio.Lock] = {}
         self._last: dict[tuple[str, str], object] = {}
         self._curated: set[str] = set()
-        # After a command, ignore a poll that would clobber the just-set value:
-        # Tuya's status() lags a cycle after set_value, so an immediate poll can
-        # read the OLD value. (entity_id, cap) -> monotonic deadline.
-        self._cmd_until: dict[tuple[str, str], float] = {}
+        # (entity_id, cap) -> (commanded value, monotonic deadline for the device
+        # to report it back); polls contradicting it are ignored until then.
+        self._cmd_pending: dict[tuple[str, str], tuple[object, float]] = {}
         # Cloud-onboarding: full device dicts (incl. local keys) from the last
         # fetch, keyed by id. Keys live here server-side; the UI only ever sees a
         # sanitised view. "add" persists the chosen ones to the config blob.
@@ -432,10 +436,18 @@ class TuyaAdapter:
         now = time.monotonic()
         for capability, value in readings:
             key = (entity_id, capability)
+            pending = self._cmd_pending.get(key)
+            if pending is not None:
+                wanted, deadline = pending
+                if value == wanted:
+                    del self._cmd_pending[key]
+                elif now < deadline:
+                    continue
+                else:
+                    del self._cmd_pending[key]
+                    log.warning("tuya %s: %s still reports %r %ds after it was set to %r",
+                                name, capability, value, _CONFIRM_SECONDS, wanted)
             if self._last.get(key) == value:
-                continue
-            # Don't let a lagging poll overwrite a value we just commanded.
-            if now < self._cmd_until.get(key, 0.0) and self._last.get(key) is not None:
                 continue
             self._last[key] = value
             spawn(
@@ -633,13 +645,12 @@ class TuyaAdapter:
                     await loop.run_in_executor(self._exec, handle.set_value, wdp, wval)
                 else:
                     await loop.run_in_executor(self._exec, handle.set_multiple_values, writes)
-            # Instant local feedback; hold off poll-clobber for a couple cycles
-            # while the device's reported status catches up. A cover open/close/stop
-            # has no decodable echo value (pub_val None) — skip the optimistic
-            # publish instead of shipping value=None into the engine's decoder.
-            self._cmd_until[(command.entity_id, cap)] = time.monotonic() + 25
+            # A cover open/close/stop has no decodable echo value (pub_val None):
+            # nothing to publish or wait for, the polls report the motion as it is.
             if pub_val is None:
+                self._cmd_pending.pop((command.entity_id, cap), None)
                 return
+            self._cmd_pending[(command.entity_id, cap)] = (pub_val, time.monotonic() + _CONFIRM_SECONDS)
             self._last[(command.entity_id, cap)] = pub_val
             await self._bus.publish_state(
                 StateUpdate(

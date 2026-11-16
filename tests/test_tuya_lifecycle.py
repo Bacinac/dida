@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 
 import pytest
 from dida_adapter_tuya.adapter import _STALE_REOPEN, TuyaAdapter
@@ -145,30 +146,54 @@ async def test_an_unchanged_value_is_not_republished(rig):
     assert await _emit(rig, dev, {"1": True}) == []
 
 
+def _commanded(a, key, value, deadline):
+    a._last[key] = value
+    a._cmd_pending[key] = (value, deadline)
+
+
 async def test_a_LAGGING_poll_does_not_undo_a_command_just_sent(rig):
-    """Tuya's status() lags a cycle behind set_value(). Without this guard the UI
-    snaps back the instant you press a button — so the user presses again, and the
-    device is toggled twice."""
+    """Tuya's status() lags behind set_value(). Without this guard the UI snaps back
+    the instant you press a button — so the user presses again, and the device is
+    toggled twice."""
     dev = _dev({"1": "on_off"})
     await _emit(rig, dev, {"1": False})          # known state: off
     rig._bus.published.clear()
-
-    # A command sets it on and blocks contradicting polls for a moment.
-    rig._last[("tuya:patio_heater", "on_off")] = True
-    rig._cmd_until[("tuya:patio_heater", "on_off")] = asyncio.get_running_loop().time() + 1e6
+    _commanded(rig, ("tuya:patio_heater", "on_off"), True, time.monotonic() + 1e6)
 
     assert await _emit(rig, dev, {"1": False}) == [], \
         "a stale poll overwrote the value we had just commanded"
 
 
-async def test_the_guard_expires_so_a_genuine_change_still_lands(rig):
-    """A permanent guard would mean a device switched at the wall never updates."""
+async def test_the_heater_keeps_its_commanded_level_until_it_reports_it_back(rig):
+    """16.11.2026: the patio heater reported the old level for 2-4 min after each
+    command. A fixed 25 s hold let the stale "Off" through, the rule's off branch
+    saw "Off" and skipped the command, and the heater ran half an hour on an empty
+    patio. The commanded value now stands until the device confirms it."""
+    key = ("tuya:patio_heater", "enum")
+    dev = _dev({"3": {"cap": "enum", "options": ["Off", "Level 1"],
+                      "raw": [None, "level_1"], "power_dp": 1}})
+    await _emit(rig, dev, {"1": False, "3": "level_1"})
+    rig._bus.published.clear()
+    _commanded(rig, key, "Level 1", time.monotonic() + 1e6)
+
+    assert await _emit(rig, dev, {"1": False, "3": "level_1"}) == [], "stale Off leaked through"
+    assert await _emit(rig, dev, {"1": True, "3": "level_1"}) == [], "the confirmation is no change"
+    assert key not in rig._cmd_pending
+
+    assert await _emit(rig, dev, {"1": False, "3": "level_1"}) == [("tuya:patio_heater", "enum", "Off")], \
+        "once confirmed, a real change at the device must land at once"
+
+
+async def test_an_unconfirmed_command_gives_way_to_the_device_after_the_deadline(rig):
+    """A device that never takes the command must not be shown as if it had."""
+    key = ("tuya:patio_heater", "on_off")
     dev = _dev({"1": "on_off"})
     await _emit(rig, dev, {"1": True})
     rig._bus.published.clear()
-    rig._cmd_until[("tuya:patio_heater", "on_off")] = 0.0   # already expired
+    _commanded(rig, key, False, 0.0)
 
-    assert await _emit(rig, dev, {"1": False}) == [("tuya:patio_heater", "on_off", False)]
+    assert await _emit(rig, dev, {"1": True}) == [("tuya:patio_heater", "on_off", True)]
+    assert key not in rig._cmd_pending
 
 
 async def test_a_device_reporting_only_diagnostics_stays_diagnostic(rig):

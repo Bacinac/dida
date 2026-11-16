@@ -90,3 +90,26 @@ def test_a_name_cannot_break_the_digest_apart():
     today = datetime.date(2026, 6, 15)
     assert digest([("Ana; Horvat:x=1", datetime.date(1992, 6, 15))], today, within=0) \
         == "0=Ana  Horvat x 1:34"
+
+
+def test_a_ponistra_card_reads_as_written():
+    # Folded lines, escapes, a grouped property, BDAY before FN, the card's UID as
+    # its id, and a birthday with no year in Apple's stand-in year.
+    stream = (
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a-1\r\nBDAY;VALUE=date:1990-04-05\r\n"
+        "FN:Horvat\\, Ana Mari\r\n ja\r\nEND:VCARD\r\n"
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:m-2\r\nFN:Marko Marić\r\n"
+        "item1.BDAY;X-APPLE-OMIT-YEAR=1604:1604-06-15\r\nEND:VCARD\r\n"
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:x-3\r\nFN:Nobody Born\r\nEND:VCARD\r\n"
+    )
+    book = read_export(stream)
+    assert book == [
+        {"name": "Horvat, Ana Marija", "born": datetime.date(1990, 4, 5),
+         "raw": "1990-04-05", "id": "a-1"},
+        {"name": "Marko Marić", "born": None, "raw": "--06-15", "id": "m-2"},
+    ]
+
+
+def test_a_real_1604_birthday_is_kept_when_the_card_does_not_omit_it():
+    book = read_export("BEGIN:VCARD\nFN:Old\nBDAY:1604-06-15\nEND:VCARD\n")
+    assert book[0]["born"] == datetime.date(1604, 6, 15)

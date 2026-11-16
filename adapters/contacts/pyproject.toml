@@ -1,12 +1,12 @@
 [project]
 name = "dida-adapter-contacts"
 version = "0.1.0"
-description = "DIDA contacts adapter — the household address book (Google People API) and whose birthday it is"
+description = "DIDA contacts adapter — the household address book (Ponistra CardDAV or Google People API) and whose birthday it is"
 requires-python = ">=3.14"
 dependencies = [
     "dida-core",
     "asyncpg",
-    "httpx>=0.27",
+    "httpx>=0.28",
 ]
 
 [build-system]

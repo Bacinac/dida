@@ -1,11 +1,14 @@
 [project]
 name = "dida-adapter-calendar"
 version = "0.1.0"
-description = "DIDA calendar adapter — user-defined schedules (season windows + cron beats) as entities"
+description = "DIDA calendar adapter — user-defined schedules (season windows + cron beats) as entities, and away from a Ponistra calendar"
 requires-python = ">=3.14"
 dependencies = [
     "dida-core",
     "asyncpg>=0.30",
+    "httpx>=0.28",
+    "icalendar>=7.3",
+    "python-dateutil>=4.0",
     "tzdata>=2024.1",
 ]
 

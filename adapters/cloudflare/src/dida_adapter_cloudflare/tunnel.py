@@ -1,7 +1,7 @@
 """Tunnel mode — for an installation where DIDA owns the tunnel outright.
 
 The house routes through a host-side `services.conf` that also drives Caddy, the
-router's split DNS and the Homepage tiles; there, this adapter edits that file and
+router's split DNS; there, this adapter edits that file and
 a host applier does the rest. A second installation has none of that: no Caddy, no
 split DNS, no applier — the connectors run in DIDA's own compose and read a
 `config.yml` DIDA writes. There, THAT file is the ingress, and this module is how
@@ -72,8 +72,6 @@ def parse_config(text: str, zone: str) -> tuple[dict, list[dict]]:
             "origin": origin,
             "serve": "wan",          # a tunnel has no LAN half to serve
             "opts": opts,
-            "section": None,
-            "icon": None,
         })
     return meta, rows
 

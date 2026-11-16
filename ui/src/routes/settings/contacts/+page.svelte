@@ -153,9 +153,31 @@
     }
   }
 
-  onMount(loadSurvey);
+  let ponistra = $state<string | null>(null);
+
+  onMount(async () => {
+    try {
+      const status = await api.contactsStatus();
+      if (status.source === "ponistra") {
+        ponistra = status.ponistra_url;
+        return;
+      }
+    } catch (e) {
+      msg = errMsg(e);
+    }
+    await loadSurvey();
+  });
 </script>
 
+{#if ponistra !== null}
+<Card>
+  <p class="text-m text-dida-text-muted">{t("upkeep.inPonistra")}</p>
+  {#if ponistra}
+    <a href={ponistra} target="_blank" rel="noreferrer"
+      class="mt-2 inline-block text-s text-dida-accent hover:underline">{t("upkeep.openPonistra")}</a>
+  {/if}
+</Card>
+{:else}
 <Card>
   <p class="text-m text-dida-text-muted">{t("upkeep.intro")}</p>
 
@@ -282,4 +304,5 @@
       </div>
     </Card>
   {/if}
+{/if}
 {/if}

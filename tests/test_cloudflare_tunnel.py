@@ -157,7 +157,7 @@ def test_a_plain_http_route_gets_no_origin_request():
 def test_adding_a_route_adds_exactly_one():
     meta, rows = parse_config(LIVE, ZONE)
     rows.append({"host": "cabin-new", "origin": "http://192.168.2.50:8080",
-                 "serve": "wan", "opts": [], "section": None, "icon": None})
+                 "serve": "wan", "opts": []})
     out = render_config(meta, rows, ZONE)
     assert len(_hosts(out)) == len(_hosts(LIVE)) + 1
     assert "cabin-new.example.com" in _hosts(out)

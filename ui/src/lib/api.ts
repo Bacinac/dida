@@ -1514,10 +1514,11 @@ export const api = {
   // consent screen and the roster both live here — OPUS Library asks DIDA over
   // HTTP rather than holding a second Google grant.
   contactsStatus: (): Promise<{
+    source: "google" | "ponistra"; ponistra_url: string;
     configured: boolean; connected: boolean; redirect_uri: string;
     people: number; announced: number;
     last_sync: { at?: string; read: number; added: number; updated: number; removed: number;
-                 no_year: { name: string; says: string }[] } | null;
+                 kept?: string[]; no_year: { name: string; says: string }[] } | null;
   }> => request(`/contacts/status`).then(jsonOrThrow),
   contactsLogin: (): Promise<{ url: string }> =>
     request(`/contacts/login`).then(jsonOrThrow),
@@ -2164,16 +2165,12 @@ export interface CloudflareRoute {
   service: string;
   serve: CloudflareServe;
   opts: string[];
-  section: string | null;   // Homepage section; null = no tile
-  icon: string | null;
 }
 export interface CloudflareRouteEdit {
   hostname: string;
   service: string;
   serve: CloudflareServe;
   opts: string[];
-  section: string | null;
-  icon: string | null;
 }
 // What the host applier reported after the last run of apply-ingress.sh.
 export interface CloudflareApply {

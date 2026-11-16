@@ -3,18 +3,23 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from time import monotonic, time_ns
 from zoneinfo import ZoneInfo
 
 from dida_core import AdapterConfig, Bus, EntityInfo, StateUpdate
+from dida_core.dav import Dav, DavError
 from dida_core.schedules import next_occurrence, schedule_active
 from home_core.tasks import spawn
+
+from dida_adapter_calendar.away import away_now
 
 log = logging.getLogger("dida.adapter.calendar")
 
 NAMESPACE = "calendar"
+AWAY = f"{NAMESPACE}:away"
 RELOAD_INTERVAL = 5.0
+AWAY_REFRESH = 300.0
 
 
 class CalendarAdapter:
@@ -52,10 +57,17 @@ class CalendarAdapter:
         self._known: set[str] = set()
         self._active: dict[str, bool] = {}
         self._next: dict[str, str] = {}  # dedupe — republish only when the date moves
+        self._cfg: AdapterConfig | None = None
+        self._away_events: list[str] = []
+        self._away_tried = -AWAY_REFRESH  # monotonic time of the last read, good or not
+        self._away_with: tuple = ()  # the settings that read was made with
+        self._away_error = ""
+        self._away_last: dict[str, object] = {}
 
     async def start(self, bus: Bus) -> None:
         self._bus = bus
         self._astro_cfg = AdapterConfig("astro", self.broker)
+        self._cfg = AdapterConfig(NAMESPACE, self.broker)
         log.info("calendar adapter up — owning calendar:* schedules")
         self.status.ok("0 schedules")
         while True:
@@ -113,7 +125,54 @@ class CalendarAdapter:
             if self._next.get(eid) != nxt:
                 self._next[eid] = nxt
                 self._pub_next(eid, nxt, name)
-        self.status.ok(f"{live} schedule{'s' if live != 1 else ''}")
+        detail = f"{live} schedule{'s' if live != 1 else ''}"
+        if await self._away(await self._resolve_tz()):
+            detail += ", away from Ponistra"
+        if self._away_error:
+            self.status.error(f"away calendar: {self._away_error}")
+        else:
+            self.status.ok(detail)
+
+    async def _away(self, tz: ZoneInfo) -> bool:
+        """`calendar:away` from the calendar named in the settings. The calendar is read
+        every few minutes and the moment judged on every pass, so an event starting
+        between two reads still flips on time. A failed read keeps the last good one
+        and turns the badge red."""
+        if self._cfg is None:
+            return False
+        await self._cfg.load()
+        if not self._cfg.get("away_calendar"):
+            self._away_error = ""
+            return False
+        settings = (self._cfg.get("ponistra_url"), self._cfg.get("ponistra_email"),
+                    self._cfg.get("ponistra_password"), self._cfg.get("away_calendar"))
+        now = datetime.now(tz)
+        if settings != self._away_with or monotonic() - self._away_tried >= AWAY_REFRESH:
+            if settings != self._away_with:
+                self._away_events = []
+            self._away_with, self._away_tried = settings, monotonic()
+            try:
+                self._away_events = await self._read_away(settings, now, tz)
+                self._away_error = ""
+            except DavError as exc:
+                log.warning("calendar: away calendar not read: %s", exc)
+                self._away_error = str(exc)
+        names = away_now(self._away_events, now, tz)
+        self._pub_away("binary", bool(names))
+        self._pub_away("text", "; ".join(n for n in names if n))
+        return True
+
+    @staticmethod
+    async def _read_away(settings: tuple, now: datetime, tz: ZoneInfo) -> list[str]:
+        url, email, password, wanted = settings
+        async with Dav(url, email, password) as dav:
+            calendars = await dav.collections("caldav")
+            found = next((c for c in calendars if c.name == wanted), None)
+            if found is None:
+                raise DavError(f"no calendar named {wanted!r}; the sign-in reaches "
+                               + ", ".join(repr(c.name) for c in calendars))
+            day = datetime.combine(now.date(), time(), tz)
+            return await dav.events(found, day - timedelta(days=1), day + timedelta(days=2))
 
     async def _resolve_tz(self) -> ZoneInfo:
         """Timezone from the astro adapter's config (`astro.tz`) — the single place
@@ -144,12 +203,29 @@ class CalendarAdapter:
             capabilities=["schedule_active", "next_occurrence"], name=name, device=eid,
         )), log=log, name=f"announce {eid}")
 
+    def _pub_away(self, capability: str, value) -> None:
+        if self._bus is None or self._away_last.get(capability) == value:
+            return
+        if not self._away_last:
+            self._announce_away()
+        self._away_last[capability] = value
+        spawn(self._bus.publish_state(StateUpdate(
+            entity_id=AWAY, capability=capability, value=value, adapter=NAMESPACE,
+            ts_ns=time_ns(), name="Away", device=AWAY,
+        )), log=log, name=f"publish {AWAY}.{capability}")
+
+    def _announce_away(self) -> None:
+        spawn(self._bus.publish_entity(EntityInfo(
+            entity_id=AWAY, adapter=NAMESPACE, capabilities=["binary", "text"], name="Away",
+            device=AWAY, device_name="Away", device_type="sensor",
+        )), log=log, name=f"announce {AWAY}")
+
     def _pub(self, eid: str, value: bool, name: str) -> None:
         if self._bus is None:
             return
         spawn(self._bus.publish_state(StateUpdate(
             entity_id=eid, capability="schedule_active", value=value, adapter=NAMESPACE,
-            ts_ns=time.time_ns(), name=name, device=eid,
+            ts_ns=time_ns(), name=name, device=eid,
         )), log=log, name=f"publish {eid}.schedule_active")
 
     def _pub_next(self, eid: str, iso_date: str, name: str) -> None:
@@ -157,5 +233,5 @@ class CalendarAdapter:
             return
         spawn(self._bus.publish_state(StateUpdate(
             entity_id=eid, capability="next_occurrence", value=iso_date, adapter=NAMESPACE,
-            ts_ns=time.time_ns(), name=name, device=eid,
+            ts_ns=time_ns(), name=name, device=eid,
         )), log=log, name=f"publish {eid}.next_occurrence")

@@ -266,11 +266,12 @@ async def _people(ctx: Ctx, adapter: str) -> dict:
     return {"announced": [dict(r) for r in rows], "total": int(total)}
 
 
-async def _store_book(ctx: Ctx, adapter: str, book: list[dict], source: str, prune: bool = False) -> dict:
+async def _store_book(ctx: Ctx, adapter: str, book: list[dict], source: str, prune: bool = False,
+                      retire: str = "") -> dict:
     for entry in book:
         if entry.get("born"):
             entry["born"] = dt.date.fromisoformat(entry["born"])
-    return await store_book(ctx.pool, book, source=source, prune=prune)
+    return await store_book(ctx.pool, book, source=source, prune=prune, retire=retire)
 
 
 async def _schedules(ctx: Ctx, adapter: str) -> list[dict]:

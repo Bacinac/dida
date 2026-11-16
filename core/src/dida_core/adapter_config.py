@@ -55,6 +55,15 @@ class ConfigField:
 
 
 
+# Signing into Ponistra over CardDAV/CalDAV, shared by contacts and calendar.
+_PONISTRA = (
+    ConfigField("ponistra_url", "Ponistra address", group="Ponistra",
+                placeholder="https://ponistra.example.com"),
+    ConfigField("ponistra_email", "E-mail", group="Ponistra"),
+    ConfigField("ponistra_password", "App password", type="password", secret=True, group="Ponistra",
+                help="Ponistra → Settings → App passwords. Not the account password."),
+)
+
 # Central config contract. Only adapters listed here are UI-configurable; each is
 # added as its adapter is migrated to read via AdapterConfig (incremental).
 ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
@@ -270,10 +279,13 @@ ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
     # refresh token is minted by "Connect" into the encrypted `_oauth` blob, never
     # typed into a field.
     "contacts": [
-        ConfigField("client_id", "OAuth Client ID",
+        ConfigField("source", "Address book", type="select", default="google",
+                    options=("google", "ponistra")),
+        *_PONISTRA,
+        ConfigField("client_id", "OAuth Client ID", group="Google",
                     help="Google Cloud → Credentials → OAuth client ID → Web application, in a project of its own (not the FCM one)."),
-        ConfigField("client_secret", "OAuth Client Secret", type="password", secret=True),
-        ConfigField("redirect_uri", "Redirect URI (optional)",
+        ConfigField("client_secret", "OAuth Client Secret", type="password", secret=True, group="Google"),
+        ConfigField("redirect_uri", "Redirect URI (optional)", group="Google",
                     placeholder="auto: <public address>/api/contacts/callback",
                     help="Empty = the public address (Settings → Network) + /api/contacts/callback. This is the value you register as an Authorised redirect URI."),
         ConfigField("announce_days", "Announce days ahead", type="number", default="1",
@@ -398,11 +410,13 @@ ADAPTER_CONFIG: dict[str, list[ConfigField]] = {
     # accessory cards); the pairing keypair lives in the adapter-managed `pairings`
     # blob (encrypted), never a ConfigField.
     "homekit": [],
-    # No config fields either: calendar is a DIDA-internal source that owns the
-    # calendar:* schedule entities (edited in the Schedules UI, not here). Listed
-    # so it renders as a first-class adapter card — without an entry the Settings →
-    # Adapters page never queries dida.status.calendar and its badge is unreachable.
-    "calendar": [],
+    # Schedules are edited in the Schedules UI, not here; these fields only feed
+    # calendar:away from a Ponistra calendar.
+    "calendar": [
+        *_PONISTRA,
+        ConfigField("away_calendar", "Away calendar", group="Ponistra",
+                    help="The calendar's name in Ponistra. An event in it covering the moment means the household is away. Empty = off."),
+    ],
     # Sun elevation + time-of-day source. Location is NOT a field — it comes from
     # the home zone (Zones → the one flagged Home), the single source of truth for
     # where "here" is. Only the refinements (altitude, tz) and cadence are config.

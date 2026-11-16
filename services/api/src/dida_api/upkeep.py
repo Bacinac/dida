@@ -135,6 +135,8 @@ def _secret() -> str:
 async def _credentials(pool) -> tuple[str, str, str]:
     rows = {r["key"]: r["value"] for r in await pool.fetch(
         "SELECT key, value FROM adapter_config WHERE adapter = 'contacts'")}
+    if rows.get("source") == "ponistra":
+        raise HTTPException(409, "The address book is kept in Ponistra; edit it there.")
     if "_oauth" not in rows:
         raise HTTPException(409, "Nisi povezan s Google kontaktima.")
     secret = _secret()

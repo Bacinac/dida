@@ -63,21 +63,53 @@ def parse_birthday(year, month, day) -> datetime.date | None:
         return None
 
 
+_VCARD_ESCAPES = {"\\\\": "\\", "\\,": ",", "\\;": ";", "\\n": "\n", "\\N": "\n"}
+
+
+def _vcard_lines(text: str):
+    """(name, params, value) per content line, folded lines joined and the group
+    prefix (`item1.BDAY`) dropped."""
+    for line in re.sub(r"\r?\n[ \t]", "", text).splitlines():
+        head, sep, value = line.partition(":")
+        if not sep:
+            continue
+        name, *params = head.split(";")
+        found = {}
+        for param in params:
+            key, _, given = param.partition("=")
+            found[key.strip().upper()] = given.strip().strip('"')
+        yield name.rpartition(".")[2].strip().upper(), found, value.strip()
+
+
+def _vcard_birthday(value: str, params: dict) -> tuple[datetime.date | None, str]:
+    """The birth date, and what the card says when it has no year."""
+    found = re.fullmatch(r"(\d{4}|--)-?(\d{2})-?(\d{2})", value.split("T")[0])
+    if not found:
+        return None, value
+    year, month, day = found.groups()
+    # Apple and Ponistra keep a birthday with no year as a stand-in year flagged by
+    # X-APPLE-OMIT-YEAR; read as written it would be somebody born in 1604.
+    if year == "--" or params.get("X-APPLE-OMIT-YEAR") == year:
+        return None, f"--{month}-{day}"
+    return parse_birthday(year, month, day), value
+
+
 def from_vcard(text: str) -> list[dict]:
-    out, name = [], ""
-    for line in text.splitlines():
-        line = line.strip()
-        head, _, value = line.partition(":")
-        if head.upper() == "FN":
-            name = value.strip()
-        elif head.upper().startswith("BDAY") and name:
-            raw = value.strip().replace("-", "")
-            when = None
-            if re.fullmatch(r"\d{8}", raw):
-                when = parse_birthday(raw[:4], raw[4:6], raw[6:])
-            out.append({"name": name, "born": when, "raw": value.strip(), "id": ""})
-        elif line.upper() == "END:VCARD":
-            name = ""
+    """Everybody in a vCard stream who has a name and a birthday, with the card's UID
+    as the contact it came from."""
+    out, card = [], {}
+    for name, params, value in _vcard_lines(text):
+        if name == "BEGIN":
+            card = {}
+        elif name == "FN":
+            card["name"] = re.sub(r"\\[\\,;nN]", lambda m: _VCARD_ESCAPES[m[0]], value)
+        elif name == "UID":
+            card["id"] = value
+        elif name == "BDAY" and "raw" not in card:
+            card["born"], card["raw"] = _vcard_birthday(value, params)
+        elif name == "END" and card.get("name") and "raw" in card:
+            out.append({"name": card["name"], "born": card["born"], "raw": card["raw"],
+                        "id": card.get("id", "")})
     return out
 
 
@@ -147,7 +179,8 @@ def digest(people: list[tuple[str, datetime.date]], today: datetime.date, within
     )
 
 
-async def store_book(pool, book: list[dict], *, source: str, prune: bool = False) -> dict:
+async def store_book(pool, book: list[dict], *, source: str, prune: bool = False,
+                     retire: str = "") -> dict:
     """Fold a contacts book into `people`, and report what it did.
 
     Matched on the contact it came from where that is known, and on the name
@@ -159,6 +192,10 @@ async def store_book(pool, book: list[dict], *, source: str, prune: bool = False
     one would empty the table. It takes `announce` with it, which is the honest
     outcome — the person is gone from the book. An EMPTY book never prunes, whatever
     the caller asks.
+
+    `retire` names the source this one replaces. Its rows the read has not taken
+    over by name are dropped, except those somebody chose to announce: those stay
+    and are reported in `kept`, so the person can be added to the new book.
     """
     rows = await pool.fetch(
         "SELECT id, name, plain_name, born_on, contact_id, source FROM people"
@@ -215,5 +252,13 @@ async def store_book(pool, book: list[dict], *, source: str, prune: bool = False
             source, list(seen),
         )
         removed = len(gone)
+    retired, kept = 0, []
+    if retire and retire != source and book:
+        gone = await pool.fetch(
+            "DELETE FROM people WHERE source = $1 AND NOT announce RETURNING id", retire)
+        retired = len(gone)
+        kept = [r["name"] for r in await pool.fetch(
+            "SELECT name FROM people WHERE source = $1 ORDER BY name", retire)]
     return {"read": len(book), "added": added, "updated": updated,
-            "unchanged": unchanged, "removed": removed, "no_year": dateless}
+            "unchanged": unchanged, "removed": removed, "retired": retired,
+            "kept": kept, "no_year": dateless}

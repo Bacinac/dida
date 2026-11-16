@@ -208,3 +208,92 @@ async def test_connecting_at_noon_reads_today_not_tomorrow():
     await a._sync(noon)  # nothing to read from — and nothing claimed as read
     assert a._synced_on == "", "a day with no token is not a day that has been read"
     assert a._due(noon) is True, "the moment a token appears, the read is still due"
+
+
+_MS = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">{}</d:multistatus>'
+
+
+def _ponistra(cards: str, status: int = 207):
+    """A Ponistra CardDAV home: the user's own book first, a shared mailbox's after."""
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.headers.get("Authorization", "")))
+        if status != 207:
+            return httpx.Response(status)
+        path = request.url.path
+        if path == "/.well-known/carddav":
+            body = '<d:response><d:href>/dav/</d:href><d:propstat><d:prop><d:current-user-principal>' \
+                   '<d:href>/dav/principals/7/</d:href></d:current-user-principal></d:prop></d:propstat></d:response>'
+        elif path == "/dav/principals/7/":
+            body = '<d:response><d:href>/dav/principals/7/</d:href><d:propstat><d:prop><card:addressbook-home-set>' \
+                   '<d:href>/dav/contacts/7/</d:href></card:addressbook-home-set></d:prop></d:propstat></d:response>'
+        elif path == "/dav/contacts/7/" and request.method == "PROPFIND":
+            body = "".join(
+                f'<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/>'
+                f'{"<card:addressbook/>" if book else ""}</d:resourcetype><d:displayname>{name}</d:displayname>'
+                f'</d:prop></d:propstat></d:response>'
+                for href, name, book in (("/dav/contacts/7/", "Ponistra", False),
+                                         ("/dav/contacts/7/book/", "Ponistra", True),
+                                         ("/dav/contacts/7/box-9/", "Ured", True)))
+        elif path == "/dav/contacts/7/book/" and request.method == "REPORT":
+            body = f'<d:response><d:href>/dav/contacts/7/book/a.vcf</d:href><d:propstat><d:prop>' \
+                   f'<card:address-data>{cards}</card:address-data></d:prop></d:propstat></d:response>'
+        else:
+            return httpx.Response(404)
+        return httpx.Response(207, text=_MS.format(body))
+
+    return httpx.MockTransport(handler), seen
+
+
+def _patch_client(monkeypatch, transport):
+    real = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: real(*a, **{**k, "transport": transport}))
+
+
+_SIGNED = {"source": "ponistra", "ponistra_url": "https://p.example", "ponistra_email": "ivo@example.com",
+           "ponistra_password": "app-pw", "sync_hour": 4}
+
+
+async def test_ponistra_is_read_from_the_users_own_book_and_replaces_google(monkeypatch):
+    transport, seen = _ponistra(
+        "BEGIN:VCARD&#13;\nUID:u-1&#13;\nFN:Ana Horvat&#13;\nBDAY;VALUE=date:1990-04-05&#13;\nEND:VCARD&#13;\n")
+    _patch_client(monkeypatch, transport)
+    a = ContactsAdapter()
+    a._cfg = _Cfg(_SIGNED)
+    a.broker = FakeBroker(
+        store_book={"read": 1, "added": 0, "updated": 1, "unchanged": 0, "removed": 0,
+                    "retired": 2, "kept": ["Iva Kovač"], "no_year": []},
+        set_setting=None)
+
+    assert await a._connected() is True
+    await a._sync(_at(4))
+
+    (call,) = a.broker.asked("store_book")
+    assert call["source"] == "ponistra" and call["prune"] is True and call["retire"] == "google"
+    assert call["book"] == [{"name": "Ana Horvat", "born": datetime.date(1990, 4, 5),
+                             "raw": "1990-04-05", "id": "u-1"}]
+    assert ("REPORT", "/dav/contacts/7/book/") in [(m, p) for m, p, _ in seen]
+    assert all(auth.startswith("Basic ") for _, _, auth in seen)
+    assert json.loads(a.broker.asked("set_setting")[0]["value"])["source"] == "ponistra"
+    assert a._synced_on == "2026-06-15"
+
+
+async def test_a_refused_app_password_is_loud_and_the_day_stays_unread(monkeypatch):
+    transport, _ = _ponistra("", status=401)
+    _patch_client(monkeypatch, transport)
+    a = ContactsAdapter()
+    a._cfg = _Cfg(_SIGNED)
+    a.broker = FakeBroker()
+    with pytest.raises(RuntimeError, match=r"Ponistra CardDAV: .*app password"):
+        await a._sync(_at(4))
+    assert a._synced_on == "" and a.broker.asked("store_book") == []
+
+
+async def test_ponistra_without_a_sign_in_is_not_connected_and_reads_nothing():
+    a = ContactsAdapter()
+    a._cfg = _Cfg({**_SIGNED, "ponistra_password": ""})
+    a.broker = FakeBroker(stored=None)
+    assert await a._connected() is False
+    await a._sync(_at(4))
+    assert a.broker.calls == []

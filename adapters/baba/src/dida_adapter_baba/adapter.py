@@ -235,6 +235,13 @@ def _light_values(payload: object) -> tuple[bool, int | None]:
     return bool(payload["on"]), max(0, min(100, int(bright)))
 
 
+def _light_burning(payload: object) -> bool | None:
+    """`lit`: whether the lamp burns at this instant, where `on` only says it is armed.
+    BABA's answer to a write does not carry it, so None means "not said", never dark."""
+    lit = payload.get("lit") if isinstance(payload, dict) else None
+    return lit if isinstance(lit, bool) else None
+
+
 class _Site:
     """One BABA install: its config, its live NATS connection, and the catalog it
     has declared. Slug→UUID is per install because go2rtc slugs are only unique
@@ -1305,16 +1312,17 @@ class BabaAdapter:
         )), log=log, name=f"announce {bell}")
 
     def _announce_light(self, camera_id: str) -> None:
-        """A camera's floodlight: a two-capability (on_off + brightness) entity beside
-        the camera, grouped under its card. Announced only once the device has
-        answered, so a wall never carries a switch for a lamp that is not there."""
+        """A camera's floodlight: an entity beside the camera, grouped under its card,
+        with on_off (armed) + brightness and a read-only `binary` (burning now).
+        Announced only once the device has answered, so a wall never carries a switch
+        for a lamp that is not there."""
         dev = self._cam_dev(camera_id)
         lamp = f"{dev}{_LIGHT_SUFFIX}"
         if lamp in self._known_lights or self._bus is None:
             return
         self._known_lights.add(lamp)
         spawn(self._bus.publish_entity(EntityInfo(
-            entity_id=lamp, adapter=NAMESPACE, capabilities=["on_off", "brightness"],
+            entity_id=lamp, adapter=NAMESPACE, capabilities=["on_off", "brightness", "binary"],
             name=_LIGHT_NAME, device=dev,
             device_name=self._camera_names.get(camera_id),
         )), log=log, name=f"announce {lamp}")
@@ -1335,7 +1343,9 @@ class BabaAdapter:
             return None
         return f"{site.cfg.api_url}/cameras/{camera_id}/light", site.cfg.archive_headers()
 
-    async def _read_light(self, site: _Site, camera_id: str) -> tuple[bool, int | None] | None:
+    async def _read_light(
+        self, site: _Site, camera_id: str,
+    ) -> tuple[bool, int | None, bool | None] | None:
         """The lamp as the DEVICE has it (BABA reads through to the camera on every
         request), or None when this camera model has none. Raises on anything else —
         an unreachable camera must not read as a lamp that is off."""
@@ -1351,7 +1361,8 @@ class BabaAdapter:
                 self._lamp_recheck[camera_id] = time.monotonic() + _NO_LIGHT_RECHECK_S
                 return None
             resp.raise_for_status()
-            return _light_values(await resp.json(content_type=None))
+            payload = await resp.json(content_type=None)
+            return (*_light_values(payload), _light_burning(payload))
 
     async def _light_refresh_loop(self) -> None:
         """Mirror every floodlight off the device, on a poll.
@@ -1413,7 +1424,8 @@ class BabaAdapter:
         if fails >= _LIGHT_FAILS_BEFORE_REST and not self._has_light.get(camera_id):
             self._lamp_recheck[camera_id] = now + _NO_LIGHT_RECHECK_S
 
-    def _publish_light(self, camera_id: str, on: bool, bright: int | None) -> None:
+    def _publish_light(self, camera_id: str, on: bool, bright: int | None,
+                       lit: bool | None = None) -> None:
         """Announce the lamp (first sight) and mirror what the device answered."""
         self._announce_light(camera_id)
         dev = self._cam_dev(camera_id)
@@ -1421,6 +1433,8 @@ class BabaAdapter:
         self._pub(lamp, "on_off", on, name=_LIGHT_NAME, device=dev)
         if bright is not None:
             self._pub(lamp, "brightness", bright, name=_LIGHT_NAME, device=dev)
+        if lit is not None:
+            self._pub(lamp, "binary", lit, name=_LIGHT_NAME, device=dev)
         known = self._light_state.get(camera_id)
         self._light_state[camera_id] = (on, bright if bright is not None else (known[1] if known else 0))
 

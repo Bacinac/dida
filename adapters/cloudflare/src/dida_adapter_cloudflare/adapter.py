@@ -31,21 +31,10 @@ _HEADER = """# Jedan izvor istine za ingress. Iz njega se generiraju Caddyfile (
 """
 
 
-def _parse_meta(comment: str) -> dict:
-    meta: dict[str, str] = {}
-    for part in comment.split("|"):
-        k, sep, v = part.partition(":")
-        k, v = k.strip().lower(), v.strip()
-        if sep and k in ("section", "icon") and v:
-            meta[k] = v
-    return meta
-
-
 def parse_source(text: str) -> list[dict]:
     rows = []
     for n, line in enumerate(text.splitlines(), 1):
-        body, _, comment = line.partition("#")
-        body = body.strip()
+        body = line.partition("#")[0].strip()
         if not body:
             continue
         parts = body.split()
@@ -54,11 +43,9 @@ def parse_source(text: str) -> list[dict]:
         host, origin, serve = parts[:3]
         if serve not in SERVE_VALUES:
             raise ValueError(f"line {n}: serve must be one of {SERVE_VALUES}, not {serve!r}")
-        meta = _parse_meta(comment)
         rows.append({
             "host": host, "origin": origin, "serve": serve,
             "opts": parts[3].split(",") if len(parts) == 4 else [],
-            "section": meta.get("section"), "icon": meta.get("icon"),
         })
     return rows
 
@@ -69,13 +56,6 @@ def format_source(rows: list[dict]) -> str:
         line = f"{r['host']:<26} {r['origin']:<34} {r['serve']}"
         if r.get("opts"):
             line += "  " + ",".join(r["opts"])
-        meta = []
-        if r.get("section"):
-            meta.append(f"section: {r['section']}")
-        if r.get("icon"):
-            meta.append(f"icon: {r['icon']}")
-        if meta:
-            line += "   # " + " | ".join(meta)
         out.append(line + "\n")
     return "".join(out)
 
@@ -117,7 +97,7 @@ class CloudflareAdapter:
 
     In `source` mode that is `services.conf`, the single source for the whole
     ingress: the Caddyfile (LAN), the cloudflared ingress (WAN), Cloudflare DNS,
-    split-DNS on the router and the Homepage tiles. Writing it is all this adapter
+    and split-DNS on the router. Writing it is all this adapter
     does there; a systemd path unit on the Proxmox host notices the change and runs
     apply-ingress.sh, which is the only thing that CAN apply it — Caddy lives in
     another container, and `pct exec` plus the router's SSH key exist only on the
@@ -130,8 +110,8 @@ class CloudflareAdapter:
 
     Until 2026-08-01 this adapter kept its own `cloudflare_routes` table and generated
     config.yml from it EVERYWHERE, which made two writers for one ingress wherever a
-    host renderer also existed: the DB knew nothing about LAN vhosts, split-DNS or
-    Homepage, so a UI edit silently reverted whatever the renderer had produced. The
+    host renderer also existed: the DB knew nothing about LAN vhosts or split-DNS,
+    so a UI edit silently reverted whatever the renderer had produced. The
     file the ingress is actually read from is now the source in both modes, so there
     is never a second copy to drift from.
 
@@ -454,7 +434,6 @@ class CloudflareAdapter:
             "routes": [{
                 "id": r["host"], "hostname": r["host"], "service": r["origin"],
                 "serve": r["serve"], "opts": r["opts"],
-                "section": r["section"], "icon": r["icon"],
             } for r in rows],
             "mode": self._mode(),
             "source_path": self._config if self._mode() == "tunnel" else self._source,
@@ -471,8 +450,6 @@ class CloudflareAdapter:
             "origin": str(req.get("service", "")).strip(),
             "serve": str(req.get("serve", "both")).strip().lower(),
             "opts": opts,
-            "section": (req.get("section") or None),
-            "icon": (req.get("icon") or None),
         }
         if row["origin"].startswith("ssh://"):
             row["serve"] = "wan"

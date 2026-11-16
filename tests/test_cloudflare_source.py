@@ -1,5 +1,5 @@
 """The ingress source parser/formatter — services.conf is the single source for the
-Caddyfile, the tunnel, split-DNS and the Homepage tiles, so a row that survives a
+Caddyfile, the tunnel and split-DNS, so a row that survives a
 round-trip wrong silently changes routing for the whole homelab.
 """
 import pytest
@@ -7,21 +7,18 @@ from dida_adapter_cloudflare.adapter import format_source, parse_source, validat
 
 SAMPLE = """\
 # hostname                 origin                             serve  opts
-baba                       http://192.168.10.11:5173          both   # section: Monitoring | icon: /icons/baba.png
-dev-proxmox                https://192.168.1.12:8006          both  nochunk   # section: Development | icon: proxmox.png
+baba                       http://192.168.10.11:5173          both   # a note after a row is not part of it
+dev-proxmox                https://192.168.1.12:8006          both  nochunk
 development                ssh://192.168.1.210:22             wan
-hp                         http://192.168.1.101:3000          both
 """
 
 
-def test_parses_columns_and_trailing_metadata():
+def test_parses_columns_and_ignores_trailing_comments():
     rows = parse_source(SAMPLE)
-    assert [r["host"] for r in rows] == ["baba", "dev-proxmox", "development", "hp"]
-    assert rows[0]["section"] == "Monitoring" and rows[0]["icon"] == "/icons/baba.png"
+    assert [r["host"] for r in rows] == ["baba", "dev-proxmox", "development"]
+    assert rows[0] == {"host": "baba", "origin": "http://192.168.10.11:5173", "serve": "both", "opts": []}
     assert rows[1]["opts"] == ["nochunk"]
     assert rows[2]["serve"] == "wan"
-    # a row without a comment carries no tile, which is not the same as an empty one
-    assert rows[3]["section"] is None and rows[3]["icon"] is None
 
 
 def test_round_trip_is_stable():

@@ -14,6 +14,7 @@ from dida_core import (
     Command,
     CommandRejected,
     StateUpdate,
+    emit_journal,
     set_reachable,
     slug,
     validate_command,
@@ -169,6 +170,10 @@ class TuyaAdapter:
         # (entity_id, cap) -> (commanded value, monotonic deadline for the device
         # to report it back); polls contradicting it are ignored until then.
         self._cmd_pending: dict[tuple[str, str], tuple[object, float]] = {}
+        # Devices whose last poll failed. A Tuya controller that drops off the
+        # network has usually rebooted, and a reboot switches it on; a device set to
+        # `restore` is given back the on_off it had before (it has no power-on DP).
+        self._lost: set[str] = set()
         # Cloud-onboarding: full device dicts (incl. local keys) from the last
         # fetch, keyed by id. Keys live here server-side; the UI only ever sees a
         # sanitised view. "add" persists the chosen ones to the config blob.
@@ -261,6 +266,10 @@ class TuyaAdapter:
                 result = await self._cloud_add([str(i) for i in (req.get("ids") or [])])
             elif action == "remove":
                 result = await self._cloud_remove([str(k) for k in (req.get("keys") or [])])
+            elif action == "options":
+                result = self._device_options()
+            elif action == "set_restore":
+                result = await self._set_restore(str(req.get("key") or ""), bool(req.get("on")))
             else:
                 result = {"error": "unknown action"}
         except Exception as exc:
@@ -302,15 +311,39 @@ class TuyaAdapter:
                 }
                 added += 1
             elif dev.get("ip") and dev.get("key"):
+                kept = {"restore": True} if by_id.get(did, {}).get("restore") else {}
                 by_id[did] = {
                     "id": dev["id"], "ip": dev["ip"], "key": dev["key"],
-                    "version": dev["version"], "name": dev["name"], "dps": dev["dps"],
+                    "version": dev["version"], "name": dev["name"], "dps": dev["dps"], **kept,
                 }
                 added += 1
         blob = json.dumps(list(by_id.values()), ensure_ascii=False, indent=2)
         await self.broker.call("store", key="config", value=blob)
         await self._cfg.load()  # supervise loop then spawns the new device tasks
         return {"ok": True, "added": added}
+
+    def _device_options(self) -> dict:
+        """Per-device options of the local devices that can switch."""
+        return {"devices": {
+            slug(d.get("name") or d["id"], default="dev"): {"restore": bool(d.get("restore"))}
+            for d in _parse_devices(self._read_config_raw())
+            if not d.get("cloud") and any(_dp_spec(s)[0] == "on_off" for s in d.get("dps", {}).values())
+        }}
+
+    async def _set_restore(self, key: str, on: bool) -> dict:
+        bare = key[len(NAMESPACE) + 1:] if key.startswith(f"{NAMESPACE}:") else key
+        devs = _parse_devices(self._read_config_raw())
+        dev = next((d for d in devs if not d.get("cloud")
+                    and slug(d.get("name") or d["id"], default="dev") == bare), None)
+        if dev is None:
+            return {"error": f"no local tuya device matches {bare!r}"}
+        if on:
+            dev["restore"] = True
+        else:
+            dev.pop("restore", None)
+        await self.broker.call("store", key="config", value=json.dumps(devs, ensure_ascii=False, indent=2))
+        await self._cfg.load()
+        return {"ok": True}
 
     async def _cloud_remove(self, keys: list[str]) -> dict:
         """Remove device(s) from the config + drop their entities and live state.
@@ -398,10 +431,16 @@ class TuyaAdapter:
                 if isinstance(data, dict) and isinstance(data.get("dps"), dict):
                     empty = 0
                     self._seen[dev["id"]] = time.monotonic()
+                    if dev["id"] in self._lost:
+                        self._lost.discard(dev["id"])
+                        if dev.get("restore"):
+                            await self._restore_power(dev, dev_slug, data["dps"])
                     self._emit(dev, dev_slug, data["dps"])
                 elif isinstance(data, dict) and data.get("Error"):
+                    self._lost.add(dev["id"])
                     log.warning("tuya %s: %s", dev.get("name", dev["ip"]), data.get("Error"))
                 else:
+                    self._lost.add(dev["id"])
                     empty += 1
                     if empty >= _STALE_REOPEN:
                         log.warning("tuya %s: %d polls answered without a status, reopening the connection",
@@ -409,8 +448,38 @@ class TuyaAdapter:
                         await self._reopen(dev)
                         empty = 0
             except Exception as exc:
+                self._lost.add(dev["id"])
                 log.warning("tuya %s poll: %s", dev.get("name", dev["ip"]), exc, exc_info=True)
             await asyncio.sleep(self._cfg.int("poll_seconds", 10) if self._cfg else 10)
+
+    async def _restore_power(self, dev: dict, dev_slug: str, dps: dict) -> None:
+        """Back from an outage with a different on_off than before it: write the
+        old one and let `dps` carry it, so the comeback value is never published."""
+        dp_id = next((dp for dp, spec in dev.get("dps", {}).items() if _dp_spec(spec)[0] == "on_off"), None)
+        if dp_id is None or str(dp_id) not in dps:
+            return
+        entity_id = f"{NAMESPACE}:{dev_slug}"
+        before = self._last.get((entity_id, "on_off"))
+        now = decode("on_off", dps[str(dp_id)])
+        if before is None or now == before:
+            return
+        name = dev.get("name") or dev["id"]
+        loop = asyncio.get_running_loop()
+        async with self._lock_for(dev["id"]):
+            res = await loop.run_in_executor(self._exec, self._handles[dev["id"]].set_value, int(dp_id), before)
+        if isinstance(res, dict) and res.get("Error"):
+            log.warning("tuya %s: could not restore on_off=%r after the outage: %s", name, before, res["Error"])
+            await emit_journal(self._bus, "command_failed", entity_id=entity_id, device_key=dev_slug,
+                               source=f"adapter:{NAMESPACE}", severity="error",
+                               message=f"{name}: restoring {'on' if before else 'off'} failed: {res['Error']}")
+            return
+        dps[str(dp_id)] = before
+        self._cmd_pending[(entity_id, "on_off")] = (before, time.monotonic() + _CONFIRM_SECONDS)
+        log.info("tuya %s: came back %s after an outage, restored %s", name,
+                 "on" if now else "off", "on" if before else "off")
+        await emit_journal(self._bus, "state_restored", entity_id=entity_id, device_key=dev_slug,
+                           source=f"adapter:{NAMESPACE}", severity="notice",
+                           message=f"{name}: came back {'on' if now else 'off'}, set {'on' if before else 'off'} again")
 
     async def _reopen(self, dev: dict) -> None:
         loop = asyncio.get_running_loop()
@@ -642,9 +711,13 @@ class TuyaAdapter:
             async with self._lock_for(dev["id"]):
                 if len(writes) == 1:
                     (wdp, wval), = writes.items()
-                    await loop.run_in_executor(self._exec, handle.set_value, wdp, wval)
+                    res = await loop.run_in_executor(self._exec, handle.set_value, wdp, wval)
                 else:
-                    await loop.run_in_executor(self._exec, handle.set_multiple_values, writes)
+                    res = await loop.run_in_executor(self._exec, handle.set_multiple_values, writes)
+            # tinytuya reports a write that never reached the device as a returned
+            # error, not an exception.
+            if isinstance(res, dict) and res.get("Error"):
+                raise RuntimeError(str(res["Error"]))
             # A cover open/close/stop has no decodable echo value (pub_val None):
             # nothing to publish or wait for, the polls report the motion as it is.
             if pub_val is None:

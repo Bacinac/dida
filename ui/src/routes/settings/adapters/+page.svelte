@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Button, Notice, PageHead, SaveButton, dialog, formatNumber } from "#lib/kit/index.js";
+  import { Button, Notice, PageHead, SaveButton, Toggle, dialog, formatNumber } from "#lib/kit/index.js";
   import { api, type AdapterCfg, type BabaSite, type EsphomeNode, type FrigateSite, type HomekitDevice, type RuntimeState, type TuyaCloudDevice } from "#lib/api.js";
   import { errMsg } from "#lib/errors.js";
   import { devices } from "#lib/store.svelte.js";
@@ -1092,6 +1092,21 @@
     }
   }
   const tuyaAddAll = () => tuyaAdd(tuyaAddable.map((d) => d.id));
+  let tuyaOpts = $state<Record<string, { restore: boolean }>>({});
+  async function loadTuyaOpts() {
+    try { tuyaOpts = (await api.tuyaDeviceOptions()).devices; } catch (e) { msg = { ...msg, tuya: errMsg(e) }; }
+  }
+  $effect(() => { if (expandedKey === "tuya") void loadTuyaOpts(); });
+  async function tuyaToggleRestore(key: string) {
+    const bare = key.startsWith("tuya:") ? key.slice(5) : key;
+    const on = !tuyaOpts[bare]?.restore;
+    try {
+      await api.tuyaSetRestore(bare, on);
+      tuyaOpts = { ...tuyaOpts, [bare]: { restore: on } };
+    } catch (e) {
+      msg = { ...msg, tuya: errMsg(e) };
+    }
+  }
 
   // Remove a device from any adapter (same UX everywhere, like esphome nodes).
   // Tuya has a clean config-removal (frees the cloud slot + re-fetchable); every
@@ -1337,6 +1352,14 @@
       <Button tone="danger" size="small" onclick={() => removeDevice(c.adapter, grp.key, grp.name)}>{t("common.remove")}</Button>
     </div>
     {#if openDevice === grp.key}
+      {@const opt = c.adapter === "tuya" ? tuyaOpts[grp.key.startsWith("tuya:") ? grp.key.slice(5) : grp.key] : undefined}
+      {#if opt}
+        <div class="mb-2 flex items-center gap-2 text-s">
+          <Toggle size="small" checked={opt.restore} onclick={() => tuyaToggleRestore(grp.key)} label={t("tuya.restore")} />
+          <span>{t("tuya.restore")}</span>
+          <span class="text-dida-text-muted">{t("tuya.restoreHint")}</span>
+        </div>
+      {/if}
       {@render bucketedFields(grp.fields)}
     {/if}
   </div>

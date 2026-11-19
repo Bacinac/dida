@@ -1453,6 +1453,14 @@ export const api = {
     request(`/adapters/tuya/devices/${encodeURIComponent(key)}`, {
       method: "DELETE",
     }).then(jsonOrThrow),
+  tuyaDeviceOptions: (): Promise<{ devices: Record<string, { restore: boolean }> }> =>
+    request(`/adapters/tuya/device-options`).then(jsonOrThrow),
+  tuyaSetRestore: (key: string, on: boolean): Promise<{ ok: boolean }> =>
+    request(`/adapters/tuya/devices/${encodeURIComponent(key)}/restore`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ on }),
+    }).then(jsonOrThrow),
 
   // Zigbee onboarding + mesh diagnostics, driven through the MQTT adapter's
   // zigbee2mqtt bridge — pair/map/rename/remove without the z2m console.

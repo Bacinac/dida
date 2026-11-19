@@ -32,7 +32,7 @@ JournalKind = Literal[
     "automation_error", "automation_fired", "automation_stale", "breaker_trip",
     "command_failed", "device_left", "device_renamed", "dhcp_lease", "manual_override",
     "manual_released", "offline", "online", "pairing", "pairing_failed", "removed", "restored",
-    "validation_rejected", "vehicle_arrived", "vehicle_left", "vlan_down", "vlan_up",
+    "state_restored", "validation_rejected", "vehicle_arrived", "vehicle_left", "vlan_down", "vlan_up",
 ]
 
 _MAX_MESSAGE = 2000   # a runaway exception string must not become a 10 MB row

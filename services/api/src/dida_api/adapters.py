@@ -748,25 +748,29 @@ async def baba_remove_site(key: str, request: Request, _admin: AuthUser = Depend
 _TUYA_CTL = "dida.tuya.ctl"
 
 
+async def _tuya_ctl(request: Request, payload: dict, wait_s: float) -> dict:
+    try:
+        resp = await request.app.state.bus.nc.request(_TUYA_CTL, json.dumps(payload).encode(), timeout=wait_s)
+    except Exception as exc:
+        raise HTTPException(503, f"Tuya adapter ne odgovara: {exc}") from exc
+    return json.loads(resp.data)
+
+
+def _tuya_ok(result: dict, prefix: str = "Tuya") -> dict:
+    if result.get("error"):
+        raise HTTPException(400, f"{prefix}: {result['error']}")
+    return result
+
+
 @router.get("/tuya/cloud-devices")
 async def tuya_cloud_devices(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
     """Pull this account's Tuya devices from the cloud + locate them on the LAN.
     Returns a sanitised list (no keys); the adapter caches the full dicts."""
     subnets = await _scan_subnets(request)
-    try:
-        resp = await request.app.state.bus.nc.request(
-            _TUYA_CTL,
-            json.dumps({"action": "cloud_devices", "subnets": subnets}).encode(),
-            timeout=100,
-        )
-    except Exception as exc:
-        raise HTTPException(503, f"Tuya adapter ne odgovara: {exc}") from exc
-    result = json.loads(resp.data)
+    result = await _tuya_ctl(request, {"action": "cloud_devices", "subnets": subnets}, 100)
     if result.get("error") == "no_creds":
         raise HTTPException(400, "Unesi Tuya cloud Access ID + Secret (i regiju) pa spremi.")
-    if result.get("error"):
-        raise HTTPException(400, f"Tuya cloud: {result['error']}")
-    return result
+    return _tuya_ok(result, "Tuya cloud")
 
 
 class TuyaCloudAdd(BaseModel):
@@ -777,31 +781,30 @@ class TuyaCloudAdd(BaseModel):
 async def tuya_cloud_add(body: TuyaCloudAdd, request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
     """Persist the chosen fetched devices (by id) to the tuya config; the adapter
     brings them online on its next supervise pass."""
-    try:
-        resp = await request.app.state.bus.nc.request(
-            _TUYA_CTL, json.dumps({"action": "add", "ids": body.ids}).encode(), timeout=30,
-        )
-    except Exception as exc:
-        raise HTTPException(503, f"Tuya adapter ne odgovara: {exc}") from exc
-    result = json.loads(resp.data)
-    if result.get("error"):
-        raise HTTPException(400, f"Tuya: {result['error']}")
-    return result
+    return _tuya_ok(await _tuya_ctl(request, {"action": "add", "ids": body.ids}, 30))
 
 
 @router.delete("/tuya/devices/{key}")
 async def tuya_remove_device(key: str, request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
     """Remove one Tuya device (by device_key) from the config + drop its entities."""
-    try:
-        resp = await request.app.state.bus.nc.request(
-            _TUYA_CTL, json.dumps({"action": "remove", "keys": [key]}).encode(), timeout=15,
-        )
-    except Exception as exc:
-        raise HTTPException(503, f"Tuya adapter ne odgovara: {exc}") from exc
-    result = json.loads(resp.data)
-    if result.get("error"):
-        raise HTTPException(400, f"Tuya: {result['error']}")
-    return result
+    return _tuya_ok(await _tuya_ctl(request, {"action": "remove", "keys": [key]}, 15))
+
+
+@router.get("/tuya/device-options")
+async def tuya_device_options(request: Request, _admin: AuthUser = Depends(require_admin)) -> dict:
+    """Per-device options of the local Tuya devices that switch, by device_key."""
+    return _tuya_ok(await _tuya_ctl(request, {"action": "options"}, 15))
+
+
+class TuyaRestore(BaseModel):
+    on: bool
+
+
+@router.put("/tuya/devices/{key}/restore")
+async def tuya_set_restore(key: str, body: TuyaRestore, request: Request,
+                           _admin: AuthUser = Depends(require_admin)) -> dict:
+    """Whether the device gets its pre-outage on/off back when it returns."""
+    return _tuya_ok(await _tuya_ctl(request, {"action": "set_restore", "key": key, "on": body.on}, 15))
 
 
 # --- HomeKit pairing (interactive onboarding) ---------------------------

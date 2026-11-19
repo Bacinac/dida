@@ -332,3 +332,98 @@ async def test_a_status_carrying_only_unmapped_dps_still_counts_as_alive(rig):
     assert "bf1234" in rig._seen
     assert rig._bus.published == []
     assert not alive.closed, "a device that answers with a status is never reopened"
+
+
+# --- a controller that drops off the network comes back ON ------------------------
+
+
+class _SeqHandle:
+    """Answers each poll with the next reply (the last one repeats) and records writes."""
+
+    def __init__(self, replies, write_reply=None) -> None:
+        self.replies = list(replies)
+        self.polls = 0
+        self.writes: list = []
+        self.write_reply = write_reply
+
+    def status(self):
+        reply = self.replies[min(self.polls, len(self.replies) - 1)]
+        self.polls += 1
+        return reply
+
+    def set_value(self, dp, value):
+        self.writes.append((dp, value))
+        return self.write_reply
+
+    def close(self) -> None:
+        pass
+
+
+class _JournalBus(_Bus):
+    def __init__(self) -> None:
+        super().__init__()
+        self.journal: list = []
+
+    async def publish_journal(self, event) -> None:
+        self.journal.append(event.kind)
+
+
+async def _outage(rig, restore, write_reply=None):
+    """19.11.2026: Strip Patio Left L lost the network twice in an hour and came back
+    ON each time; the controller has no power-on DP to say otherwise."""
+    rig._bus = _JournalBus()
+    rig._cfg = _FastCfg()
+    handle = _SeqHandle([{"dps": {"20": False}}, {"Error": "Network Error: Unable to Connect"},
+                         {"dps": {"20": True}}], write_reply)
+    rig._make_handle = lambda dev: handle
+    dev = {"id": "bf7821", "name": "Strip Patio Left L", "ip": "192.0.2.74", "dps": {"20": "on_off"}}
+    if restore:
+        dev["restore"] = True
+    task = asyncio.create_task(rig._poll_device(dev))
+    try:
+        for _ in range(400):
+            await asyncio.sleep(0.005)
+            if handle.polls > 4:
+                break
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    return handle
+
+
+async def test_a_device_set_to_restore_gets_its_pre_outage_off_back(rig):
+    handle = await _outage(rig, restore=True)
+    assert handle.writes == [(20, False)]
+    assert ("tuya:strip_patio_left_l", "on_off", True) not in rig._bus.published, \
+        "the comeback ON must not reach the engine"
+    assert "state_restored" in rig._bus.journal
+
+
+async def test_without_restore_the_comeback_value_is_reported_as_it_is(rig):
+    handle = await _outage(rig, restore=False)
+    assert handle.writes == []
+    assert ("tuya:strip_patio_left_l", "on_off", True) in rig._bus.published
+
+
+async def test_a_failed_restore_is_loud_and_the_device_is_shown_as_it_is(rig):
+    handle = await _outage(rig, restore=True, write_reply={"Error": "Network Error: Unable to Connect"})
+    assert handle.writes == [(20, False)]
+    assert ("tuya:strip_patio_left_l", "on_off", True) in rig._bus.published
+    assert "command_failed" in rig._bus.journal
+
+
+async def test_a_write_the_device_never_took_is_rejected_not_shown_as_done(rig):
+    """tinytuya returns the network error instead of raising; read as success, the
+    UI showed the strip off while it kept burning (19.11.2026, 16:15)."""
+    from dida_core import Command, CommandRejected
+
+    dev = {"id": "bf7821", "name": "Strip Patio Left L", "ip": "192.0.2.74", "dps": {"20": "on_off"}}
+    rig._by_slug["strip_patio_left_l"] = dev
+    rig._handles["bf7821"] = _SeqHandle([], write_reply={"Error": "Network Error: Unable to Connect"})
+    rig._last[("tuya:strip_patio_left_l", "on_off")] = True
+    with pytest.raises(CommandRejected, match="Unable to Connect"):
+        await rig.handle_command(Command(entity_id="tuya:strip_patio_left_l", capability="on_off",
+                                         command="turn_off", ts_ns=0))
+    assert rig._last[("tuya:strip_patio_left_l", "on_off")] is True
+    assert rig._bus.published == []

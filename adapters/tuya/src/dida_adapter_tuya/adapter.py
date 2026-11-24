@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import select
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -41,10 +42,25 @@ _CLOUD_POLL = 60
 # the full status. Only reopening the socket recovers it.
 _STALE_REOPEN = 3
 
-# Some devices (the patio heater) keep reporting the previous value for minutes
-# after a set_value. A commanded value therefore stands until the device reports
-# it back, and only this long after the command does a contradicting poll win.
-_CONFIRM_SECONDS = 300
+# A poll racing a set_value can still read the state from before the write. A
+# commanded value stands until the device reports it back, at most this long.
+_CONFIRM_SECONDS = 30
+
+# tinytuya reads exactly one frame per request. On a persistent socket the device
+# also pushes frames of its own (every DP change, every write's echo); left unread
+# they pile up and each later status() returns an older one — the patio heater's
+# polls ran 8 min behind, replaying every on/off as a phantom. Drain before asking.
+_DRAIN_MAX = 256
+
+
+def _fresh(handle, call, *args):
+    for _ in range(_DRAIN_MAX):
+        sock = getattr(handle, "socket", None)
+        if sock is None or not select.select([sock], [], [], 0)[0]:
+            break
+        if handle.receive() is None:
+            break
+    return call(*args)
 
 
 def _dp_spec(spec: object) -> tuple[str, list | None, list | None, str | None]:
@@ -427,7 +443,7 @@ class TuyaAdapter:
             try:
                 handle = self._handles[dev["id"]]
                 async with self._lock_for(dev["id"]):
-                    data = await loop.run_in_executor(self._exec, handle.status)
+                    data = await loop.run_in_executor(self._exec, _fresh, handle, handle.status)
                 if isinstance(data, dict) and isinstance(data.get("dps"), dict):
                     empty = 0
                     self._seen[dev["id"]] = time.monotonic()
@@ -465,8 +481,9 @@ class TuyaAdapter:
             return
         name = dev.get("name") or dev["id"]
         loop = asyncio.get_running_loop()
+        handle = self._handles[dev["id"]]
         async with self._lock_for(dev["id"]):
-            res = await loop.run_in_executor(self._exec, self._handles[dev["id"]].set_value, int(dp_id), before)
+            res = await loop.run_in_executor(self._exec, _fresh, handle, handle.set_value, int(dp_id), before)
         if isinstance(res, dict) and res.get("Error"):
             log.warning("tuya %s: could not restore on_off=%r after the outage: %s", name, before, res["Error"])
             await emit_journal(self._bus, "command_failed", entity_id=entity_id, device_key=dev_slug,
@@ -711,9 +728,9 @@ class TuyaAdapter:
             async with self._lock_for(dev["id"]):
                 if len(writes) == 1:
                     (wdp, wval), = writes.items()
-                    res = await loop.run_in_executor(self._exec, handle.set_value, wdp, wval)
+                    res = await loop.run_in_executor(self._exec, _fresh, handle, handle.set_value, wdp, wval)
                 else:
-                    res = await loop.run_in_executor(self._exec, handle.set_multiple_values, writes)
+                    res = await loop.run_in_executor(self._exec, _fresh, handle, handle.set_multiple_values, writes)
             # tinytuya reports a write that never reached the device as a returned
             # error, not an exception.
             if isinstance(res, dict) and res.get("Error"):

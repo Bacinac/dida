@@ -20,10 +20,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import socket
 import time
 
 import pytest
-from dida_adapter_tuya.adapter import _STALE_REOPEN, TuyaAdapter
+from dida_adapter_tuya.adapter import _STALE_REOPEN, TuyaAdapter, _fresh
 from dida_core.health import StatusReporter
 
 
@@ -165,10 +166,9 @@ async def test_a_LAGGING_poll_does_not_undo_a_command_just_sent(rig):
 
 
 async def test_the_heater_keeps_its_commanded_level_until_it_reports_it_back(rig):
-    """16.11.2026: the patio heater reported the old level for 2-4 min after each
-    command. A fixed 25 s hold let the stale "Off" through, the rule's off branch
-    saw "Off" and skipped the command, and the heater ran half an hour on an empty
-    patio. The commanded value now stands until the device confirms it."""
+    """16.11.2026: a poll read the level from before the command, the rule's off
+    branch saw "Off" and skipped the command, and the heater ran half an hour on an
+    empty patio. The commanded value stands until the device confirms it."""
     key = ("tuya:patio_heater", "enum")
     dev = _dev({"3": {"cap": "enum", "options": ["Off", "Level 1"],
                       "raw": [None, "level_1"], "power_dp": 1}})
@@ -427,3 +427,41 @@ async def test_a_write_the_device_never_took_is_rejected_not_shown_as_done(rig):
                                          command="turn_off", ts_ns=0))
     assert rig._last[("tuya:strip_patio_left_l", "on_off")] is True
     assert rig._bus.published == []
+
+
+# --- frames the device pushed on its own must not be read as the poll's answer ----
+
+
+class _PushingHandle:
+    """A persistent socket holding frames the device sent unasked (DP changes,
+    write echoes). tinytuya reads one frame per request, so unread pushes would
+    be returned in place of the answer, ever further behind."""
+
+    def __init__(self, stale: int, reply) -> None:
+        self.socket, self._device = socket.socketpair()
+        self._device.sendall(b"x" * stale)
+        self.reply = reply
+        self.drained = 0
+
+    def receive(self):
+        self.socket.recv(1)
+        self.drained += 1
+        return {"dps": {"1": True, "5": "level_2"}}
+
+    def status(self):
+        return self.reply
+
+    def close(self) -> None:
+        self.socket.close()
+        self._device.close()
+
+
+def test_frames_pushed_by_the_device_are_drained_before_the_status_query():
+    handle = _PushingHandle(stale=3, reply={"dps": {"1": False, "5": "level_1"}})
+    try:
+        assert _fresh(handle, handle.status) == {"dps": {"1": False, "5": "level_1"}}
+        assert handle.drained == 3
+        assert _fresh(handle, handle.status) == {"dps": {"1": False, "5": "level_1"}}
+        assert handle.drained == 3, "an empty socket must be asked at once, not read"
+    finally:
+        handle.close()
